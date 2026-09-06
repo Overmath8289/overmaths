@@ -3,6 +3,8 @@ import LandingPage from './pages/LandingPage'
 import Register from './Register'
 import Login from './Login'
 import VerifyEmail from './VerifyEmail' 
+import ForgotPassword from './ForgotPassword'
+import ResetPassword from './ResetPassword'
 
 function App() {
   return (
@@ -10,8 +12,10 @@ function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/login" element={<Login />} /> 
+        <Route path="/login" element={<Login />} />     
         <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />  
       </Routes>
     </BrowserRouter>
   )

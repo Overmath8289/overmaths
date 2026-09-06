@@ -8,6 +8,11 @@ function Register() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [referralCode, setReferralCode] = useState('')
+
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+
   const [message, setMessage] = useState('')
   const [registered, setRegistered] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -28,6 +33,18 @@ function Register() {
   const handleRegister = async (e) => {
     e.preventDefault()
 
+    setMessage('')
+
+    if (!fullName.trim()) {
+      setMessage('Please enter your full name.')
+      return
+    }
+
+    if (!email.trim()) {
+      setMessage('Please enter your email address.')
+      return
+    }
+
     if (!strongPassword) {
       setMessage('Please meet all password requirements.')
       return
@@ -38,38 +55,62 @@ function Register() {
       return
     }
 
-    setLoading(true)
-    setMessage('')
-    setRegistered(false)
-
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-        },
-      },
-    })
-
-    if (error) {
-      setMessage(error.message)
-      setLoading(false)
+    /*
+      Local development is intentionally kept separate
+      from Supabase authentication.
+    */
+    if (!supabase) {
+      setMessage(
+        'Account registration is available on the live Overmaths website. Local testing is currently running without Supabase.'
+      )
       return
     }
 
-    setRegistered(true)
+    setLoading(true)
 
-    setMessage(
-      'Registration successful! Please check your email and click the verification link to activate your account.'
-    )
+    try {
+      const { error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/verify-email`,
 
-    setFullName('')
-    setEmail('')
-    setPassword('')
-    setConfirmPassword('')
+          data: {
+            full_name: fullName.trim(),
 
-    setLoading(false)
+            // Prepared for the future referral system.
+            // The actual referral tracking and commission
+            // system will be connected later.
+            referral_code: referralCode.trim() || null,
+          },
+        },
+      })
+
+      if (error) {
+        setMessage(error.message)
+        setLoading(false)
+        return
+      }
+
+      setRegistered(true)
+
+      setMessage(
+        'Registration successful! Please check your email and click the verification link to activate your account.'
+      )
+
+      setFullName('')
+      setEmail('')
+      setPassword('')
+      setConfirmPassword('')
+      setReferralCode('')
+    } catch (error) {
+      setMessage(
+        error?.message ||
+          'Something went wrong while creating your account. Please try again.'
+      )
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -85,30 +126,51 @@ function Register() {
         {!registered ? (
           <form onSubmit={handleRegister}>
 
+            {/* Full Name */}
             <input
               type="text"
               placeholder="Full Name"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               required
+              disabled={loading}
+              autoComplete="name"
             />
 
+            {/* Email */}
             <input
               type="email"
               placeholder="Email Address"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              disabled={loading}
+              autoComplete="email"
             />
 
-            <input
-              type="password"
-              placeholder="Create a strong password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
+            {/* Password */}
+            <div className="password-input-wrapper">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Create a strong password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={loading}
+                autoComplete="new-password"
+              />
 
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPassword(!showPassword)}
+                disabled={loading}
+              >
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
+
+            {/* Password Rules */}
             <div className="password-rules">
 
               <p className={passwordRules.length ? 'valid' : 'invalid'}>
@@ -133,14 +195,31 @@ function Register() {
 
             </div>
 
-            <input
-              type="password"
-              placeholder="Confirm Password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-            />
+            {/* Confirm Password */}
+            <div className="password-input-wrapper">
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                placeholder="Confirm Password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                disabled={loading}
+                autoComplete="new-password"
+              />
 
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() =>
+                  setShowConfirmPassword(!showConfirmPassword)
+                }
+                disabled={loading}
+              >
+                {showConfirmPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
+
+            {/* Password Match */}
             {confirmPassword.length > 0 && (
               <p className={passwordsMatch ? 'valid' : 'invalid'}>
                 {passwordsMatch
@@ -149,11 +228,37 @@ function Register() {
               </p>
             )}
 
+            {/* Referral Code */}
+            <div className="referral-field">
+              <input
+                type="text"
+                placeholder="Referral Code (Optional)"
+                value={referralCode}
+                onChange={(e) =>
+                  setReferralCode(e.target.value.toUpperCase())
+                }
+                disabled={loading}
+              />
+
+              <small>
+                Have a referral code? Enter it here.
+              </small>
+            </div>
+
+            {/* Create Account */}
             <button
               type="submit"
-              disabled={loading || !strongPassword || !passwordsMatch}
+              disabled={
+                loading ||
+                !strongPassword ||
+                !passwordsMatch ||
+                !fullName.trim() ||
+                !email.trim()
+              }
             >
-              {loading ? 'Creating Account...' : 'Create Account'}
+              {loading
+                ? 'Creating Account...'
+                : 'Create Account'}
             </button>
 
           </form>
@@ -192,6 +297,7 @@ function Register() {
 
         {!registered && (
           <div className="signin-section">
+
             <p>Already have an account?</p>
 
             <Link
@@ -200,6 +306,7 @@ function Register() {
             >
               Sign In
             </Link>
+
           </div>
         )}
 

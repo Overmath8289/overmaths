@@ -1,9 +1,11 @@
+
 .verify-page {
   min-height: 100vh;
   display: flex;
   justify-content: center;
   align-items: center;
   padding: 40px 20px;
+  box-sizing: border-box;
 
   background:
     radial-gradient(
@@ -24,15 +26,13 @@
 .verify-card {
   width: 100%;
   max-width: 520px;
-
   padding: 45px 40px;
+  box-sizing: border-box;
 
   text-align: center;
 
   background: rgba(10, 16, 56, 0.96);
-
   border: 1px solid rgba(142, 120, 255, 0.3);
-
   border-radius: 24px;
 
   box-shadow:
@@ -52,7 +52,6 @@
 .verify-icon {
   width: 70px;
   height: 70px;
-
   margin: 0 auto 22px;
 
   display: flex;
@@ -68,7 +67,6 @@
   );
 
   color: white;
-
   font-size: 32px;
   font-weight: 800;
 
@@ -78,52 +76,43 @@
 
 .verify-card h1 {
   margin: 0 0 15px;
-
   font-size: 32px;
   font-weight: 800;
 }
 
 .verify-main-text {
   margin: 0 0 15px;
-
   color: #f8fafc;
-
   font-size: 17px;
   font-weight: 600;
+  line-height: 1.5;
 }
 
 .verify-description {
   margin: 0 auto 25px;
-
   max-width: 430px;
 
   color: #aeb5d1;
-
   font-size: 15px;
   line-height: 1.7;
 }
 
 .verify-highlight {
   margin: 25px 0;
-
   padding: 18px;
 
   text-align: left;
 
   background: rgba(124, 58, 237, 0.1);
-
   border: 1px solid rgba(168, 85, 247, 0.2);
-
   border-radius: 12px;
 }
 
 .verify-highlight strong {
   display: block;
-
   margin-bottom: 8px;
 
   color: #c084fc;
-
   font-size: 15px;
 }
 
@@ -131,14 +120,56 @@
   margin: 0;
 
   color: #aeb5d1;
-
   font-size: 13px;
   line-height: 1.6;
 }
 
-.verify-login-btn {
-  display: inline-block;
+.verify-steps {
+  margin: 25px 0;
+  text-align: left;
+}
 
+.verify-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  margin-bottom: 12px;
+}
+
+.verify-step:last-child {
+  margin-bottom: 0;
+}
+
+.verify-step span {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  border-radius: 50%;
+
+  background: rgba(124, 58, 237, 0.18);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+
+  color: #c084fc;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.verify-step p {
+  margin: 0;
+
+  color: #cbd2e9;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.verify-login-btn {
+  display: block;
   width: 100%;
   box-sizing: border-box;
 
@@ -153,10 +184,8 @@
   );
 
   color: white;
-
   font-size: 16px;
   font-weight: 700;
-
   text-decoration: none;
 
   transition: 0.25s ease;
@@ -170,17 +199,31 @@
 }
 
 .verify-footer {
-  margin: 20px 0 25px;
+  margin: 20px 0 12px;
 
   color: #7f87a8;
-
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.6;
+}
+
+.verify-back-link {
+  display: inline-block;
+  margin-bottom: 25px;
+
+  color: #c084fc;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+
+  transition: 0.2s ease;
+}
+
+.verify-back-link:hover {
+  color: #ff9a4d;
 }
 
 .verify-brand {
   padding-top: 20px;
-
   border-top: 1px solid rgba(142, 120, 255, 0.15);
 }
 
@@ -188,14 +231,12 @@
   display: block;
 
   color: #f8fafc;
-
   font-size: 16px;
   font-weight: 800;
 }
 
 .verify-brand small {
   color: #aeb5d1;
-
   font-size: 12px;
 }
 
@@ -206,6 +247,11 @@
 
   .verify-card {
     padding: 35px 22px;
+    border-radius: 20px;
+  }
+
+  .verify-logo {
+    width: 165px;
   }
 
   .verify-card h1 {
@@ -215,4 +261,13 @@
   .verify-main-text {
     font-size: 15px;
   }
+
+  .verify-description {
+    font-size: 14px;
+  }
+
+  .verify-step p {
+    font-size: 13px;
+  }
 }
+
