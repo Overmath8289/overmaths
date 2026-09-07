@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import './Practice.css'
 
 function Practice() {
+  const navigate = useNavigate()
+
   const [subject, setSubject] = useState('')
   const [topic, setTopic] = useState('mixed')
   const [topics, setTopics] = useState([])
@@ -67,24 +70,23 @@ function Practice() {
     loadTopics()
   }, [subject])
 
-
+  /*
+    Start the practice session.
+    The selected settings are passed to the Quiz page.
+  */
   const handleStart = () => {
-    if (!subject) return
-
-    const session = {
-      subject,
-      topic,
-      questionCount,
+    if (!subject) {
+      return
     }
 
-    console.log('Practice session:', session)
-
-    /*
-      We will replace this later with the real
-      question-selection and quiz navigation.
-    */
+    navigate('/quiz', {
+      state: {
+        subject,
+        topic,
+        questionCount,
+      },
+    })
   }
-
 
   return (
     <div className="practice-page">
@@ -294,7 +296,9 @@ function Practice() {
                 onClick={() => setQuestionCount(number)}
               >
 
-                <strong>{number}</strong>
+                <strong>
+                  {number}
+                </strong>
 
                 <span>
                   questions
@@ -314,7 +318,9 @@ function Practice() {
 
           <div>
 
-            <span>YOUR SESSION</span>
+            <span>
+              YOUR SESSION
+            </span>
 
             <strong>
               {subject || 'Choose a subject'}

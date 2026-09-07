@@ -8,6 +8,7 @@ import ResetPassword from './ResetPassword'
 import StudentProfile from './pages/StudentProfile'
 import Dashboard from './pages/Dashboard'
 import Practice from './pages/Practice'
+import Quiz from './pages/Quiz'
 
 
 
@@ -28,6 +29,7 @@ function App() {
         <Route path="/student-profile" element={<StudentProfile />} />
         <Route path="/dashboard" element={<Dashboard />} /> 
         <Route path="/practice" element={<Practice />} />
+        <Route path="/quiz" element={<Quiz />} /> 
       </Routes>
     </BrowserRouter>
   )
