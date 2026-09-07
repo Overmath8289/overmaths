@@ -48,7 +48,7 @@ function Quiz() {
           image_url
         `)
         .eq('subject', subject)
-        .eq('is_active', true)
+        // .eq('is_active', true)
 
       // Only filter by topic when a specific topic was selected.
       // "mixed" means questions can come from all topics.
