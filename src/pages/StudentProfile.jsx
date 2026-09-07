@@ -8,66 +8,37 @@ function StudentProfile() {
 
   const [step, setStep] = useState(1)
   const [fullName, setFullName] = useState('')
-  const [goal, setGoal] = useState('')
+  const [learningRoute, setLearningRoute] = useState('')
+  const [examType, setExamType] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
-
-  const goals = [
-    {
-      id: 'JAMB',
-      title: 'JAMB / UTME',
-      subtitle: 'Prepare smarter for UTME',
-      icon: 'target',
-    },
-    {
-      id: 'WAEC',
-      title: 'WAEC',
-      subtitle: 'Master your secondary exams',
-      icon: 'book',
-    },
-    {
-      id: 'NECO',
-      title: 'NECO',
-      subtitle: 'Build confidence for NECO',
-      icon: 'award',
-    },
-    {
-      id: 'NABTEB',
-      title: 'NABTEB',
-      subtitle: 'Prepare for technical exams',
-      icon: 'tools',
-    },
-    {
-      id: 'University',
-      title: 'University',
-      subtitle: 'Excel in your university courses',
-      icon: 'graduation',
-    },
-  ]
 
   const handleNext = () => {
     setMessage('')
 
     if (!fullName.trim()) {
-      setMessage('Please enter your name to continue.')
+      setMessage('Please enter your full name.')
       return
     }
 
     setStep(2)
   }
 
+  const selectSecondaryExam = (exam) => {
+    setLearningRoute('secondary')
+    setExamType(exam)
+  }
+
+  const selectUniversity = () => {
+    setLearningRoute('university')
+    setExamType('University')
+  }
+
   const handleSubmit = async () => {
     setMessage('')
 
-    if (!goal) {
-      setMessage('Choose your learning goal to continue.')
-      return
-    }
-
-    if (!supabase) {
-      setMessage(
-        'Profile setup is available on the live Overmaths website.'
-      )
+    if (!learningRoute || !examType) {
+      setMessage('Please select your examination route.')
       return
     }
 
@@ -80,47 +51,28 @@ function StudentProfile() {
       } = await supabase.auth.getUser()
 
       if (userError || !user) {
-        setMessage(
-          'Your session has expired. Please sign in again.'
-        )
+        setMessage('Your session has expired. Please log in again.')
         setLoading(false)
         return
       }
 
-      // const { error } = await supabase
-      //   .from('users')
-      //   .upsert(
-      //     {
-      //       id: user.id,
-      //       email: user.email,
-      //       full_name: fullName.trim(),
-      //     },
-      //     {
-      //       onConflict: 'id',
-      //     }
-      //   )
-
-
-
-
-
-
       const { error } = await supabase
-         .from('users')
-         .upsert(
-           {
-              auth_user_id: user.id,
-              email: user.email,
-              full_name: fullName.trim(),
-            },
-            {
-              onConflict: 'email',
-           }
+        .from('users')
+        .upsert(
+          {
+            auth_user_id: user.id,
+            email: user.email,
+            full_name: fullName.trim(),
+            learning_route: learningRoute,
+            exam_type: examType,
+          },
+          {
+            onConflict: 'email',
+          }
         )
-   
-
 
       if (error) {
+        console.error(error)
         setMessage(error.message)
         setLoading(false)
         return
@@ -128,324 +80,291 @@ function StudentProfile() {
 
       navigate('/dashboard')
     } catch (error) {
-      setMessage(
-        error?.message ||
-          'Something went wrong. Please try again.'
-      )
+      console.error(error)
+      setMessage('Something went wrong. Please try again.')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="profile-page">
+    <div className="student-profile-page">
 
-      {/* Background decoration */}
       <div className="profile-orb profile-orb-one"></div>
       <div className="profile-orb profile-orb-two"></div>
 
-      {/* Navigation */}
       <header className="profile-header">
-        <div className="profile-brand">
-          <img
-            src="/src/assets/overmaths-logo.png"
-            alt="Overmaths"
-          />
-        </div>
-
-        <div className="profile-step">
-          <span>SETUP</span>
-          <strong>0{step}</strong>
-          <span>/ 02</span>
-        </div>
+        <img
+          src="/src/assets/overmaths-logo.png"
+          alt="Overmaths"
+        />
       </header>
 
-      {/* Main */}
       <main className="profile-main">
 
-        {/* Progress */}
-        <div className="profile-progress">
-          <div
-            className="profile-progress-fill"
-            style={{
-              width: step === 1 ? '50%' : '100%',
-            }}
-          ></div>
+        <div className="profile-intro">
+          <p className="profile-eyebrow">
+            SETUP 0{step} / 02
+          </p>
+
+          <h1>
+            Let's personalize
+            <span> your learning.</span>
+          </h1>
+
+          <p>
+            Overmaths uses your learning route to create
+            the right preparation experience for you.
+          </p>
         </div>
 
-        {step === 1 && (
-          <section className="profile-content">
+        <div className="profile-progress">
+          <div className={step >= 1 ? 'progress-active' : ''}></div>
+          <div className={step >= 2 ? 'progress-active' : ''}></div>
+        </div>
 
-            <div className="profile-eyebrow">
-              <span className="eyebrow-line"></span>
-              YOUR JOURNEY STARTS HERE
-              <span className="eyebrow-line"></span>
-            </div>
+        <div className="profile-card">
 
-            <h1>
-              Let's build your
-              <span> learning path.</span>
-            </h1>
+          {step === 1 && (
+            <div className="profile-step">
 
-            <p className="profile-description">
-              Overmaths is more than answering questions.
-              We learn how you study, where you struggle,
-              and where you're trying to go.
-            </p>
+              <div className="step-heading">
+                <span className="step-number">01</span>
 
-            <div className="profile-form-card">
-
-              <div className="form-icon">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                >
-                  <path d="M20 21a8 8 0 0 0-16 0" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
+                <div>
+                  <h2>Tell us your name</h2>
+                  <p>
+                    This is how Overmaths will address you
+                    throughout your learning journey.
+                  </p>
+                </div>
               </div>
 
-              <div className="form-copy">
-                <label>What should we call you?</label>
-                <span>
-                  Your name will personalize your Overmaths
-                  experience.
-                </span>
+              <div className="profile-field">
+                <label>FULL NAME</label>
+
+                <input
+                  type="text"
+                  placeholder="Enter your full name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                />
               </div>
 
-              <input
-                type="text"
-                value={fullName}
-                onChange={(e) =>
-                  setFullName(e.target.value)
-                }
-                placeholder="Enter your full name"
-                disabled={loading}
-                autoComplete="name"
-              />
+              {message && (
+                <p className="profile-message">
+                  {message}
+                </p>
+              )}
 
-            </div>
-
-            {message && (
-              <div className="profile-message">
-                <span>!</span>
-                {message}
-              </div>
-            )}
-
-            <button
-              className="profile-primary-button"
-              onClick={handleNext}
-              disabled={loading}
-            >
-              <span>Continue</span>
-
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M5 12h14" />
-                <path d="m13 6 6 6-6 6" />
-              </svg>
-            </button>
-
-          </section>
-        )}
-
-        {step === 2 && (
-          <section className="profile-content profile-goal-content">
-
-            <div className="profile-eyebrow">
-              <span className="eyebrow-line"></span>
-              YOUR ACADEMIC GOAL
-              <span className="eyebrow-line"></span>
-            </div>
-
-            <h1>
-              Where are you
-              <span> heading?</span>
-            </h1>
-
-            <p className="profile-description">
-              Choose your main goal. We'll use it to
-              personalize the questions, recommendations
-              and progress you see.
-            </p>
-
-            <div className="goal-grid">
-
-              {goals.map((item) => (
+              <div className="profile-actions">
                 <button
-                  key={item.id}
-                  type="button"
-                  className={`goal-card ${
-                    goal === item.id ? 'active' : ''
-                  }`}
-                  onClick={() => {
-                    setGoal(item.id)
-                    setMessage('')
-                  }}
-                  disabled={loading}
+                  className="profile-primary-button"
+                  onClick={handleNext}
                 >
+                  Continue
 
-                  <div className="goal-icon">
-
-                    {item.icon === 'target' && (
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                      >
-                        <circle cx="12" cy="12" r="9" />
-                        <circle cx="12" cy="12" r="5" />
-                        <circle cx="12" cy="12" r="1.5" />
-                      </svg>
-                    )}
-
-                    {item.icon === 'book' && (
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                      >
-                        <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v17H6.5A2.5 2.5 0 0 0 4 22z" />
-                        <path d="M4 5.5v14A2.5 2.5 0 0 1 6.5 17H20" />
-                      </svg>
-                    )}
-
-                    {item.icon === 'award' && (
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                      >
-                        <circle cx="12" cy="8" r="5" />
-                        <path d="m8.5 12.5-1 8 4.5-2.5 4.5 2.5-1-8" />
-                      </svg>
-                    )}
-
-                    {item.icon === 'tools' && (
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                      >
-                        <path d="m14.7 6.3 3-3a4 4 0 0 0 0 5.7l-8.4 8.4a2.1 2.1 0 1 1-3-3l8.4-8.4a4 4 0 0 0 5.7 0" />
-                        <path d="m5 19 2 2" />
-                      </svg>
-                    )}
-
-                    {item.icon === 'graduation' && (
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                      >
-                        <path d="m3 9 9-5 9 5-9 5z" />
-                        <path d="M7 11.2V16c2.7 2.5 7.3 2.5 10 0v-4.8" />
-                        <path d="M21 9v7" />
-                      </svg>
-                    )}
-
-                  </div>
-
-                  <div className="goal-text">
-                    <strong>{item.title}</strong>
-                    <span>{item.subtitle}</span>
-                  </div>
-
-                  <div className="goal-check">
-                    {goal === item.id && (
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                      >
-                        <path d="m5 12 4 4L19 6" />
-                      </svg>
-                    )}
-                  </div>
-
-                </button>
-              ))}
-
-            </div>
-
-            {message && (
-              <div className="profile-message">
-                <span>!</span>
-                {message}
-              </div>
-            )}
-
-            <div className="profile-actions">
-
-              <button
-                className="back-button"
-                onClick={() => {
-                  setStep(1)
-                  setMessage('')
-                }}
-                disabled={loading}
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M19 12H5" />
-                  <path d="m11 18-6-6 6-6" />
-                </svg>
-
-                Back
-              </button>
-
-              <button
-                className="profile-primary-button"
-                onClick={handleSubmit}
-                disabled={loading || !goal}
-              >
-                <span>
-                  {loading
-                    ? 'Creating your space...'
-                    : 'Enter Overmaths'}
-                </span>
-
-                {!loading && (
                   <svg
                     viewBox="0 0 24 24"
                     fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
                   >
-                    <path d="M5 12h14" />
-                    <path d="m13 6 6 6-6 6" />
+                    <path
+                      d="M5 12h14M13 6l6 6-6 6"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </svg>
-                )}
-              </button>
+                </button>
+              </div>
 
             </div>
+          )}
 
-          </section>
-        )}
+          {step === 2 && (
+            <div className="profile-step">
+
+              <div className="step-heading">
+                <span className="step-number">02</span>
+
+                <div>
+                  <h2>Choose your learning route</h2>
+
+                  <p>
+                    Your choice determines how Overmaths
+                    organizes your subjects, courses and practice.
+                  </p>
+                </div>
+              </div>
+
+              <div className="route-section">
+
+                <p className="route-label">
+                  SECONDARY / O-LEVEL
+                </p>
+
+                <div className="goal-grid">
+
+                  <button
+                    type="button"
+                    className={`goal-card ${
+                      examType === 'UTME' ? 'selected' : ''
+                    }`}
+                    onClick={() => selectSecondaryExam('UTME')}
+                  >
+                    <div className="goal-icon">U</div>
+
+                    <div>
+                      <strong>UTME</strong>
+                      <span>JAMB examination</span>
+                    </div>
+
+                    {examType === 'UTME' && (
+                      <div className="goal-check">✓</div>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`goal-card ${
+                      examType === 'WAEC' ? 'selected' : ''
+                    }`}
+                    onClick={() => selectSecondaryExam('WAEC')}
+                  >
+                    <div className="goal-icon">W</div>
+
+                    <div>
+                      <strong>WAEC</strong>
+                      <span>West African examination</span>
+                    </div>
+
+                    {examType === 'WAEC' && (
+                      <div className="goal-check">✓</div>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`goal-card ${
+                      examType === 'NECO' ? 'selected' : ''
+                    }`}
+                    onClick={() => selectSecondaryExam('NECO')}
+                  >
+                    <div className="goal-icon">N</div>
+
+                    <div>
+                      <strong>NECO</strong>
+                      <span>National examination</span>
+                    </div>
+
+                    {examType === 'NECO' && (
+                      <div className="goal-check">✓</div>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`goal-card ${
+                      examType === 'NABTEB' ? 'selected' : ''
+                    }`}
+                    onClick={() => selectSecondaryExam('NABTEB')}
+                  >
+                    <div className="goal-icon">N</div>
+
+                    <div>
+                      <strong>NABTEB</strong>
+                      <span>Technical examination</span>
+                    </div>
+
+                    {examType === 'NABTEB' && (
+                      <div className="goal-check">✓</div>
+                    )}
+                  </button>
+
+                </div>
+
+                <p className="route-label university-label">
+                  UNIVERSITY
+                </p>
+
+                <button
+                  type="button"
+                  className={`goal-card university-card ${
+                    examType === 'University' ? 'selected' : ''
+                  }`}
+                  onClick={selectUniversity}
+                >
+                  <div className="goal-icon">U</div>
+
+                  <div>
+                    <strong>University Courses</strong>
+                    <span>
+                      Learn by course and course code
+                    </span>
+                  </div>
+
+                  {examType === 'University' && (
+                    <div className="goal-check">✓</div>
+                  )}
+                </button>
+
+              </div>
+
+              {message && (
+                <p className="profile-message">
+                  {message}
+                </p>
+              )}
+
+              <div className="profile-actions">
+
+                <button
+                  className="profile-back-button"
+                  onClick={() => {
+                    setMessage('')
+                    setStep(1)
+                  }}
+                  disabled={loading}
+                >
+                  Back
+                </button>
+
+                <button
+                  className="profile-primary-button"
+                  onClick={handleSubmit}
+                  disabled={loading}
+                >
+                  {loading ? 'Saving...' : 'Enter Overmaths'}
+
+                  {!loading && (
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                    >
+                      <path
+                        d="M5 12h14M13 6l6 6-6 6"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  )}
+                </button>
+
+              </div>
+
+            </div>
+          )}
+
+        </div>
 
       </main>
 
       <footer className="profile-footer">
-        <span>OVERMATHS</span>
-        <div></div>
-        <span>SMART EXAM PRACTICE</span>
+        <span>© 2026 Overmaths</span>
+        <span>Learn smarter. Prepare better.</span>
       </footer>
 
     </div>
