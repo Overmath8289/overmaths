@@ -8,8 +8,8 @@ function Quiz() {
 
   const {
     subject,
-    topic,
-    questionCount,
+    topic = 'mixed',
+    questionCount = 20,
   } = location.state || {}
 
   const [questions, setQuestions] = useState([])
@@ -21,115 +21,130 @@ function Quiz() {
   const [finished, setFinished] = useState(false)
 
   useEffect(() => {
-    if (!subject || !questionCount) {
-      navigate('/practice')
-      return
-    }
+    const loadQuestions = async () => {
+      if (!subject) {
+        setError('No subject was selected.')
+        setLoading(false)
+        return
+      }
 
-    fetchQuestions()
-  }, [])
+      setLoading(true)
+      setError('')
 
-  const fetchQuestions = async () => {
-    setLoading(true)
-    setError('')
-
-    try {
       let query = supabase
         .from('questions')
         .select(`
           id,
           subject,
+          course_id,
           topic,
-          question,
+          question_text,
           option_a,
           option_b,
           option_c,
           option_d,
-          correct_answer
+          correct_answer,
+          explanation,
+          image_url
         `)
         .eq('subject', subject)
+        .eq('is_active', true)
 
+      // Only filter by topic when a specific topic was selected.
+      // "mixed" means questions can come from all topics.
       if (topic && topic !== 'mixed') {
         query = query.eq('topic', topic)
       }
 
-      const { data, error } = await query
+      const { data, error: fetchError } = await query
 
-      if (error) {
-        throw error
-      }
+      if (fetchError) {
+        console.error(
+          'QUIZ ERROR:',
+          JSON.stringify(fetchError, null, 2)
+        )
 
-      if (!data || data.length === 0) {
-        setError('No questions were found for this selection.')
+        setError(
+          'Unable to load questions. Please try again.'
+        )
         setLoading(false)
         return
       }
 
-      // Shuffle questions
-      const shuffled = [...data].sort(() => Math.random() - 0.5)
+      if (!data || data.length === 0) {
+        setError(
+          topic && topic !== 'mixed'
+            ? `No questions are available for ${subject} — ${topic}.`
+            : `No questions are available for ${subject}.`
+        )
+        setLoading(false)
+        return
+      }
 
-      // Take only the requested number
-      const selectedQuestions = shuffled.slice(
+      // Randomize the questions so each practice session
+      // can feel different.
+      const shuffledQuestions = [...data].sort(
+        () => Math.random() - 0.5
+      )
+
+      const selectedQuestions = shuffledQuestions.slice(
         0,
-        Math.min(Number(questionCount), shuffled.length)
+        Math.min(questionCount, shuffledQuestions.length)
       )
 
       setQuestions(selectedQuestions)
       setLoading(false)
-    } catch (err) {
-      console.error('QUIZ ERROR:', JSON.stringify(err, null, 2))
-      setError('Unable to load questions. Please try again.')
-      setLoading(false)
     }
-  }
+
+    loadQuestions()
+  }, [subject, topic, questionCount])
+
+  const current = questions[currentQuestion]
 
   const handleAnswer = (answer) => {
-    if (selectedAnswer !== null) return
+    // Do not allow the student to change an answer
+    // after selecting one.
+    if (selectedAnswer !== null) {
+      return
+    }
 
     setSelectedAnswer(answer)
 
-    setAnswers((prev) => ({
-      ...prev,
-      [questions[currentQuestion].id]: answer,
+    setAnswers((previous) => ({
+      ...previous,
+      [current.id]: answer,
     }))
   }
 
   const handleNext = () => {
-    if (selectedAnswer === null) return
-
     if (currentQuestion < questions.length - 1) {
-      const nextIndex = currentQuestion + 1
+      setCurrentQuestion((previous) => previous + 1)
 
-      setCurrentQuestion(nextIndex)
+      const nextQuestion = questions[currentQuestion + 1]
 
-      const previousAnswer =
-        answers[questions[nextIndex].id] || null
-
-      setSelectedAnswer(previousAnswer)
+      setSelectedAnswer(
+        answers[nextQuestion.id] || null
+      )
     } else {
       setFinished(true)
     }
   }
 
   const handlePrevious = () => {
-    if (currentQuestion === 0) return
+    if (currentQuestion > 0) {
+      setCurrentQuestion((previous) => previous - 1)
 
-    const previousIndex = currentQuestion - 1
+      const previousQuestion =
+        questions[currentQuestion - 1]
 
-    setCurrentQuestion(previousIndex)
-
-    const previousAnswer =
-      answers[questions[previousIndex].id] || null
-
-    setSelectedAnswer(previousAnswer)
+      setSelectedAnswer(
+        answers[previousQuestion.id] || null
+      )
+    }
   }
 
   const getOptionClass = (option) => {
-    if (selectedAnswer === null) {
-      return ''
-    }
-
-    if (option === selectedAnswer) {
+    if (selectedAnswer === option) {
       return 'selected'
     }
 
@@ -138,222 +153,143 @@ function Quiz() {
 
   if (loading) {
     return (
-      <div className="quiz-page">
-        <div className="quiz-loading">
-          <div className="loading-spinner"></div>
-          <h2>Preparing your practice session...</h2>
-          <p>Fetching your questions.</p>
-        </div>
+      <div>
+        <h2>Loading questions...</h2>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="quiz-page">
-        <div className="quiz-error">
-          <h2>Unable to start practice</h2>
-          <p>{error}</p>
+      <div>
+        <h2>Something went wrong</h2>
 
-          <button onClick={() => navigate('/practice')}>
-            Back to Practice
-          </button>
-        </div>
+        <p>{error}</p>
+
+        <button onClick={() => navigate('/practice')}>
+          Back to Practice
+        </button>
       </div>
     )
   }
 
   if (finished) {
     return (
-      <div className="quiz-page">
-        <div className="quiz-complete">
-          <div className="complete-icon">
-            ✓
-          </div>
+      <div>
+        <h1>Practice Complete</h1>
 
-          <span className="eyebrow">
-            PRACTICE COMPLETE
-          </span>
+        <p>
+          You completed {questions.length} question
+          {questions.length !== 1 ? 's' : ''}.
+        </p>
 
-          <h1>
-            Well done.
-          </h1>
-
-          <p>
-            You have completed this practice session.
-          </p>
-
-          <div className="complete-summary">
-            <div>
-              <strong>{questions.length}</strong>
-              <span>Questions</span>
-            </div>
-
-            <div>
-              <strong>{Object.keys(answers).length}</strong>
-              <span>Answered</span>
-            </div>
-          </div>
-
-          <button
-            className="primary-button"
-            onClick={() => navigate('/practice')}
-          >
-            Practice Again
-          </button>
-        </div>
+        <button onClick={() => navigate('/practice')}>
+          Practice Again
+        </button>
       </div>
     )
   }
 
-  const question = questions[currentQuestion]
+  if (!current) {
+    return null
+  }
 
   const options = [
     {
-      key: 'A',
-      value: question.option_a,
+      letter: 'A',
+      text: current.option_a,
     },
     {
-      key: 'B',
-      value: question.option_b,
+      letter: 'B',
+      text: current.option_b,
     },
     {
-      key: 'C',
-      value: question.option_c,
+      letter: 'C',
+      text: current.option_c,
     },
     {
-      key: 'D',
-      value: question.option_d,
+      letter: 'D',
+      text: current.option_d,
     },
   ]
 
-  const progress =
-    ((currentQuestion + 1) / questions.length) * 100
-
   return (
-    <div className="quiz-page">
-
-      <header className="quiz-header">
-
-        <button
-          className="quiz-back"
-          onClick={() => navigate('/practice')}
-        >
-          ←
-          <span>Practice</span>
+    <div>
+      <header>
+        <button onClick={() => navigate('/practice')}>
+          Exit Practice
         </button>
 
-        <div className="quiz-brand">
-          <img
-            src="/src/assets/overmaths-logo.png"
-            alt="Overmaths"
-          />
+        <div>
+          {subject}
+          {topic !== 'mixed' ? ` • ${topic}` : ''}
         </div>
 
-        <div className="quiz-counter">
-          <span>
-            {String(currentQuestion + 1).padStart(2, '0')}
-          </span>
-          <small>
-            / {String(questions.length).padStart(2, '0')}
-          </small>
+        <div>
+          Question {currentQuestion + 1} of {questions.length}
         </div>
-
       </header>
 
-      <main className="quiz-container">
+      <main>
+        <section>
+          <p>
+            Question {currentQuestion + 1}
+          </p>
 
-        <div className="quiz-meta">
+          {/* 
+            IMPORTANT:
+            We are deliberately displaying question_text
+            here for now.
+
+            Later, this exact area will use our mathematical
+            renderer so fractions, powers, roots, equations,
+            Greek symbols, vectors, etc. display properly.
+          */}
+          <h2>{current.question_text}</h2>
+
+          {current.image_url && (
+            <img
+              src={current.image_url}
+              alt="Question"
+            />
+          )}
 
           <div>
-            <span className="quiz-label">
-              SUBJECT
-            </span>
-
-            <strong>
-              {subject}
-            </strong>
-          </div>
-
-          <div>
-            <span className="quiz-label">
-              TOPIC
-            </span>
-
-            <strong>
-              {topic === 'mixed' ? 'Mixed Topics' : topic}
-            </strong>
-          </div>
-
-        </div>
-
-        <div className="quiz-progress">
-          <div
-            className="quiz-progress-fill"
-            style={{ width: `${progress}%` }}
-          ></div>
-        </div>
-
-        <section className="question-card">
-
-          <div className="question-number">
-            QUESTION {String(currentQuestion + 1).padStart(2, '0')}
-          </div>
-
-          <h1 className="question-text">
-            {question.question}
-          </h1>
-
-          <div className="options-list">
-
             {options.map((option) => (
-
               <button
-                key={option.key}
-                className={`option ${getOptionClass(option.key)}`}
-                onClick={() => handleAnswer(option.key)}
+                key={option.letter}
+                className={getOptionClass(option.letter)}
+                onClick={() =>
+                  handleAnswer(option.letter)
+                }
+                disabled={selectedAnswer !== null}
               >
+                <span>{option.letter}</span>
 
-                <span className="option-letter">
-                  {option.key}
-                </span>
-
-                <span className="option-text">
-                  {option.value}
-                </span>
-
+                <span>{option.text}</span>
               </button>
-
             ))}
-
           </div>
-
         </section>
 
-        <div className="quiz-navigation">
-
+        <div>
           <button
-            className="secondary-button"
             onClick={handlePrevious}
             disabled={currentQuestion === 0}
           >
-            ← Previous
+            Previous
           </button>
 
           <button
-            className="primary-button"
             onClick={handleNext}
             disabled={selectedAnswer === null}
           >
             {currentQuestion === questions.length - 1
-              ? 'Finish Practice'
-              : 'Next Question →'}
+              ? 'Finish'
+              : 'Next'}
           </button>
-
         </div>
-
       </main>
-
     </div>
   )
 }
