@@ -43,7 +43,7 @@ function Quiz() {
           option_b,
           option_c,
           option_d,
-          correct_answer,
+          correction_answer,
           explanation,
           image_url
         `)
