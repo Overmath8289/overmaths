@@ -57,6 +57,9 @@ function Quiz() {
       }
 
       const { data, error: fetchError } = await query
+      console.log('SUBJECT:', subject)
+      console.log('QUESTIONS FROM SUPABASE:', data)
+      console.log('FETCH ERROR:', fetchError)
 
       if (fetchError) {
         console.error(
