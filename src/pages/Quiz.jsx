@@ -77,7 +77,7 @@ function Quiz() {
       setQuestions(selectedQuestions)
       setLoading(false)
     } catch (err) {
-      console.error(err)
+      console.error('QUIZ ERROR:', JSON.stringify(err, null, 2))
       setError('Unable to load questions. Please try again.')
       setLoading(false)
     }
