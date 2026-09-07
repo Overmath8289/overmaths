@@ -73,7 +73,7 @@ function Login() {
 
       // Temporary destination.
       // Later this will become /dashboard.
-      navigate('/')
+      navigate('/student-profile')
     } catch (error) {
       setMessage(
         error?.message ||
