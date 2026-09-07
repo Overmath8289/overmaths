@@ -87,18 +87,38 @@ function StudentProfile() {
         return
       }
 
+      // const { error } = await supabase
+      //   .from('users')
+      //   .upsert(
+      //     {
+      //       id: user.id,
+      //       email: user.email,
+      //       full_name: fullName.trim(),
+      //     },
+      //     {
+      //       onConflict: 'id',
+      //     }
+      //   )
+
+
+
+
+
+
       const { error } = await supabase
-        .from('users')
-        .upsert(
-          {
-            id: user.id,
-            email: user.email,
-            full_name: fullName.trim(),
-          },
-          {
-            onConflict: 'id',
-          }
+         .from('users')
+         .upsert(
+           {
+              auth_user_id: user.id,
+              email: user.email,
+              full_name: fullName.trim(),
+            },
+            {
+              onConflict: 'email',
+           }
         )
+   
+
 
       if (error) {
         setMessage(error.message)
