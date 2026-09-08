@@ -1,27 +1,219 @@
-
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-
 import { InlineMath, BlockMath } from 'react-katex'
-import 'katex/dist/katex.min.css'
 
+import 'katex/dist/katex.min.css'
 import './Quiz.css'
 
 const API_URL = 'https://overmaths.onrender.com'
 
+const TIMEOUT_ANSWER = '__TIMEOUT__'
 
 /*
-  =========================================================
-  MATH TEXT RENDERER
-  =========================================================
+=========================================================
+ANSWER NORMALIZATION
+=========================================================
+
+Database may contain:
+
+Option A
+Option B
+A
+B
+option_a
+option_b
+a
+b
+
+The quiz always works internally with:
+
+A / B / C / D
 */
 
-function MathText({ text }) {
-  if (!text) {
+function normalizeAnswer(value) {
+  if (value === null || value === undefined) {
     return null
   }
 
-  const normalizedText = String(text)
+  const normalized = String(value)
+    .trim()
+    .toLowerCase()
+
+  if (
+    normalized === 'a' ||
+    normalized === 'option a' ||
+    normalized === 'option_a' ||
+    normalized === 'optiona'
+  ) {
+    return 'A'
+  }
+
+  if (
+    normalized === 'b' ||
+    normalized === 'option b' ||
+    normalized === 'option_b' ||
+    normalized === 'optionb'
+  ) {
+    return 'B'
+  }
+
+  if (
+    normalized === 'c' ||
+    normalized === 'option c' ||
+    normalized === 'option_c' ||
+    normalized === 'optionc'
+  ) {
+    return 'C'
+  }
+
+  if (
+    normalized === 'd' ||
+    normalized === 'option d' ||
+    normalized === 'option_d' ||
+    normalized === 'optiond'
+  ) {
+    return 'D'
+  }
+
+  /*
+    Also handle values such as:
+
+    "The correct answer is Option B"
+  */
+
+  const match = normalized.match(
+    /\boption[\s_-]*([abcd])\b/
+  )
+
+  if (match) {
+    return match[1].toUpperCase()
+  }
+
+  return String(value).trim().toUpperCase()
+}
+
+
+/*
+=========================================================
+QUESTION ANSWER CHECK
+=========================================================
+*/
+
+function isAnswerCorrect(question, selectedAnswer) {
+  if (
+    !question ||
+    !selectedAnswer ||
+    selectedAnswer === TIMEOUT_ANSWER
+  ) {
+    return false
+  }
+
+  const correctAnswer = normalizeAnswer(
+    question.correction_answer
+  )
+
+  const selected = normalizeAnswer(
+    selectedAnswer
+  )
+
+  return correctAnswer === selected
+}
+
+
+/*
+=========================================================
+MATH NORMALIZATION
+=========================================================
+
+The question bank can contain ordinary text such as:
+
+0.5 * 10
+P_2
+10^-4
+
+We convert these into cleaner KaTeX-compatible
+mathematical expressions.
+
+This is intentionally conservative so normal prose
+is not accidentally converted into mathematics.
+=========================================================
+*/
+
+function normalizeMathExpression(value) {
+  if (!value) {
+    return ''
+  }
+
+  let math = String(value).trim()
+
+  /*
+    Multiplication:
+    0.5 * 10
+    becomes
+    0.5 \times 10
+  */
+  math = math.replace(
+    /\s*\*\s*/g,
+    ' \\times '
+  )
+
+  /*
+    Subscripts:
+    P_2
+    V_1
+    x_10
+
+    become:
+
+    P_{2}
+    V_{1}
+    x_{10}
+  */
+  math = math.replace(
+    /_([A-Za-z0-9]+)/g,
+    '_{$1}'
+  )
+
+  /*
+    Exponents:
+    10^-4
+    x^2
+
+    become:
+
+    10^{-4}
+    x^{2}
+  */
+  math = math.replace(
+    /\^(-?[A-Za-z0-9]+)/g,
+    '^{$1}'
+  )
+
+  return math
+}
+
+
+/*
+=========================================================
+MATH TEXT RENDERER
+=========================================================
+*/
+
+function MathText({ text }) {
+  if (
+    text === null ||
+    text === undefined ||
+    text === ''
+  ) {
+    return null
+  }
+
+  let normalizedText = String(text)
+
+  /*
+    Convert escaped delimiters into standard delimiters.
+  */
+  normalizedText = normalizedText
     .replace(/\\\[/g, '$$')
     .replace(/\\\]/g, '$$')
     .replace(/\\\(/g, '$')
@@ -32,10 +224,19 @@ function MathText({ text }) {
   let key = 0
 
   while (remaining.length > 0) {
-    const blockStart = remaining.indexOf('$$')
-    const inlineStart = remaining.indexOf('$')
+    const blockStart =
+      remaining.indexOf('$$')
 
-    if (blockStart === -1 && inlineStart === -1) {
+    const inlineStart =
+      remaining.indexOf('$')
+
+    /*
+      No more math.
+    */
+    if (
+      blockStart === -1 &&
+      inlineStart === -1
+    ) {
       parts.push(
         <span key={key++}>
           {remaining}
@@ -44,28 +245,49 @@ function MathText({ text }) {
       break
     }
 
+    /*
+      Determine which delimiter appears first.
+    */
     const firstStart =
       blockStart !== -1 &&
-      (inlineStart === -1 || blockStart === inlineStart)
+      (
+        inlineStart === -1 ||
+        blockStart === inlineStart
+      )
         ? blockStart
         : inlineStart
 
+    /*
+      Normal text before math.
+    */
     if (firstStart > 0) {
       parts.push(
         <span key={key++}>
-          {remaining.slice(0, firstStart)}
+          {remaining.slice(
+            0,
+            firstStart
+          )}
         </span>
       )
 
-      remaining = remaining.slice(firstStart)
+      remaining =
+        remaining.slice(firstStart)
     }
 
     /*
-      BLOCK MATH
+    =====================================================
+    BLOCK MATH
+    =====================================================
     */
 
-    if (remaining.startsWith('$$')) {
-      const closing = remaining.indexOf('$$', 2)
+    if (
+      remaining.startsWith('$$')
+    ) {
+      const closing =
+        remaining.indexOf(
+          '$$',
+          2
+        )
 
       if (closing === -1) {
         parts.push(
@@ -76,24 +298,48 @@ function MathText({ text }) {
         break
       }
 
-      const math = remaining.slice(2, closing)
+      const rawMath =
+        remaining.slice(
+          2,
+          closing
+        )
+
+      const math =
+        normalizeMathExpression(
+          rawMath
+        )
 
       parts.push(
-        <div className="math-block" key={key++}>
+        <div
+          className="math-block"
+          key={key++}
+        >
           <BlockMath math={math} />
         </div>
       )
 
-      remaining = remaining.slice(closing + 2)
+      remaining =
+        remaining.slice(
+          closing + 2
+        )
+
       continue
     }
 
     /*
-      INLINE MATH
+    =====================================================
+    INLINE MATH
+    =====================================================
     */
 
-    if (remaining.startsWith('$')) {
-      const closing = remaining.indexOf('$', 1)
+    if (
+      remaining.startsWith('$')
+    ) {
+      const closing =
+        remaining.indexOf(
+          '$',
+          1
+        )
 
       if (closing === -1) {
         parts.push(
@@ -104,7 +350,16 @@ function MathText({ text }) {
         break
       }
 
-      const math = remaining.slice(1, closing)
+      const rawMath =
+        remaining.slice(
+          1,
+          closing
+        )
+
+      const math =
+        normalizeMathExpression(
+          rawMath
+        )
 
       parts.push(
         <InlineMath
@@ -113,7 +368,12 @@ function MathText({ text }) {
         />
       )
 
-      remaining = remaining.slice(closing + 1)
+      remaining =
+        remaining.slice(
+          closing + 1
+        )
+
+      continue
     }
   }
 
@@ -122,9 +382,9 @@ function MathText({ text }) {
 
 
 /*
-  =========================================================
-  QUIZ
-  =========================================================
+=========================================================
+QUIZ
+=========================================================
 */
 
 function Quiz() {
@@ -186,21 +446,31 @@ function Quiz() {
   const [reviewQuestion, setReviewQuestion] =
     useState(0)
 
+  /*
+    Keep the latest answers available immediately.
+
+    This prevents the common React state timing bug where
+    the last answer is missing when the quiz is submitted.
+  */
+  const answersRef = useRef({})
+
+  const answerTimesRef = useRef({})
+
+  const current = questions[currentQuestion]
+
 
   /*
-    =======================================================
-    LOAD QUESTIONS
-    =======================================================
+  =======================================================
+  LOAD QUESTIONS
+  =======================================================
   */
 
   useEffect(() => {
     const loadQuestions = async () => {
-      /*
-        University requires courseId.
-        Secondary requires subject.
-      */
-
-      if (isUniversity && !courseId) {
+      if (
+        isUniversity &&
+        !courseId
+      ) {
         setError(
           'No university course was selected.'
         )
@@ -209,7 +479,10 @@ function Quiz() {
         return
       }
 
-      if (!isUniversity && !subject) {
+      if (
+        !isUniversity &&
+        !subject
+      ) {
         setError(
           'No subject was selected.'
         )
@@ -230,11 +503,9 @@ function Quiz() {
           String(questionCount)
         )
 
-
         /*
           UNIVERSITY
         */
-
         if (isUniversity) {
           params.set(
             'course_id',
@@ -242,11 +513,9 @@ function Quiz() {
           )
         }
 
-
         /*
           SECONDARY
         */
-
         if (!isUniversity) {
           params.set(
             'subject',
@@ -254,11 +523,9 @@ function Quiz() {
           )
         }
 
-
         /*
           TOPIC
         */
-
         if (
           topic &&
           topic !== 'mixed'
@@ -269,7 +536,6 @@ function Quiz() {
           )
         }
 
-
         const response =
           await fetch(
             `${API_URL}/api/questions?${params.toString()}`
@@ -277,7 +543,6 @@ function Quiz() {
 
         const result =
           await response.json()
-
 
         console.log(
           'QUIZ REQUEST:',
@@ -289,13 +554,7 @@ function Quiz() {
           result
         )
 
-
         if (!response.ok) {
-          console.error(
-            'PYTHON API ERROR:',
-            result
-          )
-
           setError(
             result?.error ||
               'Unable to load questions. Please try again.'
@@ -305,12 +564,12 @@ function Quiz() {
           return
         }
 
-
         const data =
           result?.questions || []
 
-
-        if (data.length === 0) {
+        if (
+          data.length === 0
+        ) {
           setError(
             getEmptyQuestionMessage()
           )
@@ -319,16 +578,15 @@ function Quiz() {
           return
         }
 
-
         /*
-          Shuffle questions.
+          Shuffle the questions.
         */
-
         const shuffledQuestions =
           [...data].sort(
-            () => Math.random() - 0.5
+            () =>
+              Math.random() -
+              0.5
           )
-
 
         const selectedQuestions =
           shuffledQuestions.slice(
@@ -339,15 +597,19 @@ function Quiz() {
             )
           )
 
-
         setQuestions(
           selectedQuestions
         )
 
         setCurrentQuestion(0)
         setSelectedAnswer(null)
+
+        answersRef.current = {}
+        answerTimesRef.current = {}
+
         setAnswers({})
         setAnswerTimes({})
+
         setFinished(false)
         setShowExplanation(false)
         setScore(0)
@@ -358,7 +620,6 @@ function Quiz() {
         )
 
         setLoading(false)
-
       } catch (fetchError) {
         console.error(
           'PYTHON CONNECTION ERROR:',
@@ -374,7 +635,6 @@ function Quiz() {
     }
 
     loadQuestions()
-
   }, [
     subject,
     courseId,
@@ -385,14 +645,10 @@ function Quiz() {
   ])
 
 
-  const current =
-    questions[currentQuestion]
-
-
   /*
-    =======================================================
-    TIMER
-    =======================================================
+  =======================================================
+  TIMER
+  =======================================================
   */
 
   useEffect(() => {
@@ -404,11 +660,9 @@ function Quiz() {
       return
     }
 
-
     /*
-      Practice stops timer after answer.
+      Practice Mode stops the timer after an answer.
     */
-
     if (
       isPracticeMode &&
       selectedAnswer !== null
@@ -416,12 +670,13 @@ function Quiz() {
       return
     }
 
-
+    /*
+      If timer reaches zero, mark unanswered.
+    */
     if (timeLeft <= 0) {
       handleTimeExpired()
       return
     }
-
 
     const timer =
       window.setInterval(() => {
@@ -434,10 +689,8 @@ function Quiz() {
         )
       }, 1000)
 
-
     return () =>
       window.clearInterval(timer)
-
   }, [
     loading,
     finished,
@@ -449,23 +702,64 @@ function Quiz() {
 
 
   /*
-    =======================================================
-    ANSWER
-    =======================================================
+  =======================================================
+  SAVE ANSWER
+  =======================================================
   */
 
-  const handleAnswer = (answer) => {
-    /*
-      Prevent changing an answer.
-    */
-
-    if (
-      selectedAnswer !== null ||
-      !current
-    ) {
+  const saveAnswer = (
+    answer,
+    elapsedSeconds
+  ) => {
+    if (!current) {
       return
     }
 
+    const questionId =
+      current.id
+
+    const updatedAnswers = {
+      ...answersRef.current,
+      [questionId]: answer,
+    }
+
+    const updatedTimes = {
+      ...answerTimesRef.current,
+      [questionId]:
+        elapsedSeconds,
+    }
+
+    answersRef.current =
+      updatedAnswers
+
+    answerTimesRef.current =
+      updatedTimes
+
+    setAnswers(
+      updatedAnswers
+    )
+
+    setAnswerTimes(
+      updatedTimes
+    )
+  }
+
+
+  /*
+  =======================================================
+  ANSWER
+  =======================================================
+  */
+
+  const handleAnswer = (
+    answer
+  ) => {
+    if (
+      !current ||
+      selectedAnswer !== null
+    ) {
+      return
+    }
 
     const elapsedSeconds =
       Math.max(
@@ -474,31 +768,16 @@ function Quiz() {
           Number(timeLeft)
       )
 
-
     setSelectedAnswer(answer)
 
-
-    setAnswers(
-      previous => ({
-        ...previous,
-        [current.id]: answer,
-      })
+    saveAnswer(
+      answer,
+      elapsedSeconds
     )
-
-
-    setAnswerTimes(
-      previous => ({
-        ...previous,
-        [current.id]:
-          elapsedSeconds,
-      })
-    )
-
 
     /*
-      Practice mode gives immediate feedback.
+      Practice mode immediately shows feedback.
     */
-
     if (isPracticeMode) {
       setShowExplanation(true)
     }
@@ -506,9 +785,9 @@ function Quiz() {
 
 
   /*
-    =======================================================
-    TIME EXPIRED
-    =======================================================
+  =======================================================
+  TIME EXPIRED
+  =======================================================
   */
 
   const handleTimeExpired = () => {
@@ -519,68 +798,64 @@ function Quiz() {
       return
     }
 
-
     const elapsedSeconds =
       Number(timePerQuestion)
 
-
     /*
-      null means unanswered.
+      Null means the student did not answer.
     */
-
-    setAnswers(
-      previous => ({
-        ...previous,
-        [current.id]: null,
-      })
+    saveAnswer(
+      null,
+      elapsedSeconds
     )
-
-
-    setAnswerTimes(
-      previous => ({
-        ...previous,
-        [current.id]:
-          elapsedSeconds,
-      })
-    )
-
-
-    /*
-      Practice:
-      show explanation.
-
-      Quiz:
-      move forward immediately.
-    */
 
     if (isPracticeMode) {
+      /*
+        Show timeout feedback before continuing.
+      */
       setSelectedAnswer(
-        '__TIMEOUT__'
+        TIMEOUT_ANSWER
       )
 
       setShowExplanation(true)
 
-    } else {
-      moveToNextQuestion()
+      return
     }
+
+    /*
+      Examination mode:
+      automatically move to the next question.
+    */
+    moveToNextQuestion(
+      answersRef.current
+    )
   }
 
 
   /*
-    =======================================================
-    NEXT QUESTION
-    =======================================================
+  =======================================================
+  NEXT QUESTION
+  =======================================================
   */
 
   const handleNext = () => {
+    if (!current) {
+      return
+    }
+
+    /*
+      In practice mode, the student must answer first.
+    */
     if (
-      !current ||
+      isPracticeMode &&
       selectedAnswer === null
     ) {
       return
     }
 
-
+    /*
+      Practice mode must show feedback before moving.
+    */
     if (
       isPracticeMode &&
       !showExplanation
@@ -588,12 +863,26 @@ function Quiz() {
       return
     }
 
-
-    moveToNextQuestion()
+    /*
+      Examination mode allows unanswered questions.
+      The student can move through the exam and submit
+      at the end.
+    */
+    moveToNextQuestion(
+      answersRef.current
+    )
   }
 
 
-  const moveToNextQuestion = () => {
+  /*
+  =======================================================
+  MOVE TO NEXT
+  =======================================================
+  */
+
+  const moveToNextQuestion = (
+    latestAnswers = answersRef.current
+  ) => {
     if (
       currentQuestion <
       questions.length - 1
@@ -604,35 +893,44 @@ function Quiz() {
       const nextQuestion =
         questions[nextIndex]
 
-
       setCurrentQuestion(
         nextIndex
       )
 
-
+      /*
+        Restore previously saved answer if one exists.
+      */
       setSelectedAnswer(
-        answers[nextQuestion.id] ??
-          null
+        latestAnswers[
+          nextQuestion.id
+        ] ?? null
       )
 
-
-      setShowExplanation(false)
-
+      setShowExplanation(
+        isPracticeMode &&
+        latestAnswers[
+          nextQuestion.id
+        ] !== undefined &&
+        latestAnswers[
+          nextQuestion.id
+        ] !== null
+      )
 
       setTimeLeft(
         Number(timePerQuestion)
       )
-
     } else {
-      finishSession()
+      finishSession(
+        latestAnswers
+      )
     }
   }
 
 
   /*
-    =======================================================
-    PREVIOUS QUESTION
-    =======================================================
+  =======================================================
+  PREVIOUS QUESTION
+  =======================================================
   */
 
   const handlePrevious = () => {
@@ -642,31 +940,29 @@ function Quiz() {
       return
     }
 
-
     const previousIndex =
       currentQuestion - 1
 
     const previousQuestion =
       questions[previousIndex]
 
-
     setCurrentQuestion(
       previousIndex
     )
 
+    const previousAnswer =
+      answersRef.current[
+        previousQuestion.id
+      ]
 
     setSelectedAnswer(
-      answers[previousQuestion.id] ??
-        null
+      previousAnswer ?? null
     )
-
 
     setShowExplanation(
       isPracticeMode &&
-      answers[previousQuestion.id] !==
-        undefined
+      previousAnswer !== undefined
     )
-
 
     setTimeLeft(
       Number(timePerQuestion)
@@ -675,32 +971,40 @@ function Quiz() {
 
 
   /*
-    =======================================================
-    FINISH SESSION
-    =======================================================
+  =======================================================
+  FINISH SESSION
+  =======================================================
   */
 
-  const finishSession = () => {
+  const finishSession = (
+    finalAnswers = answersRef.current
+  ) => {
     let calculatedScore = 0
-
 
     questions.forEach(
       question => {
         const answer =
-          answers[question.id]
-
+          finalAnswers[
+            question.id
+          ]
 
         if (
-          answer &&
-          answer !== '__TIMEOUT__' &&
-          answer ===
-            question.correction_answer
+          isAnswerCorrect(
+            question,
+            answer
+          )
         ) {
           calculatedScore += 1
         }
       }
     )
 
+    setAnswers(
+      finalAnswers
+    )
+
+    answersRef.current =
+      finalAnswers
 
     setScore(
       calculatedScore
@@ -712,9 +1016,9 @@ function Quiz() {
 
 
   /*
-    =======================================================
-    SCORE
-    =======================================================
+  =======================================================
+  SCORE
+  =======================================================
   */
 
   const scorePercentage =
@@ -728,9 +1032,9 @@ function Quiz() {
 
 
   /*
-    =======================================================
-    ANSWERED
-    =======================================================
+  =======================================================
+  ANSWERED
+  =======================================================
   */
 
   const answeredCount =
@@ -738,30 +1042,32 @@ function Quiz() {
       answers
     ).filter(
       answer =>
-        answer &&
-        answer !== '__TIMEOUT__'
+        answer !== null &&
+        answer !== undefined &&
+        answer !== TIMEOUT_ANSWER
     ).length
 
 
   /*
-    =======================================================
-    CORRECT
-    =======================================================
+  =======================================================
+  CORRECT
+  =======================================================
   */
 
   const correctCount =
     questions.filter(
       question =>
-        answers[question.id] &&
-        answers[question.id] ===
-          question.correction_answer
+        isAnswerCorrect(
+          question,
+          answers[question.id]
+        )
     ).length
 
 
   /*
-    =======================================================
-    AVERAGE SPEED
-    =======================================================
+  =======================================================
+  AVERAGE SPEED
+  =======================================================
   */
 
   const averageAnswerTime =
@@ -771,16 +1077,15 @@ function Quiz() {
 
 
   /*
-    =======================================================
-    OPTIONS
-    =======================================================
+  =======================================================
+  OPTIONS
+  =======================================================
   */
 
   const options = useMemo(() => {
     if (!current) {
       return []
     }
-
 
     return [
       {
@@ -804,25 +1109,31 @@ function Quiz() {
 
 
   /*
-    =======================================================
-    OPTION CLASS
-    =======================================================
+  =======================================================
+  OPTION CLASS
+  =======================================================
   */
 
   const getOptionClass = (
     option
   ) => {
-    /*
-      Timeout.
-    */
+    if (!current) {
+      return ''
+    }
 
+    /*
+      Timeout:
+      show the correct answer but don't
+      pretend the student selected it.
+    */
     if (
       selectedAnswer ===
-      '__TIMEOUT__'
+      TIMEOUT_ANSWER
     ) {
       if (
-        option ===
-        current.correction_answer
+        normalizeAnswer(
+          current.correction_answer
+        ) === option
       ) {
         return 'correct'
       }
@@ -830,26 +1141,24 @@ function Quiz() {
       return ''
     }
 
-
     /*
       Nothing selected.
     */
-
     if (
       selectedAnswer === null
     ) {
       return ''
     }
 
-
     /*
-      Quiz mode.
-    */
+      Examination mode:
+      never reveal correctness before submission.
 
+      The selected option is simply highlighted.
+    */
     if (!isPracticeMode) {
       if (
-        selectedAnswer ===
-        option
+        selectedAnswer === option
       ) {
         return 'selected'
       }
@@ -857,44 +1166,44 @@ function Quiz() {
       return ''
     }
 
-
     /*
-      Practice mode.
+      Practice mode:
+      show the correct option.
     */
-
     if (
-      option ===
-      current.correction_answer
+      normalizeAnswer(
+        current.correction_answer
+      ) === option
     ) {
       return 'correct'
     }
 
-
+    /*
+      Show student's wrong selection.
+    */
     if (
-      option ===
-      selectedAnswer
+      option === selectedAnswer
     ) {
       return 'wrong'
     }
-
 
     return ''
   }
 
 
   /*
-    =======================================================
-    LOADING
-    =======================================================
+  =======================================================
+  LOADING
+  =======================================================
   */
 
   if (loading) {
     return (
       <div className="quiz-page quiz-loading">
         <div className="quiz-loader">
-          <div className="loader-orb"></div>
-          <div className="loader-orb"></div>
-          <div className="loader-orb"></div>
+          <div className="loader-orb" />
+          <div className="loader-orb" />
+          <div className="loader-orb" />
 
           <p>
             Preparing your questions...
@@ -906,21 +1215,17 @@ function Quiz() {
 
 
   /*
-    =======================================================
-    ERROR
-    =======================================================
+  =======================================================
+  ERROR
+  =======================================================
   */
 
   if (error) {
     return (
       <div className="quiz-page">
-
         <main className="quiz-error-page">
-
           <div className="quiz-error-card">
-
             <div className="quiz-error-icon">
-
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -947,24 +1252,19 @@ function Quiz() {
                   fill="currentColor"
                 />
               </svg>
-
             </div>
-
 
             <p className="quiz-eyebrow">
               SESSION UNAVAILABLE
             </p>
 
-
             <h1>
               Something went wrong.
             </h1>
 
-
             <p>
               {error}
             </p>
-
 
             <button
               type="button"
@@ -974,20 +1274,17 @@ function Quiz() {
             >
               Back to Practice
             </button>
-
           </div>
-
         </main>
-
       </div>
     )
   }
 
 
   /*
-    =======================================================
-    RESULTS / REVIEW
-    =======================================================
+  =======================================================
+  RESULTS / REVIEW
+  =======================================================
   */
 
   if (finished) {
@@ -1022,32 +1319,32 @@ function Quiz() {
 
 
   /*
-    =======================================================
-    CURRENT QUESTION
-    =======================================================
+  =======================================================
+  CURRENT QUESTION
+  =======================================================
   */
 
   if (!current) {
     return null
   }
 
-
   const isTimeout =
     selectedAnswer ===
-    '__TIMEOUT__'
-
+    TIMEOUT_ANSWER
 
   const isCorrect =
     selectedAnswer !== null &&
     !isTimeout &&
-    selectedAnswer ===
-      current.correction_answer
+    isAnswerCorrect(
+      current,
+      selectedAnswer
+    )
 
 
   /*
-    =======================================================
-    TIMER DISPLAY
-    =======================================================
+  =======================================================
+  TIMER DISPLAY
+  =======================================================
   */
 
   const timerPercentage =
@@ -1055,17 +1352,19 @@ function Quiz() {
       0,
       Math.min(
         100,
-        (timeLeft /
-          Number(timePerQuestion)) *
+        (
+          timeLeft /
+          Number(timePerQuestion)
+        ) *
           100
       )
     )
 
 
   /*
-    =======================================================
-    QUIZ UI
-    =======================================================
+  =======================================================
+  QUIZ UI
+  =======================================================
   */
 
   return (
@@ -1074,7 +1373,6 @@ function Quiz() {
       {/* HEADER */}
 
       <header className="quiz-header">
-
         <button
           type="button"
           className="quiz-exit"
@@ -1098,9 +1396,7 @@ function Quiz() {
           Exit
         </button>
 
-
         <div className="quiz-title">
-
           <span>
             {isUniversity
               ? courseCode
@@ -1112,12 +1408,9 @@ function Quiz() {
               ? courseName
               : examType}
           </small>
-
         </div>
 
-
         <div className="quiz-progress">
-
           <span>
             {currentQuestion + 1}
           </span>
@@ -1125,24 +1418,19 @@ function Quiz() {
           <small>
             / {questions.length}
           </small>
-
         </div>
-
       </header>
 
 
       {/* TIMER */}
 
       <div className="quiz-timer-container">
-
         <div className="quiz-timer-top">
-
           <span>
             {isPracticeMode
               ? 'PRACTICE TIMER'
-              : 'QUIZ TIMER'}
+              : 'EXAMINATION TIMER'}
           </span>
-
 
           <strong
             className={
@@ -1155,21 +1443,17 @@ function Quiz() {
           >
             {formatTime(timeLeft)}
           </strong>
-
         </div>
 
-
         <div className="quiz-timer-bar">
-
           <div
             className="quiz-timer-progress"
             style={{
-              width: `${timerPercentage}%`,
+              width:
+                `${timerPercentage}%`,
             }}
           />
-
         </div>
-
       </div>
 
 
@@ -1178,35 +1462,29 @@ function Quiz() {
       <main className="quiz-main">
 
         <div className="quiz-question-meta">
-
           <span>
             QUESTION{' '}
             {currentQuestion + 1}
           </span>
-
 
           {topic !== 'mixed' && (
             <span>
               {topic}
             </span>
           )}
-
         </div>
 
 
         {/* QUESTION */}
 
         <section className="quiz-question-card">
-
           <div className="question-number">
             {String(
               currentQuestion + 1
             ).padStart(2, '0')}
           </div>
 
-
           <div className="question-content">
-
             <h1>
               <MathText
                 text={
@@ -1215,69 +1493,70 @@ function Quiz() {
               />
             </h1>
 
-
             {current.image_url && (
               <div className="question-image">
-
                 <img
                   src={current.image_url}
                   alt="Question illustration"
+                  onError={event => {
+                    event.currentTarget.style.display =
+                      'none'
+                  }}
                 />
-
               </div>
             )}
-
           </div>
-
         </section>
 
 
         {/* OPTIONS */}
 
         <section className="quiz-options">
-
           {options.map(
             option => (
-
               <button
                 type="button"
                 key={option.letter}
-                className={`quiz-option ${getOptionClass(
-                  option.letter
-                )}`}
+                className={
+                  `quiz-option ${getOptionClass(
+                    option.letter
+                  )}`
+                }
                 onClick={() =>
                   handleAnswer(
                     option.letter
                   )
                 }
                 disabled={
-                  selectedAnswer !==
-                  null
+                  /*
+                    Practice:
+                    lock after answering.
+
+                    Examination:
+                    allow the student to
+                    change an answer.
+                  */
+                  isPracticeMode &&
+                  selectedAnswer !== null
                 }
               >
-
                 <span className="option-letter">
                   {option.letter}
                 </span>
 
-
                 <span className="option-text">
-
                   <MathText
                     text={option.text}
                   />
-
                 </span>
 
-
                 {isPracticeMode &&
-                  selectedAnswer !==
-                    null &&
-                  option.letter ===
-                    current.correction_answer && (
-
+                  selectedAnswer !== null &&
+                  normalizeAnswer(
+                    current.correction_answer
+                  ) ===
+                    option.letter && (
                     <span className="option-status">
-
                       <svg
                         viewBox="0 0 24 24"
                         fill="none"
@@ -1290,16 +1569,11 @@ function Quiz() {
                           strokeLinejoin="round"
                         />
                       </svg>
-
                     </span>
-
                   )}
-
               </button>
-
             )
           )}
-
         </section>
 
 
@@ -1307,17 +1581,16 @@ function Quiz() {
 
         {isPracticeMode &&
           selectedAnswer !== null && (
-
             <section
-              className={`quiz-feedback ${
-                isCorrect
-                  ? 'feedback-correct'
-                  : 'feedback-wrong'
-              }`}
+              className={
+                `quiz-feedback ${
+                  isCorrect
+                    ? 'feedback-correct'
+                    : 'feedback-wrong'
+                }`
+              }
             >
-
               <div className="feedback-heading">
-
                 <strong>
                   {isTimeout
                     ? 'Time is up.'
@@ -1326,26 +1599,32 @@ function Quiz() {
                     : 'Not quite.'}
                 </strong>
 
-
                 {!isTimeout &&
                   !isCorrect && (
-
                     <span>
                       Correct answer:{' '}
                       {
-                        current.correction_answer
+                        normalizeAnswer(
+                          current.correction_answer
+                        )
                       }
                     </span>
-
                   )}
 
+                {isTimeout && (
+                  <span>
+                    Correct answer:{' '}
+                    {
+                      normalizeAnswer(
+                        current.correction_answer
+                      )
+                    }
+                  </span>
+                )}
               </div>
 
-
               {current.explanation && (
-
                 <div className="feedback-explanation">
-
                   <span>
                     EXPLANATION
                   </span>
@@ -1357,13 +1636,9 @@ function Quiz() {
                       }
                     />
                   </p>
-
                 </div>
-
               )}
-
             </section>
-
           )}
 
 
@@ -1382,7 +1657,6 @@ function Quiz() {
               0
             }
           >
-
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -1397,18 +1671,15 @@ function Quiz() {
             </svg>
 
             Previous
-
           </button>
 
 
           <div className="quiz-question-count">
-
             {currentQuestion + 1}
             {' '}
             of
             {' '}
             {questions.length}
-
           </div>
 
 
@@ -1419,16 +1690,16 @@ function Quiz() {
               handleNext
             }
             disabled={
-              selectedAnswer ===
-              null
+              isPracticeMode &&
+              selectedAnswer === null
             }
           >
-
             {currentQuestion ===
             questions.length - 1
-              ? 'Finish'
+              ? isPracticeMode
+                ? 'Finish'
+                : 'Submit Exam'
               : 'Next'}
-
 
             <svg
               viewBox="0 0 24 24"
@@ -1442,22 +1713,20 @@ function Quiz() {
                 strokeLinejoin="round"
               />
             </svg>
-
           </button>
 
         </div>
 
       </main>
-
     </div>
   )
 }
 
 
 /*
-  =========================================================
-  REVIEW SCREEN
-  =========================================================
+=========================================================
+REVIEW SCREEN
+=========================================================
 */
 
 function ReviewScreen({
@@ -1476,27 +1745,23 @@ function ReviewScreen({
   const question =
     questions[reviewQuestion]
 
-
   if (!question) {
     return null
   }
 
-
   const selected =
     answers[question.id]
 
-
   const isCorrect =
-    selected &&
-    selected ===
-      question.correction_answer
-
+    isAnswerCorrect(
+      question,
+      selected
+    )
 
   const isUnanswered =
-    !selected ||
-    selected ===
-      '__TIMEOUT__'
-
+    selected === null ||
+    selected === undefined ||
+    selected === TIMEOUT_ANSWER
 
   const options = [
     {
@@ -1517,6 +1782,10 @@ function ReviewScreen({
     },
   ]
 
+  const correctAnswer =
+    normalizeAnswer(
+      question.correction_answer
+    )
 
   return (
     <div className="quiz-page review-page">
@@ -1530,7 +1799,6 @@ function ReviewScreen({
             navigate('/practice')
           }
         >
-
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -1545,27 +1813,21 @@ function ReviewScreen({
           </svg>
 
           Practice
-
         </button>
 
-
         <div className="quiz-title">
-
           <span>
             {mode === 'practice'
               ? 'SESSION COMPLETE'
-              : 'QUIZ REVIEW'}
+              : 'EXAMINATION REVIEW'}
           </span>
 
           <small>
             Review your performance
           </small>
-
         </div>
 
-
-        <div></div>
-
+        <div />
       </header>
 
 
@@ -1578,32 +1840,25 @@ function ReviewScreen({
           <p className="quiz-eyebrow">
             {mode === 'practice'
               ? 'PRACTICE COMPLETE'
-              : 'QUIZ COMPLETE'}
+              : 'EXAMINATION COMPLETE'}
           </p>
 
-
           <h1>
-
             {score}
-
             <span>
               /{questions.length}
             </span>
-
           </h1>
-
 
           <strong>
             {scorePercentage}%
           </strong>
-
 
           <p>
             {getPerformanceMessage(
               scorePercentage
             )}
           </p>
-
         </section>
 
 
@@ -1612,7 +1867,6 @@ function ReviewScreen({
         <section className="review-stats">
 
           <div>
-
             <span>
               CORRECT
             </span>
@@ -1620,12 +1874,9 @@ function ReviewScreen({
             <strong>
               {correctCount}
             </strong>
-
           </div>
 
-
           <div>
-
             <span>
               ANSWERED
             </span>
@@ -1633,12 +1884,9 @@ function ReviewScreen({
             <strong>
               {answeredCount}
             </strong>
-
           </div>
 
-
           <div>
-
             <span>
               UNANSWERED
             </span>
@@ -1647,12 +1895,9 @@ function ReviewScreen({
               {questions.length -
                 answeredCount}
             </strong>
-
           </div>
 
-
           <div>
-
             <span>
               AVG. SPEED
             </span>
@@ -1660,7 +1905,6 @@ function ReviewScreen({
             <strong>
               {averageAnswerTime}s
             </strong>
-
           </div>
 
         </section>
@@ -1673,7 +1917,6 @@ function ReviewScreen({
           <div className="review-heading">
 
             <div>
-
               <p className="quiz-eyebrow">
                 QUESTION REVIEW
               </p>
@@ -1681,9 +1924,7 @@ function ReviewScreen({
               <h2>
                 See what happened.
               </h2>
-
             </div>
-
 
             <span>
               {reviewQuestion + 1}
@@ -1701,15 +1942,12 @@ function ReviewScreen({
           <div className="review-question-card">
 
             <div className="review-question-number">
-
               {String(
                 reviewQuestion + 1
               ).padStart(2, '0')}
-
             </div>
 
-
-            <div>
+            <div className="review-question-content">
 
               <h3>
                 <MathText
@@ -1719,16 +1957,17 @@ function ReviewScreen({
                 />
               </h3>
 
-
               {question.image_url && (
-
                 <img
                   src={
                     question.image_url
                   }
                   alt="Question illustration"
+                  onError={event => {
+                    event.currentTarget.style.display =
+                      'none'
+                  }}
                 />
-
               )}
 
             </div>
@@ -1744,24 +1983,22 @@ function ReviewScreen({
               option => {
 
                 const isSelected =
-                  selected ===
+                  normalizeAnswer(
+                    selected
+                  ) ===
                   option.letter
-
 
                 const isAnswer =
-                  question.correction_answer ===
+                  correctAnswer ===
                   option.letter
-
 
                 let className =
                   'review-option'
-
 
                 if (isAnswer) {
                   className +=
                     ' correct'
                 }
-
 
                 if (
                   isSelected &&
@@ -1771,9 +2008,7 @@ function ReviewScreen({
                     ' wrong'
                 }
 
-
                 return (
-
                   <div
                     key={
                       option.letter
@@ -1787,38 +2022,28 @@ function ReviewScreen({
                       {option.letter}
                     </span>
 
-
                     <p>
-
                       <MathText
                         text={
                           option.text
                         }
                       />
-
                     </p>
 
-
                     {isAnswer && (
-
                       <small>
                         Correct answer
                       </small>
-
                     )}
-
 
                     {isSelected &&
                       !isAnswer && (
-
                         <small>
                           Your answer
                         </small>
-
                       )}
 
                   </div>
-
                 )
               }
             )}
@@ -1829,37 +2054,31 @@ function ReviewScreen({
           {/* STATUS */}
 
           <div
-            className={`review-status ${
-              isCorrect
-                ? 'correct'
-                : isUnanswered
-                ? 'unanswered'
-                : 'wrong'
-            }`}
+            className={
+              `review-status ${
+                isCorrect
+                  ? 'correct'
+                  : isUnanswered
+                  ? 'unanswered'
+                  : 'wrong'
+              }`
+            }
           >
 
             <strong>
-
               {isCorrect
                 ? 'Correct'
                 : isUnanswered
                 ? 'Not answered'
                 : 'Incorrect'}
-
             </strong>
 
-
-            {!isCorrect &&
-              !isUnanswered && (
-
-                <span>
-                  Correct answer:{' '}
-                  {
-                    question.correction_answer
-                  }
-                </span>
-
-              )}
+            {!isCorrect && (
+              <span>
+                Correct answer:{' '}
+                {correctAnswer}
+              </span>
+            )}
 
           </div>
 
@@ -1867,26 +2086,21 @@ function ReviewScreen({
           {/* EXPLANATION */}
 
           {question.explanation && (
-
             <div className="review-explanation">
 
               <span>
                 EXPLANATION
               </span>
 
-
               <p>
-
                 <MathText
                   text={
                     question.explanation
                   }
                 />
-
               </p>
 
             </div>
-
           )}
 
 
@@ -1912,7 +2126,6 @@ function ReviewScreen({
             >
               Previous
             </button>
-
 
             <button
               type="button"
@@ -1947,7 +2160,6 @@ function ReviewScreen({
             navigate('/practice')
           }
         >
-
           Start Another Session
 
           <svg
@@ -1962,20 +2174,18 @@ function ReviewScreen({
               strokeLinejoin="round"
             />
           </svg>
-
         </button>
 
       </main>
-
     </div>
   )
 }
 
 
 /*
-  =========================================================
-  HELPERS
-  =========================================================
+=========================================================
+HELPERS
+=========================================================
 */
 
 function formatTime(seconds) {
@@ -1985,16 +2195,13 @@ function formatTime(seconds) {
       Number(seconds) || 0
     )
 
-
   const minutes =
     Math.floor(
       safeSeconds / 60
     )
 
-
   const remaining =
     safeSeconds % 60
-
 
   return `${String(
     minutes
@@ -2022,13 +2229,11 @@ function calculateAverageTime(
         'number'
     )
 
-
   if (
     values.length === 0
   ) {
     return 0
   }
-
 
   const total =
     values.reduce(
@@ -2037,9 +2242,9 @@ function calculateAverageTime(
       0
     )
 
-
   return Math.round(
-    total / values.length
+    total /
+      values.length
   )
 }
 
@@ -2051,21 +2256,17 @@ function getPerformanceMessage(
     return 'Excellent performance. You are building strong command of this material.'
   }
 
-
   if (percentage >= 75) {
     return 'Strong work. A little more practice can push this even further.'
   }
-
 
   if (percentage >= 60) {
     return 'Good foundation. Keep practising the areas you missed.'
   }
 
-
   if (percentage >= 40) {
     return 'You are making progress. Use the review to target your weaker areas.'
   }
-
 
   return 'This is your starting point. Review the explanations and try again.'
 }
@@ -2077,4 +2278,3 @@ function getEmptyQuestionMessage() {
 
 
 export default Quiz
-
