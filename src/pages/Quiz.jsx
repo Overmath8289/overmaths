@@ -41,7 +41,7 @@ function Quiz() {
         }
 
         const response = await fetch(
-          `http://127.0.0.1:5050/api/questions?${params.toString()}`
+              `https://overmaths.onrender.com/api/questions?${params.toString()}`
         )
 
         const result = await response.json()
