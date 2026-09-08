@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { supabase } from '../supabaseClient'
 
 function Quiz() {
   const location = useLocation()
@@ -31,72 +30,83 @@ function Quiz() {
       setLoading(true)
       setError('')
 
-      let query = supabase
-        .from('questions')
-        .select(`
-          id,
+      try {
+        const params = new URLSearchParams({
           subject,
-          course_id,
-          topic,
-          question_text,
-          option_a,
-          option_b,
-          option_c,
-          option_d,
-          correction_answer,
-          explanation,
-          image_url
-        `)
-        .eq('subject', subject)
-        // .eq('is_active', true)
+          limit: questionCount,
+        })
 
-      // Only filter by topic when a specific topic was selected.
-      // "mixed" means questions can come from all topics.
-      if (topic && topic !== 'mixed') {
-        query = query.eq('topic', topic)
-      }
+        if (topic && topic !== 'mixed') {
+          params.set('topic', topic)
+        }
 
-      const { data, error: fetchError } = await query
-      console.log('SUBJECT:', subject)
-      console.log('QUESTIONS FROM SUPABASE:', data)
-      console.log('FETCH ERROR:', fetchError)
+        const response = await fetch(
+          `http://127.0.0.1:5050/api/questions?${params.toString()}`
+        )
 
-      if (fetchError) {
+        const result = await response.json()
+
+        console.log('SUBJECT:', subject)
+        console.log('TOPIC:', topic)
+        console.log('QUESTIONS FROM PYTHON:', result)
+
+        if (!response.ok) {
+          console.error('PYTHON API ERROR:', result)
+
+          setError(
+            result?.error ||
+              'Unable to load questions. Please try again.'
+          )
+
+          setLoading(false)
+          return
+        }
+
+        const data = result?.questions || []
+
+        if (data.length === 0) {
+          setError(
+            topic && topic !== 'mixed'
+              ? `No questions are available for ${subject} — ${topic}.`
+              : `No questions are available for ${subject}.`
+          )
+
+          setLoading(false)
+          return
+        }
+
+        // Randomize the questions so each practice session
+        // can feel different.
+        const shuffledQuestions = [...data].sort(
+          () => Math.random() - 0.5
+        )
+
+        const selectedQuestions = shuffledQuestions.slice(
+          0,
+          Math.min(
+            Number(questionCount),
+            shuffledQuestions.length
+          )
+        )
+
+        setQuestions(selectedQuestions)
+        setCurrentQuestion(0)
+        setSelectedAnswer(null)
+        setAnswers({})
+        setFinished(false)
+        setLoading(false)
+      } catch (fetchError) {
         console.error(
-          'QUIZ ERROR:',
-          JSON.stringify(fetchError, null, 2)
+          'PYTHON CONNECTION ERROR:',
+          fetchError
         )
 
         setError(
-          'Unable to load questions. Please try again.'
+          'Unable to connect to the Overmaths question server. Please make sure the Python backend is running.'
         )
+
         setLoading(false)
-        return
       }
-
-      if (!data || data.length === 0) {
-        setError(
-          topic && topic !== 'mixed'
-            ? `No questions are available for ${subject} — ${topic}.`
-            : `No questions are available for ${subject}.`
-        )
-        setLoading(false)
-        return
-      }
-
-      // Randomize the questions so each practice session
-      // can feel different.
-      const shuffledQuestions = [...data].sort(
-        () => Math.random() - 0.5
-      )
-
-      const selectedQuestions = shuffledQuestions.slice(
-        0,
-        Math.min(questionCount, shuffledQuestions.length)
-      )
-
-      setQuestions(selectedQuestions)
-      setLoading(false)
     }
 
     loadQuestions()
@@ -239,14 +249,9 @@ function Quiz() {
             Question {currentQuestion + 1}
           </p>
 
-          {/* 
-            IMPORTANT:
-            We are deliberately displaying question_text
-            here for now.
-
-            Later, this exact area will use our mathematical
-            renderer so fractions, powers, roots, equations,
-            Greek symbols, vectors, etc. display properly.
+          {/*
+            Mathematical rendering will be added here later.
+            For now, question_text is displayed directly.
           */}
           <h2>{current.question_text}</h2>
 
