@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
-import './Practice.css'
+import { supabase } from "../supabaseClient";
 
 export default function Practice() {
   const location = useLocation()
