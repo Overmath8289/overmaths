@@ -1,2280 +1,1356 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
-import { InlineMath, BlockMath } from 'react-katex'
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { supabase } from "../supabaseClient";
+import MathText from "../components/MathText";
+import "./Quiz.css";
 
-import 'katex/dist/katex.min.css'
-import './Quiz.css'
+const API_URL = "https://overmaths.onrender.com";
 
-const API_URL = 'https://overmaths.onrender.com'
+const TIMEOUT_ANSWER = "__TIMEOUT__";
 
-const TIMEOUT_ANSWER = '__TIMEOUT__'
+function normalizeAnswer(answer) {
+  if (!answer) return null;
 
-/*
-=========================================================
-ANSWER NORMALIZATION
-=========================================================
-
-Database may contain:
-
-Option A
-Option B
-A
-B
-option_a
-option_b
-a
-b
-
-The quiz always works internally with:
-
-A / B / C / D
-*/
-
-function normalizeAnswer(value) {
-  if (value === null || value === undefined) {
-    return null
-  }
-
-  const normalized = String(value)
-    .trim()
-    .toLowerCase()
+  const value = String(answer).trim().toLowerCase();
 
   if (
-    normalized === 'a' ||
-    normalized === 'option a' ||
-    normalized === 'option_a' ||
-    normalized === 'optiona'
+    value === "a" ||
+    value === "option a" ||
+    value === "option_a" ||
+    value === "option-a"
   ) {
-    return 'A'
+    return "A";
   }
 
   if (
-    normalized === 'b' ||
-    normalized === 'option b' ||
-    normalized === 'option_b' ||
-    normalized === 'optionb'
+    value === "b" ||
+    value === "option b" ||
+    value === "option_b" ||
+    value === "option-b"
   ) {
-    return 'B'
+    return "B";
   }
 
   if (
-    normalized === 'c' ||
-    normalized === 'option c' ||
-    normalized === 'option_c' ||
-    normalized === 'optionc'
+    value === "c" ||
+    value === "option c" ||
+    value === "option_c" ||
+    value === "option-c"
   ) {
-    return 'C'
+    return "C";
   }
 
   if (
-    normalized === 'd' ||
-    normalized === 'option d' ||
-    normalized === 'option_d' ||
-    normalized === 'optiond'
+    value === "d" ||
+    value === "option d" ||
+    value === "option_d" ||
+    value === "option-d"
   ) {
-    return 'D'
+    return "D";
   }
 
-  /*
-    Also handle values such as:
-
-    "The correct answer is Option B"
-  */
-
-  const match = normalized.match(
-    /\boption[\s_-]*([abcd])\b/
-  )
-
-  if (match) {
-    return match[1].toUpperCase()
-  }
-
-  return String(value).trim().toUpperCase()
+  return null;
 }
 
+function isAnswerCorrect(selectedAnswer, correctAnswer) {
+  const selected = normalizeAnswer(selectedAnswer);
+  const correct = normalizeAnswer(correctAnswer);
 
-/*
-=========================================================
-QUESTION ANSWER CHECK
-=========================================================
-*/
-
-function isAnswerCorrect(question, selectedAnswer) {
-  if (
-    !question ||
-    !selectedAnswer ||
-    selectedAnswer === TIMEOUT_ANSWER
-  ) {
-    return false
-  }
-
-  const correctAnswer = normalizeAnswer(
-    question.correction_answer
-  )
-
-  const selected = normalizeAnswer(
-    selectedAnswer
-  )
-
-  return correctAnswer === selected
+  return Boolean(selected && correct && selected === correct);
 }
 
+function shuffleArray(array) {
+  const shuffled = [...array];
 
-/*
-=========================================================
-MATH NORMALIZATION
-=========================================================
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const randomIndex = Math.floor(Math.random() * (i + 1));
 
-The question bank can contain ordinary text such as:
-
-0.5 * 10
-P_2
-10^-4
-
-We convert these into cleaner KaTeX-compatible
-mathematical expressions.
-
-This is intentionally conservative so normal prose
-is not accidentally converted into mathematics.
-=========================================================
-*/
-
-function normalizeMathExpression(value) {
-  if (!value) {
-    return ''
+    [shuffled[i], shuffled[randomIndex]] = [
+      shuffled[randomIndex],
+      shuffled[i],
+    ];
   }
 
-  let math = String(value).trim()
-
-  /*
-    Multiplication:
-    0.5 * 10
-    becomes
-    0.5 \times 10
-  */
-  math = math.replace(
-    /\s*\*\s*/g,
-    ' \\times '
-  )
-
-  /*
-    Subscripts:
-    P_2
-    V_1
-    x_10
-
-    become:
-
-    P_{2}
-    V_{1}
-    x_{10}
-  */
-  math = math.replace(
-    /_([A-Za-z0-9]+)/g,
-    '_{$1}'
-  )
-
-  /*
-    Exponents:
-    10^-4
-    x^2
-
-    become:
-
-    10^{-4}
-    x^{2}
-  */
-  math = math.replace(
-    /\^(-?[A-Za-z0-9]+)/g,
-    '^{$1}'
-  )
-
-  return math
+  return shuffled;
 }
 
-
-/*
-=========================================================
-MATH TEXT RENDERER
-=========================================================
-*/
-
-function MathText({ text }) {
-  if (
-    text === null ||
-    text === undefined ||
-    text === ''
-  ) {
-    return null
-  }
-
-  let normalizedText = String(text)
-
-  /*
-    Convert escaped delimiters into standard delimiters.
-  */
-  normalizedText = normalizedText
-    .replace(/\\\[/g, '$$')
-    .replace(/\\\]/g, '$$')
-    .replace(/\\\(/g, '$')
-    .replace(/\\\)/g, '$')
-
-  const parts = []
-  let remaining = normalizedText
-  let key = 0
-
-  while (remaining.length > 0) {
-    const blockStart =
-      remaining.indexOf('$$')
-
-    const inlineStart =
-      remaining.indexOf('$')
-
-    /*
-      No more math.
-    */
-    if (
-      blockStart === -1 &&
-      inlineStart === -1
-    ) {
-      parts.push(
-        <span key={key++}>
-          {remaining}
-        </span>
-      )
-      break
-    }
-
-    /*
-      Determine which delimiter appears first.
-    */
-    const firstStart =
-      blockStart !== -1 &&
-      (
-        inlineStart === -1 ||
-        blockStart === inlineStart
-      )
-        ? blockStart
-        : inlineStart
-
-    /*
-      Normal text before math.
-    */
-    if (firstStart > 0) {
-      parts.push(
-        <span key={key++}>
-          {remaining.slice(
-            0,
-            firstStart
-          )}
-        </span>
-      )
-
-      remaining =
-        remaining.slice(firstStart)
-    }
-
-    /*
-    =====================================================
-    BLOCK MATH
-    =====================================================
-    */
-
-    if (
-      remaining.startsWith('$$')
-    ) {
-      const closing =
-        remaining.indexOf(
-          '$$',
-          2
-        )
-
-      if (closing === -1) {
-        parts.push(
-          <span key={key++}>
-            {remaining}
-          </span>
-        )
-        break
-      }
-
-      const rawMath =
-        remaining.slice(
-          2,
-          closing
-        )
-
-      const math =
-        normalizeMathExpression(
-          rawMath
-        )
-
-      parts.push(
-        <div
-          className="math-block"
-          key={key++}
-        >
-          <BlockMath math={math} />
-        </div>
-      )
-
-      remaining =
-        remaining.slice(
-          closing + 2
-        )
-
-      continue
-    }
-
-    /*
-    =====================================================
-    INLINE MATH
-    =====================================================
-    */
-
-    if (
-      remaining.startsWith('$')
-    ) {
-      const closing =
-        remaining.indexOf(
-          '$',
-          1
-        )
-
-      if (closing === -1) {
-        parts.push(
-          <span key={key++}>
-            {remaining}
-          </span>
-        )
-        break
-      }
-
-      const rawMath =
-        remaining.slice(
-          1,
-          closing
-        )
-
-      const math =
-        normalizeMathExpression(
-          rawMath
-        )
-
-      parts.push(
-        <InlineMath
-          key={key++}
-          math={math}
-        />
-      )
-
-      remaining =
-        remaining.slice(
-          closing + 1
-        )
-
-      continue
-    }
-  }
-
-  return <>{parts}</>
+function buildOptions(question) {
+  return [
+    {
+      key: "A",
+      text: question.option_a ?? "",
+    },
+    {
+      key: "B",
+      text: question.option_b ?? "",
+    },
+    {
+      key: "C",
+      text: question.option_c ?? "",
+    },
+    {
+      key: "D",
+      text: question.option_d ?? "",
+    },
+  ];
 }
 
+export default function Quiz() {
+  const location = useLocation();
+  const navigate = useNavigate();
 
-/*
-=========================================================
-QUIZ
-=========================================================
-*/
-
-function Quiz() {
-  const location = useLocation()
-  const navigate = useNavigate()
+  const navigationState = location.state || {};
 
   const {
-    subject = '',
+    subject = "",
     courseId = null,
-    courseCode = '',
-    courseName = '',
-    topic = 'mixed',
-    questionCount = 20,
-    mode = 'practice',
+    courseCode = "",
+    courseName = "",
+    topic = "mixed",
+    questionCount = 10,
+    mode = "Practice Mode",
     timePerQuestion = 30,
-    learningRoute = 'secondary',
-    examType = 'UTME',
-  } = location.state || {}
+    learningRoute = "",
+    examType = "",
+  } = navigationState;
 
-  const isUniversity =
-    learningRoute === 'university'
+  const isExaminationMode =
+    String(mode).toLowerCase().includes("examination") ||
+    String(mode).toLowerCase().includes("exam");
 
-  const isPracticeMode =
-    mode === 'practice'
+  const parsedQuestionCount = Math.max(
+    1,
+    Math.min(Number(questionCount) || 10, 100)
+  );
 
-  const [questions, setQuestions] =
-    useState([])
+  const parsedTimePerQuestion = Math.max(
+    5,
+    Number(timePerQuestion) || 30
+  );
 
-  const [currentQuestion, setCurrentQuestion] =
-    useState(0)
+  const [questions, setQuestions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingError, setLoadingError] = useState("");
 
-  const [selectedAnswer, setSelectedAnswer] =
-    useState(null)
-
-  const [answers, setAnswers] =
-    useState({})
-
-  const [answerTimes, setAnswerTimes] =
-    useState({})
-
-  const [timeLeft, setTimeLeft] =
-    useState(Number(timePerQuestion))
-
-  const [loading, setLoading] =
-    useState(true)
-
-  const [error, setError] =
-    useState('')
-
-  const [finished, setFinished] =
-    useState(false)
-
-  const [showExplanation, setShowExplanation] =
-    useState(false)
-
-  const [score, setScore] =
-    useState(0)
-
-  const [reviewQuestion, setReviewQuestion] =
-    useState(0)
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   /*
-    Keep the latest answers available immediately.
+   * answers:
+   *
+   * {
+   *   [questionId]: "A" | "B" | "C" | "D" | null | "__TIMEOUT__"
+   * }
+   */
+  const [answers, setAnswers] = useState({});
 
-    This prevents the common React state timing bug where
-    the last answer is missing when the quiz is submitted.
-  */
-  const answersRef = useRef({})
+  const [answerTimes, setAnswerTimes] = useState({});
 
-  const answerTimesRef = useRef({})
+  const answersRef = useRef({});
+  const answerTimesRef = useRef({});
 
-  const current = questions[currentQuestion]
+  const [timeLeft, setTimeLeft] = useState(parsedTimePerQuestion);
 
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [feedbackType, setFeedbackType] = useState("");
+  const [sessionFinished, setSessionFinished] = useState(false);
+
+  const [finalScore, setFinalScore] = useState(0);
+
+  const [user, setUser] = useState(null);
+
+  const [saving, setSaving] = useState(false);
+
+  const currentQuestion = questions[currentIndex];
 
   /*
-  =======================================================
-  LOAD QUESTIONS
-  =======================================================
-  */
+   * Keep React state and refs synchronized.
+   * The refs are important because timer callbacks can otherwise
+   * read stale React state.
+   */
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
 
   useEffect(() => {
-    const loadQuestions = async () => {
-      if (
-        isUniversity &&
-        !courseId
-      ) {
-        setError(
-          'No university course was selected.'
-        )
+    answerTimesRef.current = answerTimes;
+  }, [answerTimes]);
 
-        setLoading(false)
-        return
+  /*
+   * Load authenticated user.
+   */
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadUser() {
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+
+      if (mounted) {
+        setUser(authUser || null);
       }
+    }
 
-      if (
-        !isUniversity &&
-        !subject
-      ) {
-        setError(
-          'No subject was selected.'
-        )
+    loadUser();
 
-        setLoading(false)
-        return
-      }
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
-      setLoading(true)
-      setError('')
+  /*
+   * Load questions from the production Flask API.
+   */
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadQuestions() {
+      setLoading(true);
+      setLoadingError("");
 
       try {
-        const params =
-          new URLSearchParams()
+        const params = new URLSearchParams();
 
-        params.set(
-          'limit',
-          String(questionCount)
-        )
-
-        /*
-          UNIVERSITY
-        */
-        if (isUniversity) {
-          params.set(
-            'course_id',
-            String(courseId)
-          )
+        if (courseId) {
+          params.set("course_id", String(courseId));
+        } else if (subject) {
+          params.set("subject", subject);
+        } else {
+          throw new Error("No subject or course was selected.");
         }
 
-        /*
-          SECONDARY
-        */
-        if (!isUniversity) {
-          params.set(
-            'subject',
-            subject
-          )
+        if (topic && topic !== "mixed") {
+          params.set("topic", topic);
         }
 
-        /*
-          TOPIC
-        */
-        if (
-          topic &&
-          topic !== 'mixed'
-        ) {
-          params.set(
-            'topic',
-            topic
-          )
-        }
+        params.set("limit", String(parsedQuestionCount));
 
-        const response =
-          await fetch(
-            `${API_URL}/api/questions?${params.toString()}`
-          )
-
-        const result =
-          await response.json()
-
-        console.log(
-          'QUIZ REQUEST:',
-          params.toString()
-        )
-
-        console.log(
-          'QUESTIONS FROM PYTHON:',
-          result
-        )
+        const response = await fetch(
+          `${API_URL}/api/questions?${params.toString()}`
+        );
 
         if (!response.ok) {
-          setError(
-            result?.error ||
-              'Unable to load questions. Please try again.'
-          )
+          let message = "Unable to load questions.";
 
-          setLoading(false)
-          return
+          try {
+            const errorData = await response.json();
+
+            if (errorData?.error) {
+              message = errorData.error;
+            }
+          } catch {
+            // Keep default message.
+          }
+
+          throw new Error(message);
         }
 
-        const data =
-          result?.questions || []
+        const data = await response.json();
 
-        if (
-          data.length === 0
-        ) {
-          setError(
-            getEmptyQuestionMessage()
-          )
+        const loadedQuestions = Array.isArray(data?.questions)
+          ? data.questions
+          : [];
 
-          setLoading(false)
-          return
+        if (!loadedQuestions.length) {
+          throw new Error(
+            "No questions are available for this selection yet."
+          );
         }
 
         /*
-          Shuffle the questions.
-        */
-        const shuffledQuestions =
-          [...data].sort(
-            () =>
-              Math.random() -
-              0.5
-          )
-
-        const selectedQuestions =
-          shuffledQuestions.slice(
-            0,
-            Math.min(
-              Number(questionCount),
-              shuffledQuestions.length
-            )
-          )
-
-        setQuestions(
-          selectedQuestions
-        )
-
-        setCurrentQuestion(0)
-        setSelectedAnswer(null)
-
-        answersRef.current = {}
-        answerTimesRef.current = {}
-
-        setAnswers({})
-        setAnswerTimes({})
-
-        setFinished(false)
-        setShowExplanation(false)
-        setScore(0)
-        setReviewQuestion(0)
-
-        setTimeLeft(
-          Number(timePerQuestion)
-        )
-
-        setLoading(false)
-      } catch (fetchError) {
-        console.error(
-          'PYTHON CONNECTION ERROR:',
-          fetchError
-        )
-
-        setError(
-          'Unable to connect to the Overmaths question server.'
-        )
-
-        setLoading(false)
-      }
-    }
-
-    loadQuestions()
-  }, [
-    subject,
-    courseId,
-    topic,
-    questionCount,
-    isUniversity,
-    timePerQuestion,
-  ])
-
-
-  /*
-  =======================================================
-  TIMER
-  =======================================================
-  */
-
-  useEffect(() => {
-    if (
-      loading ||
-      finished ||
-      !current
-    ) {
-      return
-    }
-
-    /*
-      Practice Mode stops the timer after an answer.
-    */
-    if (
-      isPracticeMode &&
-      selectedAnswer !== null
-    ) {
-      return
-    }
-
-    /*
-      If timer reaches zero, mark unanswered.
-    */
-    if (timeLeft <= 0) {
-      handleTimeExpired()
-      return
-    }
-
-    const timer =
-      window.setInterval(() => {
-        setTimeLeft(
-          previous =>
-            Math.max(
-              previous - 1,
-              0
-            )
-        )
-      }, 1000)
-
-    return () =>
-      window.clearInterval(timer)
-  }, [
-    loading,
-    finished,
-    current,
-    timeLeft,
-    selectedAnswer,
-    isPracticeMode,
-  ])
-
-
-  /*
-  =======================================================
-  SAVE ANSWER
-  =======================================================
-  */
-
-  const saveAnswer = (
-    answer,
-    elapsedSeconds
-  ) => {
-    if (!current) {
-      return
-    }
-
-    const questionId =
-      current.id
-
-    const updatedAnswers = {
-      ...answersRef.current,
-      [questionId]: answer,
-    }
-
-    const updatedTimes = {
-      ...answerTimesRef.current,
-      [questionId]:
-        elapsedSeconds,
-    }
-
-    answersRef.current =
-      updatedAnswers
-
-    answerTimesRef.current =
-      updatedTimes
-
-    setAnswers(
-      updatedAnswers
-    )
-
-    setAnswerTimes(
-      updatedTimes
-    )
-  }
-
-
-  /*
-  =======================================================
-  ANSWER
-  =======================================================
-  */
-
-  const handleAnswer = (
-    answer
-  ) => {
-    if (
-      !current ||
-      selectedAnswer !== null
-    ) {
-      return
-    }
-
-    const elapsedSeconds =
-      Math.max(
-        0,
-        Number(timePerQuestion) -
-          Number(timeLeft)
-      )
-
-    setSelectedAnswer(answer)
-
-    saveAnswer(
-      answer,
-      elapsedSeconds
-    )
-
-    /*
-      Practice mode immediately shows feedback.
-    */
-    if (isPracticeMode) {
-      setShowExplanation(true)
-    }
-  }
-
-
-  /*
-  =======================================================
-  TIME EXPIRED
-  =======================================================
-  */
-
-  const handleTimeExpired = () => {
-    if (
-      !current ||
-      selectedAnswer !== null
-    ) {
-      return
-    }
-
-    const elapsedSeconds =
-      Number(timePerQuestion)
-
-    /*
-      Null means the student did not answer.
-    */
-    saveAnswer(
-      null,
-      elapsedSeconds
-    )
-
-    if (isPracticeMode) {
-      /*
-        Show timeout feedback before continuing.
-      */
-      setSelectedAnswer(
-        TIMEOUT_ANSWER
-      )
-
-      setShowExplanation(true)
-
-      return
-    }
-
-    /*
-      Examination mode:
-      automatically move to the next question.
-    */
-    moveToNextQuestion(
-      answersRef.current
-    )
-  }
-
-
-  /*
-  =======================================================
-  NEXT QUESTION
-  =======================================================
-  */
-
-  const handleNext = () => {
-    if (!current) {
-      return
-    }
-
-    /*
-      In practice mode, the student must answer first.
-    */
-    if (
-      isPracticeMode &&
-      selectedAnswer === null
-    ) {
-      return
-    }
-
-    /*
-      Practice mode must show feedback before moving.
-    */
-    if (
-      isPracticeMode &&
-      !showExplanation
-    ) {
-      return
-    }
-
-    /*
-      Examination mode allows unanswered questions.
-      The student can move through the exam and submit
-      at the end.
-    */
-    moveToNextQuestion(
-      answersRef.current
-    )
-  }
-
-
-  /*
-  =======================================================
-  MOVE TO NEXT
-  =======================================================
-  */
-
-  const moveToNextQuestion = (
-    latestAnswers = answersRef.current
-  ) => {
-    if (
-      currentQuestion <
-      questions.length - 1
-    ) {
-      const nextIndex =
-        currentQuestion + 1
-
-      const nextQuestion =
-        questions[nextIndex]
-
-      setCurrentQuestion(
-        nextIndex
-      )
-
-      /*
-        Restore previously saved answer if one exists.
-      */
-      setSelectedAnswer(
-        latestAnswers[
-          nextQuestion.id
-        ] ?? null
-      )
-
-      setShowExplanation(
-        isPracticeMode &&
-        latestAnswers[
-          nextQuestion.id
-        ] !== undefined &&
-        latestAnswers[
-          nextQuestion.id
-        ] !== null
-      )
-
-      setTimeLeft(
-        Number(timePerQuestion)
-      )
-    } else {
-      finishSession(
-        latestAnswers
-      )
-    }
-  }
-
-
-  /*
-  =======================================================
-  PREVIOUS QUESTION
-  =======================================================
-  */
-
-  const handlePrevious = () => {
-    if (
-      currentQuestion === 0
-    ) {
-      return
-    }
-
-    const previousIndex =
-      currentQuestion - 1
-
-    const previousQuestion =
-      questions[previousIndex]
-
-    setCurrentQuestion(
-      previousIndex
-    )
-
-    const previousAnswer =
-      answersRef.current[
-        previousQuestion.id
-      ]
-
-    setSelectedAnswer(
-      previousAnswer ?? null
-    )
-
-    setShowExplanation(
-      isPracticeMode &&
-      previousAnswer !== undefined
-    )
-
-    setTimeLeft(
-      Number(timePerQuestion)
-    )
-  }
-
-
-  /*
-  =======================================================
-  FINISH SESSION
-  =======================================================
-  */
-
-  const finishSession = (
-    finalAnswers = answersRef.current
-  ) => {
-    let calculatedScore = 0
-
-    questions.forEach(
-      question => {
-        const answer =
-          finalAnswers[
-            question.id
-          ]
-
-        if (
-          isAnswerCorrect(
-            question,
-            answer
-          )
-        ) {
-          calculatedScore += 1
+         * Shuffle only after receiving the questions.
+         * This keeps the backend simple while giving the student
+         * a fresh question order.
+         */
+        const shuffledQuestions = shuffleArray(loadedQuestions).slice(
+          0,
+          parsedQuestionCount
+        );
+
+        if (mounted) {
+          setQuestions(shuffledQuestions);
+          setCurrentIndex(0);
+        }
+      } catch (error) {
+        console.error("QUIZ LOAD ERROR:", error);
+
+        if (mounted) {
+          setLoadingError(
+            error?.message ||
+              "Something went wrong while loading the questions."
+          );
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
         }
       }
-    )
+    }
 
-    setAnswers(
-      finalAnswers
-    )
+    loadQuestions();
 
-    answersRef.current =
-      finalAnswers
+    return () => {
+      mounted = false;
+    };
+  }, [courseId, subject, topic, parsedQuestionCount]);
 
-    setScore(
-      calculatedScore
-    )
+  /*
+   * Reset timer whenever the question changes.
+   */
+  useEffect(() => {
+    if (!currentQuestion || sessionFinished) return;
 
-    setFinished(true)
-    setReviewQuestion(0)
+    setTimeLeft(parsedTimePerQuestion);
+    setShowFeedback(false);
+    setFeedbackType("");
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }, [currentIndex, currentQuestion?.id, parsedTimePerQuestion, sessionFinished]);
+
+  /*
+   * Timer.
+   *
+   * When time reaches zero:
+   * - record the question as unanswered
+   * - award zero
+   * - Practice Mode shows timeout feedback
+   * - Examination Mode automatically moves to the next question
+   */
+  useEffect(() => {
+    if (
+      !currentQuestion ||
+      sessionFinished ||
+      showFeedback
+    ) {
+      return undefined;
+    }
+
+    const timer = window.setInterval(() => {
+      setTimeLeft((previousTime) => {
+        if (previousTime <= 1) {
+          window.clearInterval(timer);
+
+          handleTimeout(currentQuestion);
+
+          return 0;
+        }
+
+        return previousTime - 1;
+      });
+    }, 1000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [
+    currentQuestion?.id,
+    sessionFinished,
+    showFeedback,
+    parsedTimePerQuestion,
+  ]);
+
+  /*
+   * Record an answer in both state and refs.
+   */
+  function saveAnswer(questionId, selectedAnswer, secondsUsed) {
+    const nextAnswers = {
+      ...answersRef.current,
+      [questionId]: selectedAnswer,
+    };
+
+    const nextAnswerTimes = {
+      ...answerTimesRef.current,
+      [questionId]: secondsUsed,
+    };
+
+    answersRef.current = nextAnswers;
+    answerTimesRef.current = nextAnswerTimes;
+
+    setAnswers(nextAnswers);
+    setAnswerTimes(nextAnswerTimes);
   }
 
+  /*
+   * Handle normal student answer.
+   */
+  function handleAnswer(selectedAnswer) {
+    if (!currentQuestion || sessionFinished) return;
+
+    /*
+     * In Practice Mode, once an answer has been selected,
+     * don't allow another selection for the same question.
+     */
+    if (!isExaminationMode && answersRef.current[currentQuestion.id]) {
+      return;
+    }
+
+    const secondsUsed = Math.max(
+      0,
+      parsedTimePerQuestion - timeLeft
+    );
+
+    saveAnswer(
+      currentQuestion.id,
+      selectedAnswer,
+      secondsUsed
+    );
+
+    if (!isExaminationMode) {
+      const correct = isAnswerCorrect(
+        selectedAnswer,
+        currentQuestion.correction_answer
+      );
+
+      setFeedbackType(correct ? "correct" : "wrong");
+      setShowFeedback(true);
+    }
+  }
 
   /*
-  =======================================================
-  SCORE
-  =======================================================
-  */
+   * Handle timeout.
+   */
+  function handleTimeout(question) {
+    if (!question || sessionFinished) return;
 
-  const scorePercentage =
-    questions.length > 0
-      ? Math.round(
-          (score /
-            questions.length) *
-            100
-        )
-      : 0
+    /*
+     * If an answer already exists, don't overwrite it.
+     */
+    if (answersRef.current[question.id]) {
+      return;
+    }
 
+    saveAnswer(
+      question.id,
+      TIMEOUT_ANSWER,
+      parsedTimePerQuestion
+    );
+
+    if (isExaminationMode) {
+      /*
+       * Examination Mode should continue automatically.
+       */
+      if (currentIndex >= questions.length - 1) {
+        finishSession({
+          ...answersRef.current,
+          [question.id]: TIMEOUT_ANSWER,
+        });
+      } else {
+        setCurrentIndex((index) => index + 1);
+      }
+
+      return;
+    }
+
+    /*
+     * Practice Mode gives feedback before moving on.
+     */
+    setFeedbackType("timeout");
+    setShowFeedback(true);
+  }
 
   /*
-  =======================================================
-  ANSWERED
-  =======================================================
-  */
+   * Calculate score from the latest answer object.
+   *
+   * Correct = 1
+   * Wrong = 0
+   * Unanswered/timeout = 0
+   */
+  function calculateScore(answerMap) {
+    return questions.reduce((score, question) => {
+      const selectedAnswer = answerMap?.[question.id];
 
-  const answeredCount =
-    Object.values(
-      answers
-    ).filter(
-      answer =>
-        answer !== null &&
-        answer !== undefined &&
-        answer !== TIMEOUT_ANSWER
-    ).length
-
-
-  /*
-  =======================================================
-  CORRECT
-  =======================================================
-  */
-
-  const correctCount =
-    questions.filter(
-      question =>
+      if (
+        selectedAnswer &&
+        selectedAnswer !== TIMEOUT_ANSWER &&
         isAnswerCorrect(
-          question,
-          answers[question.id]
+          selectedAnswer,
+          question.correction_answer
         )
-    ).length
-
-
-  /*
-  =======================================================
-  AVERAGE SPEED
-  =======================================================
-  */
-
-  const averageAnswerTime =
-    calculateAverageTime(
-      answerTimes
-    )
-
-
-  /*
-  =======================================================
-  OPTIONS
-  =======================================================
-  */
-
-  const options = useMemo(() => {
-    if (!current) {
-      return []
-    }
-
-    return [
-      {
-        letter: 'A',
-        text: current.option_a,
-      },
-      {
-        letter: 'B',
-        text: current.option_b,
-      },
-      {
-        letter: 'C',
-        text: current.option_c,
-      },
-      {
-        letter: 'D',
-        text: current.option_d,
-      },
-    ]
-  }, [current])
-
-
-  /*
-  =======================================================
-  OPTION CLASS
-  =======================================================
-  */
-
-  const getOptionClass = (
-    option
-  ) => {
-    if (!current) {
-      return ''
-    }
-
-    /*
-      Timeout:
-      show the correct answer but don't
-      pretend the student selected it.
-    */
-    if (
-      selectedAnswer ===
-      TIMEOUT_ANSWER
-    ) {
-      if (
-        normalizeAnswer(
-          current.correction_answer
-        ) === option
       ) {
-        return 'correct'
+        return score + 1;
       }
 
-      return ''
-    }
-
-    /*
-      Nothing selected.
-    */
-    if (
-      selectedAnswer === null
-    ) {
-      return ''
-    }
-
-    /*
-      Examination mode:
-      never reveal correctness before submission.
-
-      The selected option is simply highlighted.
-    */
-    if (!isPracticeMode) {
-      if (
-        selectedAnswer === option
-      ) {
-        return 'selected'
-      }
-
-      return ''
-    }
-
-    /*
-      Practice mode:
-      show the correct option.
-    */
-    if (
-      normalizeAnswer(
-        current.correction_answer
-      ) === option
-    ) {
-      return 'correct'
-    }
-
-    /*
-      Show student's wrong selection.
-    */
-    if (
-      option === selectedAnswer
-    ) {
-      return 'wrong'
-    }
-
-    return ''
+      return score;
+    }, 0);
   }
 
+  /*
+   * Finish the session.
+   *
+   * Accepting finalAnswers prevents the last answer from being lost
+   * because of React's asynchronous state update.
+   */
+  async function finishSession(finalAnswers = answersRef.current) {
+    if (sessionFinished || saving) return;
+
+    setSaving(true);
+
+    const score = calculateScore(finalAnswers);
+
+    setFinalScore(score);
+    setSessionFinished(true);
+    setShowFeedback(false);
+
+    /*
+     * Save attempt to Supabase if the relevant tables are available.
+     *
+     * We deliberately don't block the result screen if saving fails.
+     */
+    try {
+      if (user) {
+        const attemptPayload = {
+          user_id: user.id,
+          score,
+          total_questions: questions.length,
+          subject: subject || null,
+          topic: topic || null,
+          mode: isExaminationMode
+            ? "Examination Mode"
+            : "Practice Mode",
+        };
+
+        const { data: attempt, error: attemptError } =
+          await supabase
+            .from("quiz_attempts")
+            .insert(attemptPayload)
+            .select()
+            .single();
+
+        if (attemptError) {
+          console.warn(
+            "QUIZ ATTEMPT SAVE WARNING:",
+            attemptError
+          );
+        }
+
+        /*
+         * Only save individual answers when an attempt was
+         * successfully created and the table supports it.
+         */
+        if (attempt && !attemptError) {
+          const answerRows = questions.map((question) => ({
+            attempt_id: attempt.id,
+            question_id: question.id,
+            selected_answer:
+              finalAnswers?.[question.id] === TIMEOUT_ANSWER
+                ? null
+                : finalAnswers?.[question.id] ?? null,
+            is_correct: isAnswerCorrect(
+              finalAnswers?.[question.id],
+              question.correction_answer
+            ),
+            time_taken:
+              answerTimesRef.current?.[question.id] ?? null,
+          }));
+
+          const { error: answersError } = await supabase
+            .from("quiz_answers")
+            .insert(answerRows);
+
+          if (answersError) {
+            console.warn(
+              "QUIZ ANSWERS SAVE WARNING:",
+              answersError
+            );
+          }
+        }
+      }
+    } catch (error) {
+      console.warn("QUIZ SAVE WARNING:", error);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   /*
-  =======================================================
-  LOADING
-  =======================================================
-  */
+   * Move to the next question.
+   */
+  function handleNext() {
+    if (!currentQuestion || sessionFinished) return;
 
+    /*
+     * Practice Mode requires an answer before proceeding.
+     * Timeout is considered an answered/missed question.
+     */
+    const currentAnswer =
+      answersRef.current[currentQuestion.id];
+
+    if (!isExaminationMode) {
+      if (!currentAnswer) {
+        return;
+      }
+    }
+
+    if (currentIndex >= questions.length - 1) {
+      finishSession();
+      return;
+    }
+
+    setCurrentIndex((index) => index + 1);
+  }
+
+  /*
+   * Move to a previous question in Examination Mode.
+   *
+   * This is intentionally allowed in examination mode so the
+   * student can review/change answers before submission.
+   */
+  function handlePrevious() {
+    if (currentIndex <= 0 || sessionFinished) return;
+
+    setCurrentIndex((index) => index - 1);
+  }
+
+  /*
+   * Direct question navigation.
+   *
+   * Examination Mode allows revisiting questions.
+   */
+  function handleQuestionJump(index) {
+    if (!isExaminationMode || sessionFinished) return;
+
+    setCurrentIndex(index);
+  }
+
+  /*
+   * Current answer.
+   */
+  const selectedAnswer = currentQuestion
+    ? answers[currentQuestion.id]
+    : null;
+
+  /*
+   * Progress.
+   */
+  const answeredCount = useMemo(() => {
+    return questions.filter((question) => {
+      const answer = answers[question.id];
+
+      return Boolean(answer);
+    }).length;
+  }, [questions, answers]);
+
+  const correctCount = useMemo(() => {
+    return questions.reduce((count, question) => {
+      const answer = answers[question.id];
+
+      if (
+        answer &&
+        answer !== TIMEOUT_ANSWER &&
+        isAnswerCorrect(
+          answer,
+          question.correction_answer
+        )
+      ) {
+        return count + 1;
+      }
+
+      return count;
+    }, 0);
+  }, [questions, answers]);
+
+  const unansweredCount = Math.max(
+    0,
+    questions.length - answeredCount
+  );
+
+  /*
+   * Review percentage.
+   */
+  const percentage =
+    questions.length > 0
+      ? Math.round((finalScore / questions.length) * 100)
+      : 0;
+
+  /*
+   * Loading state.
+   */
   if (loading) {
     return (
-      <div className="quiz-page quiz-loading">
-        <div className="quiz-loader">
-          <div className="loader-orb" />
-          <div className="loader-orb" />
-          <div className="loader-orb" />
+      <main className="quiz-page">
+        <div className="quiz-loading">
+          <div className="quiz-loading-orb" />
+
+          <h2>Preparing your session</h2>
 
           <p>
-            Preparing your questions...
+            Loading your questions and building your
+            practice experience...
           </p>
         </div>
-      </div>
-    )
+      </main>
+    );
   }
 
+  /*
+   * Error state.
+   */
+  if (loadingError) {
+    return (
+      <main className="quiz-page">
+        <div className="quiz-error-card">
+          <div className="quiz-error-icon">!</div>
+
+          <h2>We couldn't load the questions</h2>
+
+          <p>{loadingError}</p>
+
+          <button
+            type="button"
+            className="quiz-primary-button"
+            onClick={() => navigate("/practice")}
+          >
+            Back to Practice
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   /*
-  =======================================================
-  ERROR
-  =======================================================
-  */
-
-  if (error) {
+   * No questions.
+   */
+  if (!questions.length) {
     return (
-      <div className="quiz-page">
-        <main className="quiz-error-page">
-          <div className="quiz-error-card">
-            <div className="quiz-error-icon">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-              >
-                <circle
-                  cx="12"
-                  cy="12"
-                  r="9"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                />
+      <main className="quiz-page">
+        <div className="quiz-error-card">
+          <h2>No questions available</h2>
 
-                <path
-                  d="M12 8v5"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                />
+          <p>
+            There are currently no active questions for
+            this selection.
+          </p>
 
-                <circle
-                  cx="12"
-                  cy="16"
-                  r="1"
-                  fill="currentColor"
-                />
-              </svg>
+          <button
+            type="button"
+            className="quiz-primary-button"
+            onClick={() => navigate("/practice")}
+          >
+            Back to Practice
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  /*
+   * Final review/results screen.
+   */
+  if (sessionFinished) {
+    return (
+      <main className="quiz-page quiz-review-page">
+        <div className="quiz-shell">
+          <header className="quiz-topbar">
+            <button
+              type="button"
+              className="quiz-back-button"
+              onClick={() => navigate("/practice")}
+            >
+              ← Practice
+            </button>
+
+            <div className="quiz-brand">
+              <span className="quiz-brand-mark">O</span>
+              <span>Overmaths</span>
             </div>
 
-            <p className="quiz-eyebrow">
-              SESSION UNAVAILABLE
-            </p>
+            <div className="quiz-mode-badge">
+              {isExaminationMode
+                ? "Examination Mode"
+                : "Practice Mode"}
+            </div>
+          </header>
+
+          <section className="quiz-result-hero">
+            <div className="quiz-result-eyebrow">
+              SESSION COMPLETE
+            </div>
 
             <h1>
-              Something went wrong.
+              Your performance
             </h1>
 
             <p>
-              {error}
+              {isExaminationMode
+                ? "Your examination has been submitted and analysed."
+                : "You've completed this practice session."}
             </p>
+
+            <div className="quiz-score-card">
+              <div className="quiz-score-number">
+                {finalScore}
+                <span>/{questions.length}</span>
+              </div>
+
+              <div className="quiz-score-label">
+                {percentage}% Score
+              </div>
+            </div>
+
+            <div className="quiz-result-stats">
+              <div className="quiz-result-stat">
+                <strong>{finalScore}</strong>
+                <span>Correct</span>
+              </div>
+
+              <div className="quiz-result-stat">
+                <strong>
+                  {questions.length - finalScore}
+                </strong>
+                <span>Missed</span>
+              </div>
+
+              <div className="quiz-result-stat">
+                <strong>{answeredCount}</strong>
+                <span>Attempted</span>
+              </div>
+
+              <div className="quiz-result-stat">
+                <strong>{unansweredCount}</strong>
+                <span>Unanswered</span>
+              </div>
+            </div>
+          </section>
+
+          <section className="quiz-review-section">
+            <div className="quiz-section-heading">
+              <div>
+                <span>ANALYSIS</span>
+                <h2>Question review</h2>
+              </div>
+            </div>
+
+            <div className="quiz-review-list">
+              {questions.map((question, index) => {
+                const answer =
+                  answers[question.id];
+
+                const correctAnswer =
+                  normalizeAnswer(
+                    question.correction_answer
+                  );
+
+                const selected =
+                  normalizeAnswer(answer);
+
+                const correct =
+                  selected &&
+                  selected === correctAnswer;
+
+                const timedOut =
+                  answer === TIMEOUT_ANSWER;
+
+                return (
+                  <article
+                    key={question.id}
+                    className={`quiz-review-card ${
+                      correct
+                        ? "is-correct"
+                        : "is-wrong"
+                    }`}
+                  >
+                    <div className="quiz-review-header">
+                      <div className="quiz-review-number">
+                        Q{index + 1}
+                      </div>
+
+                      <div className="quiz-review-status">
+                        {correct
+                          ? "Correct"
+                          : timedOut
+                          ? "Time expired"
+                          : "Not correct"}
+                      </div>
+                    </div>
+
+                    <div className="quiz-review-question">
+                      <MathText>
+                        {question.question_text}
+                      </MathText>
+                    </div>
+
+                    {question.image_url && (
+                      <div className="quiz-review-image">
+                        <img
+                          src={question.image_url}
+                          alt={`Question ${index + 1}`}
+                          onError={(event) => {
+                            event.currentTarget.style.display =
+                              "none";
+                          }}
+                        />
+                      </div>
+                    )}
+
+                    <div className="quiz-review-answers">
+                      <div>
+                        <span>Your answer</span>
+
+                        <strong>
+                          {timedOut
+                            ? "Not answered"
+                            : selected || "Not answered"}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span>Correct answer</span>
+
+                        <strong>
+                          {correctAnswer || "Unavailable"}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div className="quiz-review-options">
+                      {buildOptions(question).map(
+                        (option) => {
+                          const isCorrectOption =
+                            option.key === correctAnswer;
+
+                          const isSelectedOption =
+                            option.key === selected;
+
+                          return (
+                            <div
+                              key={option.key}
+                              className={`quiz-review-option ${
+                                isCorrectOption
+                                  ? "is-correct-option"
+                                  : ""
+                              } ${
+                                isSelectedOption &&
+                                !isCorrectOption
+                                  ? "is-selected-wrong"
+                                  : ""
+                              }`}
+                            >
+                              <span className="quiz-option-letter">
+                                {option.key}
+                              </span>
+
+                              <MathText>
+                                {option.text}
+                              </MathText>
+                            </div>
+                          );
+                        }
+                      )}
+                    </div>
+
+                    {question.explanation && (
+                      <div className="quiz-review-explanation">
+                        <div className="quiz-explanation-label">
+                          Explanation
+                        </div>
+
+                        <MathText>
+                          {question.explanation}
+                        </MathText>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+
+          <div className="quiz-review-footer">
+            <button
+              type="button"
+              className="quiz-primary-button"
+              onClick={() => navigate("/practice")}
+            >
+              Start another session
+            </button>
 
             <button
               type="button"
-              onClick={() =>
-                navigate('/practice')
-              }
+              className="quiz-secondary-button"
+              onClick={() => navigate("/dashboard")}
             >
-              Back to Practice
+              Back to Dashboard
             </button>
           </div>
-        </main>
-      </div>
-    )
+        </div>
+      </main>
+    );
   }
 
+  const progressPercentage =
+    ((currentIndex + 1) / questions.length) * 100;
 
-  /*
-  =======================================================
-  RESULTS / REVIEW
-  =======================================================
-  */
-
-  if (finished) {
-    return (
-      <ReviewScreen
-        questions={questions}
-        answers={answers}
-        score={score}
-        scorePercentage={
-          scorePercentage
-        }
-        answeredCount={
-          answeredCount
-        }
-        correctCount={
-          correctCount
-        }
-        averageAnswerTime={
-          averageAnswerTime
-        }
-        reviewQuestion={
-          reviewQuestion
-        }
-        setReviewQuestion={
-          setReviewQuestion
-        }
-        navigate={navigate}
-        mode={mode}
-      />
-    )
-  }
-
-
-  /*
-  =======================================================
-  CURRENT QUESTION
-  =======================================================
-  */
-
-  if (!current) {
-    return null
-  }
-
-  const isTimeout =
-    selectedAnswer ===
-    TIMEOUT_ANSWER
-
-  const isCorrect =
-    selectedAnswer !== null &&
-    !isTimeout &&
+  const isCurrentCorrect =
+    selectedAnswer &&
+    selectedAnswer !== TIMEOUT_ANSWER &&
     isAnswerCorrect(
-      current,
-      selectedAnswer
-    )
-
-
-  /*
-  =======================================================
-  TIMER DISPLAY
-  =======================================================
-  */
-
-  const timerPercentage =
-    Math.max(
-      0,
-      Math.min(
-        100,
-        (
-          timeLeft /
-          Number(timePerQuestion)
-        ) *
-          100
-      )
-    )
-
-
-  /*
-  =======================================================
-  QUIZ UI
-  =======================================================
-  */
+      selectedAnswer,
+      currentQuestion.correction_answer
+    );
 
   return (
-    <div className="quiz-page">
+    <main className="quiz-page">
+      <div className="quiz-shell">
 
-      {/* HEADER */}
-
-      <header className="quiz-header">
-        <button
-          type="button"
-          className="quiz-exit"
-          onClick={() =>
-            navigate('/practice')
-          }
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
+        {/* TOP BAR */}
+        <header className="quiz-topbar">
+          <button
+            type="button"
+            className="quiz-back-button"
+            onClick={() => navigate("/practice")}
           >
-            <path
-              d="M19 12H5M11 18l-6-6 6-6"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+            ← Exit
+          </button>
 
-          Exit
-        </button>
-
-        <div className="quiz-title">
-          <span>
-            {isUniversity
-              ? courseCode
-              : subject}
-          </span>
-
-          <small>
-            {isUniversity
-              ? courseName
-              : examType}
-          </small>
-        </div>
-
-        <div className="quiz-progress">
-          <span>
-            {currentQuestion + 1}
-          </span>
-
-          <small>
-            / {questions.length}
-          </small>
-        </div>
-      </header>
-
-
-      {/* TIMER */}
-
-      <div className="quiz-timer-container">
-        <div className="quiz-timer-top">
-          <span>
-            {isPracticeMode
-              ? 'PRACTICE TIMER'
-              : 'EXAMINATION TIMER'}
-          </span>
-
-          <strong
-            className={
-              timeLeft <= 5
-                ? 'danger'
-                : timeLeft <= 10
-                ? 'warning'
-                : ''
-            }
-          >
-            {formatTime(timeLeft)}
-          </strong>
-        </div>
-
-        <div className="quiz-timer-bar">
-          <div
-            className="quiz-timer-progress"
-            style={{
-              width:
-                `${timerPercentage}%`,
-            }}
-          />
-        </div>
-      </div>
-
-
-      {/* QUESTION AREA */}
-
-      <main className="quiz-main">
-
-        <div className="quiz-question-meta">
-          <span>
-            QUESTION{' '}
-            {currentQuestion + 1}
-          </span>
-
-          {topic !== 'mixed' && (
-            <span>
-              {topic}
-            </span>
-          )}
-        </div>
-
-
-        {/* QUESTION */}
-
-        <section className="quiz-question-card">
-          <div className="question-number">
-            {String(
-              currentQuestion + 1
-            ).padStart(2, '0')}
+          <div className="quiz-brand">
+            <span className="quiz-brand-mark">O</span>
+            <span>Overmaths</span>
           </div>
 
-          <div className="question-content">
+          <div className="quiz-mode-badge">
+            {isExaminationMode
+              ? "Examination Mode"
+              : "Practice Mode"}
+          </div>
+        </header>
+
+        {/* SESSION HEADER */}
+        <section className="quiz-session-header">
+          <div className="quiz-session-title">
+            <span>
+              {learningRoute === "university"
+                ? courseCode || courseName
+                : examType || "Exam Practice"}
+            </span>
+
             <h1>
-              <MathText
-                text={
-                  current.question_text
-                }
-              />
+              {courseName ||
+                subject ||
+                "Practice Session"}
             </h1>
 
-            {current.image_url && (
-              <div className="question-image">
-                <img
-                  src={current.image_url}
-                  alt="Question illustration"
-                  onError={event => {
-                    event.currentTarget.style.display =
-                      'none'
-                  }}
-                />
-              </div>
-            )}
-          </div>
-        </section>
-
-
-        {/* OPTIONS */}
-
-        <section className="quiz-options">
-          {options.map(
-            option => (
-              <button
-                type="button"
-                key={option.letter}
-                className={
-                  `quiz-option ${getOptionClass(
-                    option.letter
-                  )}`
-                }
-                onClick={() =>
-                  handleAnswer(
-                    option.letter
-                  )
-                }
-                disabled={
-                  /*
-                    Practice:
-                    lock after answering.
-
-                    Examination:
-                    allow the student to
-                    change an answer.
-                  */
-                  isPracticeMode &&
-                  selectedAnswer !== null
-                }
-              >
-                <span className="option-letter">
-                  {option.letter}
-                </span>
-
-                <span className="option-text">
-                  <MathText
-                    text={option.text}
-                  />
-                </span>
-
-                {isPracticeMode &&
-                  selectedAnswer !== null &&
-                  normalizeAnswer(
-                    current.correction_answer
-                  ) ===
-                    option.letter && (
-                    <span className="option-status">
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                      >
-                        <path
-                          d="M5 12l4 4 9-10"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </span>
-                  )}
-              </button>
-            )
-          )}
-        </section>
-
-
-        {/* PRACTICE FEEDBACK */}
-
-        {isPracticeMode &&
-          selectedAnswer !== null && (
-            <section
-              className={
-                `quiz-feedback ${
-                  isCorrect
-                    ? 'feedback-correct'
-                    : 'feedback-wrong'
-                }`
-              }
-            >
-              <div className="feedback-heading">
-                <strong>
-                  {isTimeout
-                    ? 'Time is up.'
-                    : isCorrect
-                    ? 'Correct!'
-                    : 'Not quite.'}
-                </strong>
-
-                {!isTimeout &&
-                  !isCorrect && (
-                    <span>
-                      Correct answer:{' '}
-                      {
-                        normalizeAnswer(
-                          current.correction_answer
-                        )
-                      }
-                    </span>
-                  )}
-
-                {isTimeout && (
-                  <span>
-                    Correct answer:{' '}
-                    {
-                      normalizeAnswer(
-                        current.correction_answer
-                      )
-                    }
-                  </span>
-                )}
-              </div>
-
-              {current.explanation && (
-                <div className="feedback-explanation">
-                  <span>
-                    EXPLANATION
-                  </span>
-
-                  <p>
-                    <MathText
-                      text={
-                        current.explanation
-                      }
-                    />
-                  </p>
-                </div>
-              )}
-            </section>
-          )}
-
-
-        {/* NAVIGATION */}
-
-        <div className="quiz-navigation">
-
-          <button
-            type="button"
-            className="quiz-previous"
-            onClick={
-              handlePrevious
-            }
-            disabled={
-              currentQuestion ===
-              0
-            }
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-            >
-              <path
-                d="M19 12H5M11 18l-6-6 6-6"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-
-            Previous
-          </button>
-
-
-          <div className="quiz-question-count">
-            {currentQuestion + 1}
-            {' '}
-            of
-            {' '}
-            {questions.length}
-          </div>
-
-
-          <button
-            type="button"
-            className="quiz-next"
-            onClick={
-              handleNext
-            }
-            disabled={
-              isPracticeMode &&
-              selectedAnswer === null
-            }
-          >
-            {currentQuestion ===
-            questions.length - 1
-              ? isPracticeMode
-                ? 'Finish'
-                : 'Submit Exam'
-              : 'Next'}
-
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-            >
-              <path
-                d="M5 12h14M13 6l6 6-6 6"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
-
-        </div>
-
-      </main>
-    </div>
-  )
-}
-
-
-/*
-=========================================================
-REVIEW SCREEN
-=========================================================
-*/
-
-function ReviewScreen({
-  questions,
-  answers,
-  score,
-  scorePercentage,
-  answeredCount,
-  correctCount,
-  averageAnswerTime,
-  reviewQuestion,
-  setReviewQuestion,
-  navigate,
-  mode,
-}) {
-  const question =
-    questions[reviewQuestion]
-
-  if (!question) {
-    return null
-  }
-
-  const selected =
-    answers[question.id]
-
-  const isCorrect =
-    isAnswerCorrect(
-      question,
-      selected
-    )
-
-  const isUnanswered =
-    selected === null ||
-    selected === undefined ||
-    selected === TIMEOUT_ANSWER
-
-  const options = [
-    {
-      letter: 'A',
-      text: question.option_a,
-    },
-    {
-      letter: 'B',
-      text: question.option_b,
-    },
-    {
-      letter: 'C',
-      text: question.option_c,
-    },
-    {
-      letter: 'D',
-      text: question.option_d,
-    },
-  ]
-
-  const correctAnswer =
-    normalizeAnswer(
-      question.correction_answer
-    )
-
-  return (
-    <div className="quiz-page review-page">
-
-      <header className="quiz-header">
-
-        <button
-          type="button"
-          className="quiz-exit"
-          onClick={() =>
-            navigate('/practice')
-          }
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-          >
-            <path
-              d="M19 12H5M11 18l-6-6 6-6"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-
-          Practice
-        </button>
-
-        <div className="quiz-title">
-          <span>
-            {mode === 'practice'
-              ? 'SESSION COMPLETE'
-              : 'EXAMINATION REVIEW'}
-          </span>
-
-          <small>
-            Review your performance
-          </small>
-        </div>
-
-        <div />
-      </header>
-
-
-      <main className="review-main">
-
-        {/* SCORE HERO */}
-
-        <section className="review-hero">
-
-          <p className="quiz-eyebrow">
-            {mode === 'practice'
-              ? 'PRACTICE COMPLETE'
-              : 'EXAMINATION COMPLETE'}
-          </p>
-
-          <h1>
-            {score}
-            <span>
-              /{questions.length}
-            </span>
-          </h1>
-
-          <strong>
-            {scorePercentage}%
-          </strong>
-
-          <p>
-            {getPerformanceMessage(
-              scorePercentage
-            )}
-          </p>
-        </section>
-
-
-        {/* STATS */}
-
-        <section className="review-stats">
-
-          <div>
-            <span>
-              CORRECT
-            </span>
-
-            <strong>
-              {correctCount}
-            </strong>
-          </div>
-
-          <div>
-            <span>
-              ANSWERED
-            </span>
-
-            <strong>
-              {answeredCount}
-            </strong>
-          </div>
-
-          <div>
-            <span>
-              UNANSWERED
-            </span>
-
-            <strong>
-              {questions.length -
-                answeredCount}
-            </strong>
-          </div>
-
-          <div>
-            <span>
-              AVG. SPEED
-            </span>
-
-            <strong>
-              {averageAnswerTime}s
-            </strong>
-          </div>
-
-        </section>
-
-
-        {/* QUESTION REVIEW */}
-
-        <section className="review-section">
-
-          <div className="review-heading">
-
-            <div>
-              <p className="quiz-eyebrow">
-                QUESTION REVIEW
+            {topic && topic !== "mixed" && (
+              <p>
+                Topic: {topic}
               </p>
+            )}
+          </div>
 
-              <h2>
-                See what happened.
-              </h2>
-            </div>
+          <div
+            className={`quiz-timer ${
+              timeLeft <= 5
+                ? "is-danger"
+                : timeLeft <= 10
+                ? "is-warning"
+                : ""
+            }`}
+          >
+            <span>TIME</span>
 
+            <strong>
+              {String(
+                Math.floor(timeLeft / 60)
+              ).padStart(2, "0")}
+              :
+              {String(timeLeft % 60).padStart(
+                2,
+                "0"
+              )}
+            </strong>
+          </div>
+        </section>
+
+        {/* PROGRESS */}
+        <section className="quiz-progress-section">
+          <div className="quiz-progress-info">
             <span>
-              {reviewQuestion + 1}
-              {' '}
-              /
-              {' '}
-              {questions.length}
+              Question{" "}
+              <strong>{currentIndex + 1}</strong>{" "}
+              of{" "}
+              <strong>{questions.length}</strong>
             </span>
 
+            <span>
+              {answeredCount} answered
+            </span>
           </div>
 
+          <div className="quiz-progress-track">
+            <div
+              className="quiz-progress-fill"
+              style={{
+                width: `${progressPercentage}%`,
+              }}
+            />
+          </div>
+        </section>
 
-          {/* QUESTION */}
-
-          <div className="review-question-card">
-
-            <div className="review-question-number">
-              {String(
-                reviewQuestion + 1
-              ).padStart(2, '0')}
+        {/* EXAM NAVIGATION */}
+        {isExaminationMode && (
+          <section className="quiz-question-navigator">
+            <div className="quiz-question-navigator-title">
+              Question navigator
             </div>
 
-            <div className="review-question-content">
+            <div className="quiz-question-numbers">
+              {questions.map(
+                (question, index) => {
+                  const answer =
+                    answers[question.id];
 
-              <h3>
-                <MathText
-                  text={
-                    question.question_text
-                  }
-                />
-              </h3>
-
-              {question.image_url && (
-                <img
-                  src={
-                    question.image_url
-                  }
-                  alt="Question illustration"
-                  onError={event => {
-                    event.currentTarget.style.display =
-                      'none'
-                  }}
-                />
+                  return (
+                    <button
+                      type="button"
+                      key={question.id}
+                      className={`quiz-question-number ${
+                        index === currentIndex
+                          ? "is-current"
+                          : ""
+                      } ${
+                        answer
+                          ? "is-answered"
+                          : ""
+                      }`}
+                      onClick={() =>
+                        handleQuestionJump(index)
+                      }
+                    >
+                      {index + 1}
+                    </button>
+                  );
+                }
               )}
-
             </div>
+          </section>
+        )}
 
+        {/* QUESTION CARD */}
+        <section className="quiz-question-card">
+
+          <div className="quiz-question-label">
+            QUESTION {currentIndex + 1}
           </div>
 
+          <div className="quiz-question-text">
+            <MathText>
+              {currentQuestion.question_text}
+            </MathText>
+          </div>
 
-          {/* ANSWERS */}
+          {/* QUESTION IMAGE */}
+          {currentQuestion.image_url && (
+            <div className="quiz-question-image">
+              <img
+                src={currentQuestion.image_url}
+                alt={`Question ${currentIndex + 1}`}
+                onError={(event) => {
+                  console.warn(
+                    "QUESTION IMAGE FAILED:",
+                    currentQuestion.image_url
+                  );
 
-          <div className="review-options">
+                  event.currentTarget.style.display =
+                    "none";
+                }}
+              />
+            </div>
+          )}
 
-            {options.map(
-              option => {
-
+          {/* OPTIONS */}
+          <div className="quiz-options">
+            {buildOptions(currentQuestion).map(
+              (option) => {
                 const isSelected =
+                  selectedAnswer === option.key;
+
+                const isCorrectOption =
                   normalizeAnswer(
-                    selected
-                  ) ===
-                  option.letter
+                    currentQuestion.correction_answer
+                  ) === option.key;
 
-                const isAnswer =
-                  correctAnswer ===
-                  option.letter
+                const showCorrectness =
+                  !isExaminationMode &&
+                  showFeedback;
 
-                let className =
-                  'review-option'
+                let optionClass =
+                  "quiz-option";
 
-                if (isAnswer) {
-                  className +=
-                    ' correct'
+                if (isSelected) {
+                  optionClass += " is-selected";
                 }
 
                 if (
-                  isSelected &&
-                  !isAnswer
+                  showCorrectness &&
+                  isCorrectOption
                 ) {
-                  className +=
-                    ' wrong'
+                  optionClass += " is-correct";
+                }
+
+                if (
+                  showCorrectness &&
+                  isSelected &&
+                  !isCorrectOption
+                ) {
+                  optionClass += " is-wrong";
                 }
 
                 return (
-                  <div
-                    key={
-                      option.letter
+                  <button
+                    type="button"
+                    key={option.key}
+                    className={optionClass}
+                    onClick={() =>
+                      handleAnswer(option.key)
                     }
-                    className={
-                      className
+                    disabled={
+                      sessionFinished ||
+                      (!isExaminationMode &&
+                        Boolean(selectedAnswer))
                     }
                   >
-
-                    <span>
-                      {option.letter}
+                    <span className="quiz-option-letter">
+                      {option.key}
                     </span>
 
-                    <p>
-                      <MathText
-                        text={
-                          option.text
-                        }
-                      />
-                    </p>
+                    <span className="quiz-option-text">
+                      <MathText>
+                        {option.text}
+                      </MathText>
+                    </span>
 
-                    {isAnswer && (
-                      <small>
-                        Correct answer
-                      </small>
-                    )}
-
-                    {isSelected &&
-                      !isAnswer && (
-                        <small>
-                          Your answer
-                        </small>
+                    {showCorrectness &&
+                      isCorrectOption && (
+                        <span className="quiz-option-indicator">
+                          ✓
+                        </span>
                       )}
+                  </button>
+                );
+              }
+            )}
+          </div>
 
+          {/* PRACTICE FEEDBACK */}
+          {!isExaminationMode &&
+            showFeedback && (
+              <div
+                className={`quiz-feedback ${
+                  feedbackType === "correct"
+                    ? "is-correct"
+                    : feedbackType === "wrong"
+                    ? "is-wrong"
+                    : "is-timeout"
+                }`}
+              >
+                <div className="quiz-feedback-heading">
+                  {feedbackType === "correct"
+                    ? "Correct!"
+                    : feedbackType === "wrong"
+                    ? "Not quite."
+                    : "Time's up."}
+                </div>
+
+                {feedbackType === "correct" && (
+                  <p>
+                    Excellent. You selected the
+                    correct answer.
+                  </p>
+                )}
+
+                {feedbackType === "wrong" && (
+                  <p>
+                    The correct answer is{" "}
+                    <strong>
+                      {normalizeAnswer(
+                        currentQuestion.correction_answer
+                      )}
+                    </strong>
+                    .
+                  </p>
+                )}
+
+                {feedbackType === "timeout" && (
+                  <p>
+                    This question was not answered
+                    before the timer expired.
+                  </p>
+                )}
+
+                {currentQuestion.explanation && (
+                  <div className="quiz-feedback-explanation">
+                    <span>
+                      Explanation
+                    </span>
+
+                    <MathText>
+                      {currentQuestion.explanation}
+                    </MathText>
                   </div>
-                )
-              }
+                )}
+              </div>
             )}
-
-          </div>
-
-
-          {/* STATUS */}
-
-          <div
-            className={
-              `review-status ${
-                isCorrect
-                  ? 'correct'
-                  : isUnanswered
-                  ? 'unanswered'
-                  : 'wrong'
-              }`
-            }
-          >
-
-            <strong>
-              {isCorrect
-                ? 'Correct'
-                : isUnanswered
-                ? 'Not answered'
-                : 'Incorrect'}
-            </strong>
-
-            {!isCorrect && (
-              <span>
-                Correct answer:{' '}
-                {correctAnswer}
-              </span>
-            )}
-
-          </div>
-
-
-          {/* EXPLANATION */}
-
-          {question.explanation && (
-            <div className="review-explanation">
-
-              <span>
-                EXPLANATION
-              </span>
-
-              <p>
-                <MathText
-                  text={
-                    question.explanation
-                  }
-                />
-              </p>
-
-            </div>
-          )}
-
-
-          {/* REVIEW NAVIGATION */}
-
-          <div className="review-navigation">
-
-            <button
-              type="button"
-              onClick={() =>
-                setReviewQuestion(
-                  previous =>
-                    Math.max(
-                      previous - 1,
-                      0
-                    )
-                )
-              }
-              disabled={
-                reviewQuestion ===
-                0
-              }
-            >
-              Previous
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                setReviewQuestion(
-                  previous =>
-                    Math.min(
-                      previous + 1,
-                      questions.length - 1
-                    )
-                )
-              }
-              disabled={
-                reviewQuestion ===
-                questions.length - 1
-              }
-            >
-              Next
-            </button>
-
-          </div>
-
         </section>
 
+        {/* NAVIGATION */}
+        <footer className="quiz-navigation">
 
-        {/* FINISH */}
-
-        <button
-          type="button"
-          className="review-finish-button"
-          onClick={() =>
-            navigate('/practice')
-          }
-        >
-          Start Another Session
-
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
+          <button
+            type="button"
+            className="quiz-secondary-button"
+            onClick={handlePrevious}
+            disabled={
+              currentIndex === 0 ||
+              sessionFinished
+            }
           >
-            <path
-              d="M5 12h14M13 6l6 6-6 6"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
+            ← Previous
+          </button>
 
-      </main>
-    </div>
-  )
+          <div className="quiz-navigation-center">
+            <span>
+              {isExaminationMode
+                ? `${answeredCount}/${questions.length} answered`
+                : `Question ${currentIndex + 1} of ${questions.length}`}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            className="quiz-primary-button"
+            onClick={handleNext}
+            disabled={
+              sessionFinished ||
+              (!isExaminationMode &&
+                !selectedAnswer)
+            }
+          >
+            {currentIndex === questions.length - 1
+              ? isExaminationMode
+                ? saving
+                  ? "Submitting..."
+                  : "Submit Exam"
+                : "View Results"
+              : "Next Question →"}
+          </button>
+        </footer>
+
+        {/* EXAM SUBMISSION NOTICE */}
+        {isExaminationMode && (
+          <div className="quiz-exam-notice">
+            <span>●</span>
+
+            <p>
+              Examination Mode hides correctness and
+              explanations until you submit your exam.
+              You can move between questions and change
+              your answers before submission.
+            </p>
+          </div>
+        )}
+      </div>
+    </main>
+  );
 }
-
-
-/*
-=========================================================
-HELPERS
-=========================================================
-*/
-
-function formatTime(seconds) {
-  const safeSeconds =
-    Math.max(
-      0,
-      Number(seconds) || 0
-    )
-
-  const minutes =
-    Math.floor(
-      safeSeconds / 60
-    )
-
-  const remaining =
-    safeSeconds % 60
-
-  return `${String(
-    minutes
-  ).padStart(
-    2,
-    '0'
-  )}:${String(
-    remaining
-  ).padStart(
-    2,
-    '0'
-  )}`
-}
-
-
-function calculateAverageTime(
-  answerTimes
-) {
-  const values =
-    Object.values(
-      answerTimes
-    ).filter(
-      value =>
-        typeof value ===
-        'number'
-    )
-
-  if (
-    values.length === 0
-  ) {
-    return 0
-  }
-
-  const total =
-    values.reduce(
-      (sum, value) =>
-        sum + value,
-      0
-    )
-
-  return Math.round(
-    total /
-      values.length
-  )
-}
-
-
-function getPerformanceMessage(
-  percentage
-) {
-  if (percentage >= 90) {
-    return 'Excellent performance. You are building strong command of this material.'
-  }
-
-  if (percentage >= 75) {
-    return 'Strong work. A little more practice can push this even further.'
-  }
-
-  if (percentage >= 60) {
-    return 'Good foundation. Keep practising the areas you missed.'
-  }
-
-  if (percentage >= 40) {
-    return 'You are making progress. Use the review to target your weaker areas.'
-  }
-
-  return 'This is your starting point. Review the explanations and try again.'
-}
-
-
-function getEmptyQuestionMessage() {
-  return 'No questions are available for this selection yet.'
-}
-
-
-export default Quiz
