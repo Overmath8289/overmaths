@@ -1362,3 +1362,312 @@
   }
 }
 
+
+/* =========================================================
+   ANSWER FEEDBACK — OVERRIDE
+   Keep these at the VERY BOTTOM of Quiz.css
+   ========================================================= */
+
+/* Correct answer */
+.quiz-option.correct,
+.quiz-option.is-correct,
+.option.correct,
+.option.is-correct {
+  background: rgba(34, 197, 94, 0.18) !important;
+  border: 2px solid #22c55e !important;
+  color: #ffffff !important;
+  box-shadow:
+    0 0 0 1px rgba(34, 197, 94, 0.25),
+    0 0 22px rgba(34, 197, 94, 0.25) !important;
+}
+
+/* Wrong answer */
+.quiz-option.wrong,
+.quiz-option.is-wrong,
+.option.wrong,
+.option.is-wrong {
+  background: rgba(239, 68, 68, 0.18) !important;
+  border: 2px solid #ef4444 !important;
+  color: #ffffff !important;
+  box-shadow:
+    0 0 0 1px rgba(239, 68, 68, 0.25),
+    0 0 22px rgba(239, 68, 68, 0.25) !important;
+}
+
+/* Correct answer should remain green even when it wasn't selected */
+.quiz-option.correct:hover,
+.quiz-option.is-correct:hover,
+.option.correct:hover,
+.option.is-correct:hover {
+  background: rgba(34, 197, 94, 0.22) !important;
+  border-color: #22c55e !important;
+}
+
+/* Wrong answer should remain red */
+.quiz-option.wrong:hover,
+.quiz-option.is-wrong:hover,
+.option.wrong:hover,
+.option.is-wrong:hover {
+  background: rgba(239, 68, 68, 0.22) !important;
+  border-color: #ef4444 !important;
+}
+
+
+/* =========================================================
+   FEEDBACK LABELS / ICONS
+   ========================================================= */
+
+.quiz-option.correct .option-label,
+.quiz-option.is-correct .option-label,
+.option.correct .option-label,
+.option.is-correct .option-label {
+  color: #4ade80 !important;
+}
+
+.quiz-option.wrong .option-label,
+.quiz-option.is-wrong .option-label,
+.option.wrong .option-label,
+.option.is-wrong .option-label {
+  color: #f87171 !important;
+}
+
+
+/* =========================================================
+   PRACTICE FEEDBACK BOX
+   ========================================================= */
+
+.feedback.correct {
+  border-color: #22c55e !important;
+  background: rgba(34, 197, 94, 0.10) !important;
+  color: #ffffff !important;
+}
+
+.feedback.wrong {
+  border-color: #ef4444 !important;
+  background: rgba(239, 68, 68, 0.10) !important;
+  color: #ffffff !important;
+}
+
+
+
+
+/* =========================================================
+   QUIZ NAVIGATION — OVERRIDE
+   Previous / Next / Exit
+   ========================================================= */
+
+/* Navigation container */
+.quiz-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 28px;
+}
+
+/* Previous button */
+.quiz-navigation .previous-btn,
+.quiz-navigation .prev-btn,
+.previous-btn,
+.prev-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  min-width: 130px;
+  min-height: 48px;
+  padding: 0 20px;
+
+  border: 1px solid rgba(168, 85, 247, 0.45) !important;
+  border-radius: 14px;
+
+  background: rgba(124, 58, 237, 0.10) !important;
+  color: #f8fafc !important;
+
+  font-size: 14px;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.quiz-navigation .previous-btn:hover,
+.quiz-navigation .prev-btn:hover,
+.previous-btn:hover,
+.prev-btn:hover {
+  transform: translateY(-2px);
+
+  background: rgba(124, 58, 237, 0.20) !important;
+  border-color: #a855f7 !important;
+
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.20);
+}
+
+
+/* Next button */
+.quiz-navigation .next-btn,
+.next-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+
+  min-width: 145px;
+  min-height: 50px;
+  padding: 0 24px;
+
+  border: none !important;
+  border-radius: 14px;
+
+  background: linear-gradient(
+    135deg,
+    #7c3aed,
+    #a855f7 55%,
+    #ff7a18
+  ) !important;
+
+  color: #ffffff !important;
+
+  font-size: 14px;
+  font-weight: 800;
+
+  cursor: pointer;
+
+  box-shadow:
+    0 8px 25px rgba(124, 58, 237, 0.28),
+    0 4px 14px rgba(255, 122, 24, 0.12);
+
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    filter 0.2s ease;
+}
+
+.quiz-navigation .next-btn:hover,
+.next-btn:hover {
+  transform: translateY(-2px);
+
+  filter: brightness(1.08);
+
+  box-shadow:
+    0 12px 32px rgba(124, 58, 237, 0.38),
+    0 6px 18px rgba(255, 122, 24, 0.18);
+}
+
+.quiz-navigation .next-btn:active,
+.next-btn:active,
+.previous-btn:active,
+.prev-btn:active {
+  transform: translateY(0);
+}
+
+
+/* Disabled Previous button */
+.quiz-navigation .previous-btn:disabled,
+.quiz-navigation .prev-btn:disabled,
+.previous-btn:disabled,
+.prev-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+
+/* Question number in the middle */
+.quiz-navigation .question-counter,
+.question-counter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  min-width: 80px;
+  padding: 10px 16px;
+
+  border: 1px solid rgba(168, 85, 247, 0.20);
+  border-radius: 12px;
+
+  background: rgba(255, 255, 255, 0.035);
+
+  color: #ffffff;
+
+  font-size: 14px;
+  font-weight: 800;
+}
+
+
+/* Exit / Leave session */
+.quiz-exit,
+.exit-btn,
+.leave-session-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  min-height: 42px;
+  padding: 0 16px;
+
+  border: 1px solid rgba(239, 68, 68, 0.35) !important;
+  border-radius: 12px;
+
+  background: rgba(239, 68, 68, 0.06) !important;
+  color: #fca5a5 !important;
+
+  font-size: 13px;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.quiz-exit:hover,
+.exit-btn:hover,
+.leave-session-btn:hover {
+  transform: translateY(-1px);
+
+  background: rgba(239, 68, 68, 0.13) !important;
+  border-color: #ef4444 !important;
+  color: #ffffff !important;
+}
+
+
+/* Mobile */
+@media (max-width: 600px) {
+  .quiz-navigation {
+    gap: 10px;
+  }
+
+  .quiz-navigation .previous-btn,
+  .quiz-navigation .prev-btn,
+  .previous-btn,
+  .prev-btn {
+    min-width: 0;
+    flex: 1;
+    padding: 0 12px;
+  }
+
+  .quiz-navigation .next-btn,
+  .next-btn {
+    min-width: 0;
+    flex: 1;
+    padding: 0 14px;
+  }
+
+  .quiz-navigation .question-counter,
+  .question-counter {
+    min-width: 60px;
+    padding: 9px 10px;
+  }
+}
