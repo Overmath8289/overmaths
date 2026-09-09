@@ -1,7 +1,10 @@
+
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import "./Practice.css";
+
+const API_URL = "https://overmaths.onrender.com";
 
 const QUESTION_COUNTS = [5, 10, 20, 30];
 
@@ -139,10 +142,7 @@ function Practice() {
 
   /*
    * ---------------------------------------------------------
-   * LOAD SECONDARY SUBJECTS
-   *
-   * Subjects come from the actual question bank.
-   * Nothing is manually hard-coded here.
+   * LOAD SECONDARY SUBJECTS FROM PYTHON API
    * ---------------------------------------------------------
    */
   useEffect(() => {
@@ -154,51 +154,60 @@ function Practice() {
     let mounted = true;
 
     async function loadSubjects() {
-      const { data, error } = await supabase
-        .from("questions")
-        .select("subject")
-        .eq("is_active", true)
-        .not("subject", "is", null);
+      try {
+        const response = await fetch(
+          `${API_URL}/api/practice/subjects`
+        );
 
-      if (error) {
-        console.error("Unable to load subjects:", error);
+        if (!response.ok) {
+          throw new Error(
+            `Subjects API returned ${response.status}`
+          );
+        }
+
+        const result = await response.json();
+
+        if (!mounted) return;
+
+        const uniqueSubjects = [
+          ...new Set(
+            (result.subjects || [])
+              .map((subject) =>
+                String(subject || "").trim()
+              )
+              .filter(Boolean)
+          ),
+        ].sort((a, b) => a.localeCompare(b));
+
+        setSubjects(uniqueSubjects);
+
+        /*
+         * Keep Dashboard-selected subject if it exists.
+         */
+        if (
+          selectedSubject &&
+          uniqueSubjects.includes(selectedSubject)
+        ) {
+          return;
+        }
+
+        /*
+         * Otherwise choose the first available subject.
+         */
+        if (uniqueSubjects.length > 0) {
+          setSelectedSubject(uniqueSubjects[0]);
+        } else {
+          setSelectedSubject("");
+        }
+      } catch (error) {
+        console.error(
+          "Unable to load subjects from Python API:",
+          error
+        );
 
         if (mounted) {
           setSubjects([]);
         }
-
-        return;
-      }
-
-      if (!mounted) return;
-
-      const uniqueSubjects = [
-        ...new Set(
-          (data || [])
-            .map((item) => item.subject?.trim())
-            .filter(Boolean)
-        ),
-      ].sort((a, b) => a.localeCompare(b));
-
-      setSubjects(uniqueSubjects);
-
-      /*
-       * If Dashboard already sent a subject and that subject
-       * exists in the database, keep it.
-       *
-       * Otherwise select the first available subject.
-       */
-      if (
-        selectedSubject &&
-        uniqueSubjects.includes(selectedSubject)
-      ) {
-        return;
-      }
-
-      if (uniqueSubjects.length > 0) {
-        setSelectedSubject(uniqueSubjects[0]);
-      } else {
-        setSelectedSubject("");
       }
     }
 
@@ -211,9 +220,7 @@ function Practice() {
 
   /*
    * ---------------------------------------------------------
-   * LOAD UNIVERSITY COURSES
-   *
-   * Courses come from the courses table.
+   * LOAD UNIVERSITY COURSES FROM PYTHON API
    * ---------------------------------------------------------
    */
   useEffect(() => {
@@ -225,41 +232,52 @@ function Practice() {
     let mounted = true;
 
     async function loadCourses() {
-      const { data, error } = await supabase
-        .from("courses")
-        .select("id, name, code, description")
-        .eq("is_active", true)
-        .order("code", { ascending: true });
+      try {
+        const response = await fetch(
+          `${API_URL}/api/practice/courses`
+        );
 
-      if (error) {
-        console.error("Unable to load university courses:", error);
+        if (!response.ok) {
+          throw new Error(
+            `Courses API returned ${response.status}`
+          );
+        }
+
+        const result = await response.json();
+
+        if (!mounted) return;
+
+        const loadedCourses = result.courses || [];
+
+        setCourses(loadedCourses);
+
+        /*
+         * Keep Dashboard-selected course where possible.
+         */
+        const incomingCourseExists = loadedCourses.some(
+          (course) =>
+            String(course.id) ===
+            String(selectedCourseId)
+        );
+
+        if (incomingCourseExists) {
+          return;
+        }
+
+        if (loadedCourses.length > 0) {
+          setSelectedCourseId(loadedCourses[0].id);
+        } else {
+          setSelectedCourseId("");
+        }
+      } catch (error) {
+        console.error(
+          "Unable to load university courses from Python API:",
+          error
+        );
 
         if (mounted) {
           setCourses([]);
         }
-
-        return;
-      }
-
-      if (!mounted) return;
-
-      setCourses(data || []);
-
-      /*
-       * Keep Dashboard-selected course where possible.
-       */
-      const incomingCourseExists = (data || []).some(
-        (course) => String(course.id) === String(selectedCourseId)
-      );
-
-      if (incomingCourseExists) {
-        return;
-      }
-
-      if (data?.length > 0) {
-        setSelectedCourseId(data[0].id);
-      } else {
-        setSelectedCourseId("");
       }
     }
 
@@ -272,14 +290,17 @@ function Practice() {
 
   /*
    * ---------------------------------------------------------
-   * LOAD TOPICS
+   * LOAD TOPICS FROM PYTHON API
+   * ---------------------------------------------------------
    *
-   * Topics are ALWAYS loaded according to the selected
-   * subject/course.
+   * Secondary:
+   *   /api/practice/topics?subject=Physics
    *
-   * Mixed Topics is not a database topic.
-   * It means the quiz can pull from any topic belonging
-   * to the selected subject/course.
+   * University:
+   *   /api/practice/topics?course_id=1
+   *
+   * Mixed Topics is handled by the question API and is not
+   * sent as an actual database topic.
    * ---------------------------------------------------------
    */
   useEffect(() => {
@@ -289,62 +310,59 @@ function Practice() {
       setTopics([]);
       setSelectedTopic("mixed");
 
-      if (learningRoute === "secondary") {
-        if (!selectedSubject) return;
+      try {
+        let url = "";
 
-        const { data, error } = await supabase
-          .from("questions")
-          .select("topic")
-          .eq("is_active", true)
-          .eq("subject", selectedSubject)
-          .is("course_id", null)
-          .not("topic", "is", null);
+        if (learningRoute === "secondary") {
+          if (!selectedSubject) return;
 
-        if (error) {
-          console.error("Unable to load secondary topics:", error);
-          return;
+          url =
+            `${API_URL}/api/practice/topics?subject=` +
+            encodeURIComponent(selectedSubject);
         }
+
+        if (learningRoute === "university") {
+          if (!selectedCourseId) return;
+
+          url =
+            `${API_URL}/api/practice/topics?course_id=` +
+            encodeURIComponent(selectedCourseId);
+        }
+
+        if (!url) return;
+
+        const response = await fetch(url);
+
+        if (!response.ok) {
+          throw new Error(
+            `Topics API returned ${response.status}`
+          );
+        }
+
+        const result = await response.json();
 
         if (!mounted) return;
 
         const uniqueTopics = [
           ...new Set(
-            (data || [])
-              .map((item) => item.topic?.trim())
+            (result.topics || [])
+              .map((topic) =>
+                String(topic || "").trim()
+              )
               .filter(Boolean)
           ),
         ].sort((a, b) => a.localeCompare(b));
 
         setTopics(uniqueTopics);
-        return;
-      }
+      } catch (error) {
+        console.error(
+          "Unable to load topics from Python API:",
+          error
+        );
 
-      if (learningRoute === "university") {
-        if (!selectedCourseId) return;
-
-        const { data, error } = await supabase
-          .from("questions")
-          .select("topic")
-          .eq("is_active", true)
-          .eq("course_id", selectedCourseId)
-          .not("topic", "is", null);
-
-        if (error) {
-          console.error("Unable to load university topics:", error);
-          return;
+        if (mounted) {
+          setTopics([]);
         }
-
-        if (!mounted) return;
-
-        const uniqueTopics = [
-          ...new Set(
-            (data || [])
-              .map((item) => item.topic?.trim())
-              .filter(Boolean)
-          ),
-        ].sort((a, b) => a.localeCompare(b));
-
-        setTopics(uniqueTopics);
       }
     }
 
@@ -353,7 +371,11 @@ function Practice() {
     return () => {
       mounted = false;
     };
-  }, [learningRoute, selectedSubject, selectedCourseId]);
+  }, [
+    learningRoute,
+    selectedSubject,
+    selectedCourseId,
+  ]);
 
   /*
    * ---------------------------------------------------------
@@ -362,7 +384,9 @@ function Practice() {
    */
   const selectedCourse = useMemo(() => {
     return courses.find(
-      (course) => String(course.id) === String(selectedCourseId)
+      (course) =>
+        String(course.id) ===
+        String(selectedCourseId)
     );
   }, [courses, selectedCourseId]);
 
@@ -373,7 +397,9 @@ function Practice() {
    */
   const previewName =
     learningRoute === "university"
-      ? selectedCourse?.code || selectedCourse?.name || "Choose Course"
+      ? selectedCourse?.code ||
+        selectedCourse?.name ||
+        "Choose Course"
       : selectedSubject || "Choose Subject";
 
   const previewTopic =
@@ -388,8 +414,10 @@ function Practice() {
 
   const previewSpeed =
     SPEED_OPTIONS.find(
-      (option) => option.value === timePerQuestion
-    )?.label || `${timePerQuestion} sec`;
+      (option) =>
+        option.value === timePerQuestion
+    )?.label ||
+    `${timePerQuestion} sec`;
 
   /*
    * ---------------------------------------------------------
@@ -399,12 +427,18 @@ function Practice() {
   async function handleStart() {
     if (starting) return;
 
-    if (learningRoute === "secondary" && !selectedSubject) {
+    if (
+      learningRoute === "secondary" &&
+      !selectedSubject
+    ) {
       alert("Please choose a subject.");
       return;
     }
 
-    if (learningRoute === "university" && !selectedCourseId) {
+    if (
+      learningRoute === "university" &&
+      !selectedCourseId
+    ) {
       alert("Please choose a course.");
       return;
     }
@@ -477,7 +511,9 @@ function Practice() {
       <div className="practice-page">
         <div className="practice-loading">
           <div className="practice-loader"></div>
-          <p>Preparing your practice studio...</p>
+          <p>
+            Preparing your practice studio...
+          </p>
         </div>
       </div>
     );
@@ -505,7 +541,10 @@ function Practice() {
           onClick={() => navigate("/dashboard")}
           type="button"
         >
-          <span className="practice-logo-mark">O</span>
+          <span className="practice-logo-mark">
+            O
+          </span>
+
           <span className="practice-logo-text">
             Over<span>maths</span>
           </span>
@@ -531,7 +570,9 @@ function Practice() {
 
           <button
             type="button"
-            onClick={() => navigate("/student-profile")}
+            onClick={() =>
+              navigate("/student-profile")
+            }
             className="practice-nav-link"
           >
             Profile
@@ -548,7 +589,6 @@ function Practice() {
         </button>
 
       </header>
-
 
       {/* =====================================================
           MAIN
@@ -575,7 +615,6 @@ function Practice() {
 
         </section>
 
-
         {/* =================================================
             LEARNING AREA
             ================================================= */}
@@ -583,17 +622,22 @@ function Practice() {
 
           <div className="practice-section-heading">
             <div>
-              <span className="section-number">01</span>
+              <span className="section-number">
+                01
+              </span>
+
               <div>
-                <h2>What are you studying?</h2>
+                <h2>
+                  What are you studying?
+                </h2>
+
                 <p>
-                  Select from the subjects and courses available
-                  in your question bank.
+                  Select from the subjects and courses
+                  available in your question bank.
                 </p>
               </div>
             </div>
           </div>
-
 
           <div className="practice-selection-grid">
 
@@ -611,11 +655,15 @@ function Practice() {
                     id="subject"
                     value={selectedSubject}
                     onChange={(event) => {
-                      setSelectedSubject(event.target.value);
+                      setSelectedSubject(
+                        event.target.value
+                      );
+
                       setSelectedTopic("mixed");
                     }}
                     className="practice-select"
                   >
+
                     <option value="">
                       Choose subject
                     </option>
@@ -628,6 +676,7 @@ function Practice() {
                         {subject}
                       </option>
                     ))}
+
                   </select>
 
                   <span className="practice-select-arrow">
@@ -637,12 +686,12 @@ function Practice() {
                 </div>
 
                 <small>
-                  Subjects are loaded from your question bank.
+                  Subjects are loaded from the
+                  Overmaths question API.
                 </small>
 
               </div>
             )}
-
 
             {/* University */}
             {learningRoute === "university" && (
@@ -658,11 +707,15 @@ function Practice() {
                     id="course"
                     value={selectedCourseId}
                     onChange={(event) => {
-                      setSelectedCourseId(event.target.value);
+                      setSelectedCourseId(
+                        event.target.value
+                      );
+
                       setSelectedTopic("mixed");
                     }}
                     className="practice-select"
                   >
+
                     <option value="">
                       Choose course
                     </option>
@@ -677,6 +730,7 @@ function Practice() {
                           : course.name}
                       </option>
                     ))}
+
                   </select>
 
                   <span className="practice-select-arrow">
@@ -686,12 +740,12 @@ function Practice() {
                 </div>
 
                 <small>
-                  Courses are loaded from your university course bank.
+                  Courses are loaded from the
+                  Overmaths question API.
                 </small>
 
               </div>
             )}
-
 
             {/* Topic */}
             <div className="practice-field">
@@ -706,7 +760,9 @@ function Practice() {
                   id="topic"
                   value={selectedTopic}
                   onChange={(event) =>
-                    setSelectedTopic(event.target.value)
+                    setSelectedTopic(
+                      event.target.value
+                    )
                   }
                   className="practice-select"
                   disabled={
@@ -715,6 +771,7 @@ function Practice() {
                       : !selectedCourseId
                   }
                 >
+
                   <option value="mixed">
                     Mixed Topics
                   </option>
@@ -727,6 +784,7 @@ function Practice() {
                       {topic}
                     </option>
                   ))}
+
                 </select>
 
                 <span className="practice-select-arrow">
@@ -736,8 +794,8 @@ function Practice() {
               </div>
 
               <small>
-                Mixed Topics pulls questions from all available
-                topics in your selection.
+                Mixed Topics pulls questions from all
+                available topics in your selection.
               </small>
 
             </div>
@@ -746,7 +804,6 @@ function Practice() {
 
         </section>
 
-
         {/* =================================================
             MODE
             ================================================= */}
@@ -754,10 +811,14 @@ function Practice() {
 
           <div className="practice-section-heading">
             <div>
-              <span className="section-number">02</span>
+              <span className="section-number">
+                02
+              </span>
 
               <div>
-                <h2>Choose your mode</h2>
+                <h2>
+                  Choose your mode
+                </h2>
 
                 <p>
                   Decide whether you want instant learning
@@ -767,16 +828,19 @@ function Practice() {
             </div>
           </div>
 
-
           <div className="practice-mode-grid">
 
             {/* Practice */}
             <button
               type="button"
               className={`practice-mode-card ${
-                mode === "practice" ? "selected" : ""
+                mode === "practice"
+                  ? "selected"
+                  : ""
               }`}
-              onClick={() => setMode("practice")}
+              onClick={() =>
+                setMode("practice")
+              }
             >
 
               <div className="mode-icon">
@@ -786,7 +850,9 @@ function Practice() {
               <div className="mode-content">
 
                 <div className="mode-title-row">
-                  <h3>Practice Mode</h3>
+                  <h3>
+                    Practice Mode
+                  </h3>
 
                   {mode === "practice" && (
                     <span className="selected-badge">
@@ -815,14 +881,17 @@ function Practice() {
 
             </button>
 
-
             {/* Examination */}
             <button
               type="button"
               className={`practice-mode-card examination ${
-                mode === "examination" ? "selected" : ""
+                mode === "examination"
+                  ? "selected"
+                  : ""
               }`}
-              onClick={() => setMode("examination")}
+              onClick={() =>
+                setMode("examination")
+              }
             >
 
               <div className="mode-icon">
@@ -832,7 +901,9 @@ function Practice() {
               <div className="mode-content">
 
                 <div className="mode-title-row">
-                  <h3>Examination Mode</h3>
+                  <h3>
+                    Examination Mode
+                  </h3>
 
                   {mode === "examination" && (
                     <span className="selected-badge">
@@ -864,7 +935,6 @@ function Practice() {
 
         </section>
 
-
         {/* =================================================
             QUESTIONS
             ================================================= */}
@@ -872,10 +942,14 @@ function Practice() {
 
           <div className="practice-section-heading">
             <div>
-              <span className="section-number">03</span>
+              <span className="section-number">
+                03
+              </span>
 
               <div>
-                <h2>How many questions?</h2>
+                <h2>
+                  How many questions?
+                </h2>
 
                 <p>
                   Set the size of your session.
@@ -884,7 +958,6 @@ function Practice() {
             </div>
           </div>
 
-
           <div className="practice-choice-grid">
 
             {QUESTION_COUNTS.map((count) => (
@@ -892,12 +965,18 @@ function Practice() {
                 type="button"
                 key={count}
                 className={`practice-choice ${
-                  questionCount === count ? "selected" : ""
+                  questionCount === count
+                    ? "selected"
+                    : ""
                 }`}
-                onClick={() => setQuestionCount(count)}
+                onClick={() =>
+                  setQuestionCount(count)
+                }
               >
 
-                <strong>{count}</strong>
+                <strong>
+                  {count}
+                </strong>
 
                 <span>
                   Questions
@@ -910,7 +989,6 @@ function Practice() {
 
         </section>
 
-
         {/* =================================================
             SPEED
             ================================================= */}
@@ -918,18 +996,22 @@ function Practice() {
 
           <div className="practice-section-heading">
             <div>
-              <span className="section-number">04</span>
+              <span className="section-number">
+                04
+              </span>
 
               <div>
-                <h2>Set your speed</h2>
+                <h2>
+                  Set your speed
+                </h2>
 
                 <p>
-                  Choose how much time you get for each question.
+                  Choose how much time you get for each
+                  question.
                 </p>
               </div>
             </div>
           </div>
-
 
           <div className="practice-speed-grid">
 
@@ -943,7 +1025,9 @@ function Practice() {
                     : ""
                 }`}
                 onClick={() =>
-                  setTimePerQuestion(option.value)
+                  setTimePerQuestion(
+                    option.value
+                  )
                 }
               >
 
@@ -961,7 +1045,6 @@ function Practice() {
           </div>
 
         </section>
-
 
         {/* =================================================
             SESSION PREVIEW
@@ -993,53 +1076,66 @@ function Practice() {
 
           </div>
 
-
           <div className="preview-details">
 
             <div className="preview-detail">
               <span>Study</span>
-              <strong>{previewName}</strong>
+              <strong>
+                {previewName}
+              </strong>
             </div>
 
             <div className="preview-detail">
               <span>Topic</span>
-              <strong>{previewTopic}</strong>
+              <strong>
+                {previewTopic}
+              </strong>
             </div>
 
             <div className="preview-detail">
               <span>Mode</span>
-              <strong>{previewMode}</strong>
+              <strong>
+                {previewMode}
+              </strong>
             </div>
 
             <div className="preview-detail">
               <span>Questions</span>
-              <strong>{questionCount}</strong>
+              <strong>
+                {questionCount}
+              </strong>
             </div>
 
             <div className="preview-detail">
               <span>Speed</span>
-              <strong>{previewSpeed}/question</strong>
+              <strong>
+                {previewSpeed}/question
+              </strong>
             </div>
 
           </div>
 
-
           {mode === "examination" && (
             <div className="examination-note">
+
               <span>🎯</span>
 
               <div>
-                <strong>Examination mode is active</strong>
+
+                <strong>
+                  Examination mode is active
+                </strong>
 
                 <p>
-                  Answers and explanations will remain hidden
-                  until you submit the examination. Your result
-                  will then be analyzed.
+                  Answers and explanations will remain
+                  hidden until you submit the examination.
+                  Your result will then be analyzed.
                 </p>
+
               </div>
+
             </div>
           )}
-
 
           <button
             type="button"
@@ -1047,6 +1143,7 @@ function Practice() {
             onClick={handleStart}
             disabled={starting}
           >
+
             {starting ? (
               <>
                 <span className="button-spinner"></span>
@@ -1058,17 +1155,18 @@ function Practice() {
                 <span>→</span>
               </>
             )}
+
           </button>
 
         </section>
 
       </main>
 
-
       {/* =====================================================
           FOOTER
           ===================================================== */}
       <footer className="practice-footer">
+
         <span>
           © {new Date().getFullYear()} Overmaths
         </span>
@@ -1076,6 +1174,7 @@ function Practice() {
         <span>
           Learn smarter. Perform better.
         </span>
+
       </footer>
 
     </div>
