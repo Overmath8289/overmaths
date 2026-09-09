@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
@@ -7,9 +8,7 @@ function Dashboard() {
   const navigate = useNavigate()
 
   const [profile, setProfile] = useState(null)
-  const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
-  const [coursesLoading, setCoursesLoading] = useState(false)
 
   useEffect(() => {
     const loadDashboard = async () => {
@@ -36,30 +35,6 @@ function Dashboard() {
         }
 
         setProfile(data)
-
-        /*
-          If the student is on the university route,
-          load the real courses from Supabase.
-        */
-        if (data?.learning_route === 'university') {
-          setCoursesLoading(true)
-
-          const {
-            data: courseData,
-            error: courseError,
-          } = await supabase
-            .from('courses')
-            .select('id, name, code, description')
-            .order('code', { ascending: true })
-
-          if (courseError) {
-            console.error('Courses error:', courseError)
-          } else {
-            setCourses(courseData || [])
-          }
-
-          setCoursesLoading(false)
-        }
       } catch (error) {
         console.error('Dashboard error:', error)
       } finally {
@@ -101,72 +76,15 @@ function Dashboard() {
     : `Let's make today's ${examType} preparation count.`
 
   /*
-    Secondary / O-Level subjects.
+    IMPORTANT PRACTICE FLOW
 
-    University courses are NOT hard-coded here.
-    They come directly from the Supabase courses table.
+    The Dashboard does not know or care which
+    subjects or courses are available.
+
+    All practice selection happens inside /practice.
   */
-  const secondarySubjects = [
-    {
-      name: 'PHYSICS',
-      title: '15 Questions',
-      description: 'Build your accuracy',
-      icon: 'P',
-      iconClass: 'physics-icon',
-    },
-    {
-      name: 'MATHEMATICS',
-      title: '15 Questions',
-      description: 'Strengthen your skills',
-      icon: 'M',
-      iconClass: 'maths-icon',
-    },
-    {
-      name: 'ENGLISH',
-      title: '10 Questions',
-      description: 'Improve your confidence',
-      icon: 'E',
-      iconClass: 'english-icon',
-    },
-  ]
-
-  const subjects = isUniversity
-    ? courses.map((course) => ({
-        id: course.id,
-        name: course.code || course.name,
-        title: course.name,
-        description:
-          course.description ||
-          'Strengthen your understanding',
-        icon: getCourseIcon(course.code),
-        iconClass: getCourseIconClass(course.code),
-        courseId: course.id,
-        courseCode: course.code,
-        courseName: course.name,
-      }))
-    : secondarySubjects
-
-  const handleStartPractice = (subject) => {
-    if (isUniversity) {
-      navigate('/practice', {
-        state: {
-          learningRoute: 'university',
-          courseId: subject.courseId,
-          courseCode: subject.courseCode,
-          courseName: subject.courseName,
-        },
-      })
-
-      return
-    }
-
-    navigate('/practice', {
-      state: {
-        learningRoute: 'secondary',
-        subject: subject.name,
-        examType,
-      },
-    })
+  const handleStartPractice = () => {
+    navigate('/practice')
   }
 
   return (
@@ -183,6 +101,7 @@ function Dashboard() {
         </div>
 
         <nav className="dashboard-nav">
+
           <button
             type="button"
             className="active"
@@ -200,20 +119,24 @@ function Dashboard() {
 
           <button
             type="button"
+            onClick={() => navigate('/dashboard')}
           >
             Progress
           </button>
 
           <button
             type="button"
+            onClick={() => navigate('/student-profile')}
           >
             Profile
           </button>
+
         </nav>
 
         <button
           type="button"
           className="dashboard-profile"
+          onClick={() => navigate('/student-profile')}
         >
           <span className="profile-avatar">
             {firstName.charAt(0).toUpperCase()}
@@ -241,7 +164,9 @@ function Dashboard() {
 
         {/* WELCOME */}
         <section className="dashboard-welcome">
+
           <div>
+
             <p className="dashboard-eyebrow">
               {routeTitle}
             </p>
@@ -254,12 +179,14 @@ function Dashboard() {
             <p className="dashboard-subtitle">
               {routeDescription}
             </p>
+
           </div>
 
           <div className="welcome-status">
             <span className="status-dot"></span>
             Ready to learn
           </div>
+
         </section>
 
         {/* EXAM / PREMIUM CARD */}
@@ -270,8 +197,11 @@ function Dashboard() {
           <div className="exam-content">
 
             <div className="exam-label">
+
               <span className="lock-icon">
+
                 <svg viewBox="0 0 24 24" fill="none">
+
                   <rect
                     x="5"
                     y="10"
@@ -288,10 +218,13 @@ function Dashboard() {
                     strokeWidth="1.8"
                     strokeLinecap="round"
                   />
+
                 </svg>
+
               </span>
 
               PREMIUM EXAM PLANNER
+
             </div>
 
             <h2>
@@ -321,6 +254,7 @@ function Dashboard() {
                   strokeLinejoin="round"
                 />
               </svg>
+
             </button>
 
           </div>
@@ -347,6 +281,7 @@ function Dashboard() {
           <div className="section-heading">
 
             <div>
+
               <p className="section-kicker">
                 FOCUS FOR TODAY
               </p>
@@ -354,112 +289,119 @@ function Dashboard() {
               <h2>
                 Today's Mission
               </h2>
+
             </div>
 
             <span className="mission-count">
-              0 / 3 completed
+              READY WHEN YOU ARE
             </span>
 
           </div>
 
           <div className="mission-grid">
 
-            {coursesLoading ? (
+            {/* MISSION 1 */}
+            <div className="mission-card">
 
-              <div className="mission-card">
-                <div className="mission-info">
-                  <strong>
-                    Loading your courses...
-                  </strong>
-
-                  <p>
-                    Preparing your learning space.
-                  </p>
-                </div>
+              <div className="mission-icon physics-icon">
+                ?
               </div>
 
-            ) : subjects.length > 0 ? (
+              <div className="mission-info">
 
-              subjects.map((subject) => (
+                <span>THINK FIRST</span>
 
-                <div
-                  className="mission-card"
-                  key={
-                    isUniversity
-                      ? subject.courseId
-                      : subject.name
-                  }
-                >
+                <strong>
+                  Understand before you answer.
+                </strong>
 
-                  <div
-                    className={`mission-icon ${subject.iconClass}`}
-                  >
-                    {subject.icon}
-                  </div>
-
-                  <div className="mission-info">
-
-                    <span>
-                      {subject.name}
-                    </span>
-
-                    <strong>
-                      {subject.title}
-                    </strong>
-
-                    <p>
-                      {subject.description}
-                    </p>
-
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleStartPractice(subject)
-                    }
-                  >
-                    Start
-
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                    >
-                      <path
-                        d="M5 12h14M13 6l6 6-6 6"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </button>
-
-                </div>
-
-              ))
-
-            ) : (
-
-              <div className="mission-card">
-
-                <div className="mission-info">
-
-                  <strong>
-                    No courses available yet.
-                  </strong>
-
-                  <p>
-                    Your university courses will appear
-                    here when they are added.
-                  </p>
-
-                </div>
+                <p>
+                  The fastest way to improve is to understand
+                  why an answer is correct.
+                </p>
 
               </div>
 
-            )}
+            </div>
 
+            {/* MISSION 2 */}
+            <div className="mission-card">
+
+              <div className="mission-icon maths-icon">
+                ↑
+              </div>
+
+              <div className="mission-info">
+
+                <span>BUILD YOUR EDGE</span>
+
+                <strong>
+                  Turn mistakes into progress.
+                </strong>
+
+                <p>
+                  Every mistake reveals something your next
+                  practice session can improve.
+                </p>
+
+              </div>
+
+            </div>
+
+            {/* MISSION 3 */}
+            <div className="mission-card">
+
+              <div className="mission-icon english-icon">
+                ✓
+              </div>
+
+              <div className="mission-info">
+
+                <span>EXAM MINDSET</span>
+
+                <strong>
+                  Accuracy first. Speed follows.
+                </strong>
+
+                <p>
+                  Train your understanding now so pressure
+                  feels easier when the real exam arrives.
+                </p>
+
+              </div>
+
+            </div>
+
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              marginTop: '18px',
+            }}
+          >
+            <button
+              type="button"
+              className="premium-button"
+              onClick={handleStartPractice}
+            >
+              Start Practicing
+
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <path
+                  d="M5 12h14M13 6l6 6-6 6"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+
+            </button>
           </div>
 
         </section>
@@ -468,6 +410,7 @@ function Dashboard() {
         <section className="stats-grid">
 
           <div className="stat-card">
+
             <span className="stat-label">
               QUESTIONS ANSWERED
             </span>
@@ -477,6 +420,7 @@ function Dashboard() {
             <p>
               Start your first mission
             </p>
+
           </div>
 
           <div className="stat-card">
@@ -548,6 +492,7 @@ function Dashboard() {
               <button
                 type="button"
                 className="panel-link"
+                onClick={() => navigate('/dashboard')}
               >
                 View details
               </button>
@@ -630,7 +575,7 @@ function Dashboard() {
 
         </section>
 
-        {/* CONTINUE PRACTICE */}
+        {/* KEEP MOVING */}
         <section className="dashboard-section">
 
           <div className="section-heading">
@@ -642,7 +587,7 @@ function Dashboard() {
               </p>
 
               <h2>
-                Continue Practicing
+                Your Next Move
               </h2>
 
             </div>
@@ -651,63 +596,92 @@ function Dashboard() {
 
           <div className="practice-grid">
 
-            {subjects.length > 0 ? (
+            <button
+              type="button"
+              className="practice-card"
+              onClick={handleStartPractice}
+            >
 
-              subjects.map((subject) => (
+              <span>
+                PRACTICE SMARTER
+              </span>
 
-                <button
-                  type="button"
-                  className="practice-card"
-                  key={
-                    isUniversity
-                      ? `practice-${subject.courseId}`
-                      : `practice-${subject.name}`
-                  }
-                  onClick={() =>
-                    handleStartPractice(subject)
-                  }
-                >
+              <strong>
+                Build a session around what you need.
+              </strong>
 
-                  <span>
-                    {subject.name}
-                  </span>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <path
+                  d="M5 12h14M13 6l6 6-6 6"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                />
+              </svg>
 
-                  <strong>
-                    Start Practice
-                  </strong>
+            </button>
 
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                  >
-                    <path
-                      d="M5 12h14M13 6l6 6-6 6"
-                      stroke="currentColor"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                    />
-                  </svg>
+            <button
+              type="button"
+              className="practice-card"
+              onClick={handleStartPractice}
+            >
 
-                </button>
+              <span>
+                CHALLENGE YOURSELF
+              </span>
 
-              ))
+              <strong>
+                Don't practise only what you already know.
+              </strong>
 
-            ) : (
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <path
+                  d="M5 12h14M13 6l6 6-6 6"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                />
+              </svg>
 
-              <div className="practice-card">
+            </button>
 
-                <span>
-                  COURSES
-                </span>
+            <button
+              type="button"
+              className="practice-card"
+              onClick={handleStartPractice}
+            >
 
-                <strong>
-                  No courses available
-                </strong>
+              <span>
+                READY FOR MORE?
+              </span>
 
-              </div>
+              <strong>
+                Choose your subject, topic and challenge.
+              </strong>
 
-            )}
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <path
+                  d="M5 12h14M13 6l6 6-6 6"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                />
+              </svg>
+
+            </button>
 
           </div>
 
@@ -773,73 +747,5 @@ function Dashboard() {
     </div>
   )
 }
-
-
-/*
-  Give university courses a simple visual identity
-  based on their course code.
-
-  This does NOT affect the database.
-*/
-
-function getCourseIcon(code = '') {
-  const normalized = code.toUpperCase()
-
-  if (normalized.startsWith('PHY')) {
-    return 'P'
-  }
-
-  if (
-    normalized.startsWith('MAT') ||
-    normalized.startsWith('MTH')
-  ) {
-    return 'M'
-  }
-
-  if (normalized.startsWith('CHM')) {
-    return 'C'
-  }
-
-  if (normalized.startsWith('CSC')) {
-    return 'C'
-  }
-
-  if (normalized.startsWith('GST')) {
-    return 'G'
-  }
-
-  return 'C'
-}
-
-
-function getCourseIconClass(code = '') {
-  const normalized = code.toUpperCase()
-
-  if (normalized.startsWith('PHY')) {
-    return 'physics-icon'
-  }
-
-  if (
-    normalized.startsWith('MAT') ||
-    normalized.startsWith('MTH')
-  ) {
-    return 'maths-icon'
-  }
-
-  if (normalized.startsWith('CHM')) {
-    return 'chemistry-icon'
-  }
-
-  if (normalized.startsWith('CSC')) {
-    return 'computer-icon'
-  }
-
-  if (normalized.startsWith('GST')) {
-    return 'english-icon'
-  }
-
-  return 'maths-icon'
-}
-
 
 export default Dashboard
