@@ -1,332 +1,441 @@
-import { useEffect, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import React, { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
-import './Practice.css' 
+import "./Practice.css";
 
-export default function Practice() {
-  const location = useLocation()
-  const navigate = useNavigate()
+const QUESTION_COUNTS = [5, 10, 20, 30];
 
-  const incomingState = location.state || {}
+const SPEED_OPTIONS = [
+  { value: 10, label: "10 sec", description: "Very Fast" },
+  { value: 20, label: "20 sec", description: "Fast" },
+  { value: 30, label: "30 sec", description: "Balanced" },
+  { value: 45, label: "45 sec", description: "Relaxed" },
+  { value: 60, label: "60 sec", description: "No Rush" },
+];
 
-  const [profile, setProfile] = useState(null)
-  const [courses, setCourses] = useState([])
-  const [subjects, setSubjects] = useState([])
+function Practice() {
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  const [selectedCourse, setSelectedCourse] = useState(null)
-  const [selectedSubject, setSelectedSubject] = useState('')
+  const incomingState = location.state || {};
 
-  const [topic, setTopic] = useState('mixed')
-  const [topics, setTopics] = useState([])
+  const [loading, setLoading] = useState(true);
+  const [starting, setStarting] = useState(false);
 
-  const [mode, setMode] = useState('practice')
-  const [questionCount, setQuestionCount] = useState(10)
-  const [timePerQuestion, setTimePerQuestion] = useState(30)
+  const [profile, setProfile] = useState(null);
 
-  const [loading, setLoading] = useState(true)
-  const [loadingTopics, setLoadingTopics] = useState(false)
-  const [error, setError] = useState('')
+  // secondary | university
+  const [learningRoute, setLearningRoute] = useState(
+    incomingState.learningRoute || "secondary"
+  );
 
-  const isUniversity = profile?.learning_route === 'university'
+  const [examType, setExamType] = useState(
+    incomingState.examType || ""
+  );
 
-  /* =========================================================
-     LOAD USER PROFILE
-     ========================================================= */
+  // Secondary subjects
+  const [subjects, setSubjects] = useState([]);
 
+  // University courses
+  const [courses, setCourses] = useState([]);
+
+  // Topics belonging to current subject/course
+  const [topics, setTopics] = useState([]);
+
+  const [selectedSubject, setSelectedSubject] = useState(
+    incomingState.subject || ""
+  );
+
+  const [selectedCourseId, setSelectedCourseId] = useState(
+    incomingState.courseId || ""
+  );
+
+  const [selectedTopic, setSelectedTopic] = useState("mixed");
+
+  const [mode, setMode] = useState("practice");
+
+  const [questionCount, setQuestionCount] = useState(10);
+
+  const [timePerQuestion, setTimePerQuestion] = useState(30);
+
+  /*
+   * ---------------------------------------------------------
+   * LOAD USER + PROFILE
+   * ---------------------------------------------------------
+   */
   useEffect(() => {
-    let mounted = true
+    let mounted = true;
 
     async function loadProfile() {
-      setLoading(true)
-      setError('')
+      setLoading(true);
 
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser()
+      try {
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
 
-      if (authError || !user) {
-        navigate('/login', { replace: true })
-        return
-      }
+        if (authError) {
+          throw authError;
+        }
 
-      const { data, error: profileError } = await supabase
-        .from('users')
-        .select('full_name, learning_route, exam_type')
-        .eq('auth_user_id', user.id)
-        .maybeSingle()
+        if (!user) {
+          navigate("/login");
+          return;
+        }
 
-      if (!mounted) return
+        const { data, error } = await supabase
+          .from("users")
+          .select("full_name, learning_route, exam_type")
+          .eq("auth_user_id", user.id)
+          .single();
 
-      if (profileError) {
-        console.error(profileError)
-        setError('Unable to load your learning profile.')
-        setLoading(false)
-        return
-      }
+        if (error) {
+          throw error;
+        }
 
-      const nextProfile = data || {
-        full_name: user.user_metadata?.full_name || 'Student',
-        learning_route: 'secondary',
-        exam_type: 'UTME',
-      }
+        if (!mounted) return;
 
-      setProfile(nextProfile)
+        setProfile(data);
 
-      if (incomingState.learningRoute === 'university') {
-        setProfile((current) => ({
-          ...(current || nextProfile),
-          learning_route: 'university',
-        }))
-      }
+        /*
+         * Navigation state has priority because Dashboard
+         * may intentionally send the student here for a
+         * particular subject/course.
+         */
+        if (!incomingState.learningRoute && data?.learning_route) {
+          setLearningRoute(data.learning_route);
+        }
 
-      if (incomingState.learningRoute === 'secondary') {
-        setProfile((current) => ({
-          ...(current || nextProfile),
-          learning_route: 'secondary',
-        }))
-      }
+        if (!incomingState.examType && data?.exam_type) {
+          setExamType(data.exam_type);
+        }
 
-      setLoading(false)
-    }
+        if (
+          !incomingState.subject &&
+          data?.learning_route !== "university"
+        ) {
+          setSelectedSubject("");
+        }
+      } catch (error) {
+        console.error("Practice profile error:", error);
 
-    loadProfile()
-
-    return () => {
-      mounted = false
-    }
-  }, [navigate])
-
-  /* =========================================================
-     LOAD UNIVERSITY COURSES
-     ========================================================= */
-
-  useEffect(() => {
-    if (!profile || !isUniversity) return
-
-    let mounted = true
-
-    async function loadCourses() {
-      setError('')
-
-      const { data, error: coursesError } = await supabase
-        .from('courses')
-        .select('id, name, code, description')
-        .order('code', { ascending: true })
-
-      if (!mounted) return
-
-      if (coursesError) {
-        console.error(coursesError)
-        setError('Unable to load university courses.')
-        return
-      }
-
-      const loadedCourses = data || []
-
-      setCourses(loadedCourses)
-
-      if (incomingState.courseId) {
-        const incomingCourse = loadedCourses.find(
-          (course) => String(course.id) === String(incomingState.courseId)
-        )
-
-        if (incomingCourse) {
-          setSelectedCourse(incomingCourse)
-          return
+        if (mounted) {
+          setProfile(null);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
         }
       }
-
-      if (loadedCourses.length > 0) {
-        setSelectedCourse(loadedCourses[0])
-      }
     }
 
-    loadCourses()
+    loadProfile();
 
     return () => {
-      mounted = false
-    }
-  }, [profile, isUniversity])
+      mounted = false;
+    };
+  }, [navigate]);
 
-  /* =========================================================
-     LOAD SECONDARY SUBJECTS
-     ========================================================= */
-
+  /*
+   * ---------------------------------------------------------
+   * LOAD SECONDARY SUBJECTS
+   *
+   * Subjects come from the actual question bank.
+   * Nothing is manually hard-coded here.
+   * ---------------------------------------------------------
+   */
   useEffect(() => {
-    if (!profile || isUniversity) return
+    if (learningRoute !== "secondary") {
+      setSubjects([]);
+      return;
+    }
 
-    let mounted = true
+    let mounted = true;
 
     async function loadSubjects() {
-      setError('')
+      const { data, error } = await supabase
+        .from("questions")
+        .select("subject")
+        .eq("is_active", true)
+        .not("subject", "is", null);
 
-      const { data, error: subjectsError } = await supabase
-        .from('questions')
-        .select('subject')
-        .eq('is_active', true)
-        .not('subject', 'is', null)
+      if (error) {
+        console.error("Unable to load subjects:", error);
 
-      if (!mounted) return
-
-      if (subjectsError) {
-        console.error(subjectsError)
-
-        setSubjects([
-          'Physics',
-          'Mathematics',
-          'English',
-        ])
-
-        if (incomingState.subject) {
-          setSelectedSubject(incomingState.subject)
-        } else {
-          setSelectedSubject('Physics')
+        if (mounted) {
+          setSubjects([]);
         }
 
-        return
+        return;
       }
+
+      if (!mounted) return;
 
       const uniqueSubjects = [
         ...new Set(
           (data || [])
-            .map((item) => item.subject)
+            .map((item) => item.subject?.trim())
             .filter(Boolean)
         ),
-      ].sort()
+      ].sort((a, b) => a.localeCompare(b));
 
-      const finalSubjects =
-        uniqueSubjects.length > 0
-          ? uniqueSubjects
-          : ['Physics', 'Mathematics', 'English']
+      setSubjects(uniqueSubjects);
 
-      setSubjects(finalSubjects)
-
-      if (incomingState.subject) {
-        const matchingSubject = finalSubjects.find(
-          (subject) =>
-            subject.toLowerCase() ===
-            String(incomingState.subject).toLowerCase()
-        )
-
-        if (matchingSubject) {
-          setSelectedSubject(matchingSubject)
-          return
-        }
+      /*
+       * If Dashboard already sent a subject and that subject
+       * exists in the database, keep it.
+       *
+       * Otherwise select the first available subject.
+       */
+      if (
+        selectedSubject &&
+        uniqueSubjects.includes(selectedSubject)
+      ) {
+        return;
       }
 
-      if (finalSubjects.length > 0) {
-        setSelectedSubject(finalSubjects[0])
+      if (uniqueSubjects.length > 0) {
+        setSelectedSubject(uniqueSubjects[0]);
+      } else {
+        setSelectedSubject("");
       }
     }
 
-    loadSubjects()
+    loadSubjects();
 
     return () => {
-      mounted = false
-    }
-  }, [profile, isUniversity])
+      mounted = false;
+    };
+  }, [learningRoute]);
 
-  /* =========================================================
-     LOAD TOPICS
-     ========================================================= */
-
+  /*
+   * ---------------------------------------------------------
+   * LOAD UNIVERSITY COURSES
+   *
+   * Courses come from the courses table.
+   * ---------------------------------------------------------
+   */
   useEffect(() => {
-    if (!profile) return
-
-    if (isUniversity && !selectedCourse) {
-      setTopics([])
-      return
+    if (learningRoute !== "university") {
+      setCourses([]);
+      return;
     }
 
-    if (!isUniversity && !selectedSubject) {
-      setTopics([])
-      return
+    let mounted = true;
+
+    async function loadCourses() {
+      const { data, error } = await supabase
+        .from("courses")
+        .select("id, name, code, description")
+        .eq("is_active", true)
+        .order("code", { ascending: true });
+
+      if (error) {
+        console.error("Unable to load university courses:", error);
+
+        if (mounted) {
+          setCourses([]);
+        }
+
+        return;
+      }
+
+      if (!mounted) return;
+
+      setCourses(data || []);
+
+      /*
+       * Keep Dashboard-selected course where possible.
+       */
+      const incomingCourseExists = (data || []).some(
+        (course) => String(course.id) === String(selectedCourseId)
+      );
+
+      if (incomingCourseExists) {
+        return;
+      }
+
+      if (data?.length > 0) {
+        setSelectedCourseId(data[0].id);
+      } else {
+        setSelectedCourseId("");
+      }
     }
 
-    let mounted = true
+    loadCourses();
+
+    return () => {
+      mounted = false;
+    };
+  }, [learningRoute]);
+
+  /*
+   * ---------------------------------------------------------
+   * LOAD TOPICS
+   *
+   * Topics are ALWAYS loaded according to the selected
+   * subject/course.
+   *
+   * Mixed Topics is not a database topic.
+   * It means the quiz can pull from any topic belonging
+   * to the selected subject/course.
+   * ---------------------------------------------------------
+   */
+  useEffect(() => {
+    let mounted = true;
 
     async function loadTopics() {
-      setLoadingTopics(true)
-      setError('')
+      setTopics([]);
+      setSelectedTopic("mixed");
 
-      let query = supabase
-        .from('questions')
-        .select('topic')
-        .eq('is_active', true)
-        .not('topic', 'is', null)
+      if (learningRoute === "secondary") {
+        if (!selectedSubject) return;
 
-      if (isUniversity) {
-        query = query.eq('course_id', selectedCourse.id)
-      } else {
-        query = query
-          .is('course_id', null)
-          .eq('subject', selectedSubject)
+        const { data, error } = await supabase
+          .from("questions")
+          .select("topic")
+          .eq("is_active", true)
+          .eq("subject", selectedSubject)
+          .is("course_id", null)
+          .not("topic", "is", null);
+
+        if (error) {
+          console.error("Unable to load secondary topics:", error);
+          return;
+        }
+
+        if (!mounted) return;
+
+        const uniqueTopics = [
+          ...new Set(
+            (data || [])
+              .map((item) => item.topic?.trim())
+              .filter(Boolean)
+          ),
+        ].sort((a, b) => a.localeCompare(b));
+
+        setTopics(uniqueTopics);
+        return;
       }
 
-      const { data, error: topicError } = await query
+      if (learningRoute === "university") {
+        if (!selectedCourseId) return;
 
-      if (!mounted) return
+        const { data, error } = await supabase
+          .from("questions")
+          .select("topic")
+          .eq("is_active", true)
+          .eq("course_id", selectedCourseId)
+          .not("topic", "is", null);
 
-      if (topicError) {
-        console.error(topicError)
-        setTopics([])
-        setLoadingTopics(false)
-        return
+        if (error) {
+          console.error("Unable to load university topics:", error);
+          return;
+        }
+
+        if (!mounted) return;
+
+        const uniqueTopics = [
+          ...new Set(
+            (data || [])
+              .map((item) => item.topic?.trim())
+              .filter(Boolean)
+          ),
+        ].sort((a, b) => a.localeCompare(b));
+
+        setTopics(uniqueTopics);
       }
-
-      const uniqueTopics = [
-        ...new Set(
-          (data || [])
-            .map((item) => item.topic)
-            .filter(Boolean)
-        ),
-      ].sort()
-
-      setTopics(uniqueTopics)
-      setTopic('mixed')
-      setLoadingTopics(false)
     }
 
-    loadTopics()
+    loadTopics();
 
     return () => {
-      mounted = false
+      mounted = false;
+    };
+  }, [learningRoute, selectedSubject, selectedCourseId]);
+
+  /*
+   * ---------------------------------------------------------
+   * SELECTED COURSE
+   * ---------------------------------------------------------
+   */
+  const selectedCourse = useMemo(() => {
+    return courses.find(
+      (course) => String(course.id) === String(selectedCourseId)
+    );
+  }, [courses, selectedCourseId]);
+
+  /*
+   * ---------------------------------------------------------
+   * SESSION PREVIEW
+   * ---------------------------------------------------------
+   */
+  const previewName =
+    learningRoute === "university"
+      ? selectedCourse?.code || selectedCourse?.name || "Choose Course"
+      : selectedSubject || "Choose Subject";
+
+  const previewTopic =
+    selectedTopic === "mixed"
+      ? "Mixed Topics"
+      : selectedTopic || "Choose Topic";
+
+  const previewMode =
+    mode === "practice"
+      ? "Practice Mode"
+      : "Examination Mode";
+
+  const previewSpeed =
+    SPEED_OPTIONS.find(
+      (option) => option.value === timePerQuestion
+    )?.label || `${timePerQuestion} sec`;
+
+  /*
+   * ---------------------------------------------------------
+   * START SESSION
+   * ---------------------------------------------------------
+   */
+  async function handleStart() {
+    if (starting) return;
+
+    if (learningRoute === "secondary" && !selectedSubject) {
+      alert("Please choose a subject.");
+      return;
     }
-  }, [profile, isUniversity, selectedCourse, selectedSubject])
 
-  /* =========================================================
-     START PRACTICE
-     ========================================================= */
-
-  function handleStart() {
-    if (isUniversity && !selectedCourse) {
-      setError('Please select a course first.')
-      return
+    if (learningRoute === "university" && !selectedCourseId) {
+      alert("Please choose a course.");
+      return;
     }
 
-    if (!isUniversity && !selectedSubject) {
-      setError('Please select a subject first.')
-      return
-    }
+    setStarting(true);
 
-    navigate('/quiz', {
-      state: {
-        subject: isUniversity ? '' : selectedSubject,
+    try {
+      const quizState = {
+        learningRoute,
 
-        courseId: isUniversity
-          ? selectedCourse.id
-          : null,
+        subject:
+          learningRoute === "secondary"
+            ? selectedSubject
+            : "",
 
-        courseCode: isUniversity
-          ? selectedCourse.code
-          : '',
+        courseId:
+          learningRoute === "university"
+            ? selectedCourseId
+            : "",
 
-        courseName: isUniversity
-          ? selectedCourse.name
-          : '',
+        courseCode:
+          learningRoute === "university"
+            ? selectedCourse?.code || ""
+            : "",
 
-        topic,
+        courseName:
+          learningRoute === "university"
+            ? selectedCourse?.name || ""
+            : "",
+
+        topic: selectedTopic,
 
         questionCount,
 
@@ -334,554 +443,420 @@ export default function Practice() {
 
         timePerQuestion,
 
-        learningRoute: isUniversity
-          ? 'university'
-          : 'secondary',
-
         examType:
-          profile?.exam_type || 'UTME',
-      },
-    })
-  }
+          learningRoute === "secondary"
+            ? examType
+            : "",
+      };
 
-  /* =========================================================
-     NAVIGATION
-     ========================================================= */
-
-  async function handleLogout() {
-    await supabase.auth.signOut()
-    navigate('/login', { replace: true })
-  }
-
-  /* =========================================================
-     HELPERS
-     ========================================================= */
-
-  function getCourseIcon(code = '') {
-    const firstLetter = code.charAt(0).toUpperCase()
-
-    const icons = {
-      P: 'P',
-      M: 'M',
-      C: 'C',
-      G: 'G',
-      B: 'B',
-      E: 'E',
+      navigate("/quiz", {
+        state: quizState,
+      });
+    } finally {
+      setStarting(false);
     }
-
-    return icons[firstLetter] || 'C'
   }
 
-  function getSubjectIcon(subject = '') {
-    const value = subject.toLowerCase()
-
-    if (value.includes('physics')) return 'P'
-    if (value.includes('math')) return 'M'
-    if (value.includes('english')) return 'E'
-    if (value.includes('chem')) return 'C'
-    if (value.includes('bio')) return 'B'
-
-    return subject.charAt(0).toUpperCase() || 'S'
+  /*
+   * ---------------------------------------------------------
+   * LOGOUT
+   * ---------------------------------------------------------
+   */
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    navigate("/login");
   }
 
-  function getSubjectIconClass(subject = '') {
-    const value = subject.toLowerCase()
-
-    if (value.includes('physics')) return 'physics-icon'
-    if (value.includes('math')) return 'maths-icon'
-    if (value.includes('english')) return 'english-icon'
-    if (value.includes('chem')) return 'chemistry-icon'
-    if (value.includes('bio')) return 'biology-icon'
-
-    return ''
-  }
-
-  const selectedName = isUniversity
-    ? selectedCourse?.name || 'Select a course'
-    : selectedSubject || 'Select a subject'
-
-  const selectedCode = isUniversity
-    ? selectedCourse?.code || ''
-    : selectedSubject || ''
-
+  /*
+   * ---------------------------------------------------------
+   * LOADING
+   * ---------------------------------------------------------
+   */
   if (loading) {
     return (
       <div className="practice-page">
         <div className="practice-loading">
-          <div className="practice-loader">
-            <div className="loader-orb" />
-          </div>
-
-          <p>Preparing your learning space...</p>
+          <div className="practice-loader"></div>
+          <p>Preparing your practice studio...</p>
         </div>
       </div>
-    )
+    );
   }
 
+  /*
+   * ---------------------------------------------------------
+   * PAGE
+   * ---------------------------------------------------------
+   */
   return (
     <div className="practice-page">
+
+      {/* Ambient background */}
+      <div className="practice-glow practice-glow-one"></div>
+      <div className="practice-glow practice-glow-two"></div>
 
       {/* =====================================================
           HEADER
           ===================================================== */}
-
       <header className="practice-header">
-        <div className="practice-header-inner">
+
+        <button
+          className="practice-logo"
+          onClick={() => navigate("/dashboard")}
+          type="button"
+        >
+          <span className="practice-logo-mark">O</span>
+          <span className="practice-logo-text">
+            Over<span>maths</span>
+          </span>
+        </button>
+
+        <nav className="practice-nav">
 
           <button
             type="button"
-            className="practice-brand"
-            onClick={() => navigate('/')}
-            aria-label="Go to Overmaths home"
+            onClick={() => navigate("/dashboard")}
+            className="practice-nav-link"
           >
-            <img
-              src="/src/assets/overmaths-logo.png"
-              alt="Overmaths"
-            />
+            Dashboard
           </button>
 
-          <nav
-            className="practice-nav"
-            aria-label="Main navigation"
+          <button
+            type="button"
+            onClick={() => navigate("/practice")}
+            className="practice-nav-link active"
           >
-            <button
-              type="button"
-              onClick={() => navigate('/')}
-            >
-              Home
-            </button>
+            Practice
+          </button>
 
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard')}
-            >
-              Dashboard
-            </button>
+          <button
+            type="button"
+            onClick={() => navigate("/student-profile")}
+            className="practice-nav-link"
+          >
+            Profile
+          </button>
 
-            <button
-              type="button"
-              className="practice-nav-active"
-              onClick={() => navigate('/practice')}
-            >
-              Practice
-            </button>
+        </nav>
 
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard')}
-            >
-              Progress
-            </button>
+        <button
+          type="button"
+          className="practice-logout"
+          onClick={handleLogout}
+        >
+          Logout
+        </button>
 
-            <button
-              type="button"
-              onClick={() => navigate('/student-profile')}
-            >
-              Profile
-            </button>
-          </nav>
-
-          <div className="practice-header-actions">
-
-            <button
-              type="button"
-              className="practice-dashboard-button"
-              onClick={() => navigate('/dashboard')}
-            >
-              <span>←</span>
-              Dashboard
-            </button>
-
-            <button
-              type="button"
-              className="practice-logout"
-              onClick={handleLogout}
-            >
-              Logout
-            </button>
-
-          </div>
-
-        </div>
       </header>
+
 
       {/* =====================================================
           MAIN
           ===================================================== */}
-
       <main className="practice-main">
 
-        {/* Decorative background */}
-        <div className="practice-background-glow glow-one" />
-        <div className="practice-background-glow glow-two" />
+        {/* Hero */}
+        <section className="practice-hero">
 
-        {/* ===================================================
-            INTRO
-            =================================================== */}
-
-        <section className="practice-intro">
-
-          <div className="practice-intro-copy">
-
-            <div className="practice-eyebrow">
-              <span className="eyebrow-line" />
-              BUILD YOUR SESSION
-            </div>
-
-            <h1>
-              Practice with
-              <span> purpose.</span>
-            </h1>
-
-            <p className="practice-subtitle">
-              Build a focused learning session around what
-              you want to master today.
-            </p>
-
+          <div className="practice-eyebrow">
+            <span className="practice-eyebrow-dot"></span>
+            PERSONALIZED LEARNING
           </div>
 
-          <div className="practice-status">
-            <span className="status-dot" />
-            <span>
-              {isUniversity
-                ? 'University Learning'
-                : `${profile?.exam_type || 'UTME'} Preparation`}
-            </span>
-          </div>
+          <h1>
+            Build your
+            <span> practice session.</span>
+          </h1>
+
+          <p>
+            Choose what you want to study, how you want to
+            study it, and how fast you want to be challenged.
+          </p>
 
         </section>
 
-        {/* ===================================================
-            ERROR
-            =================================================== */}
 
-        {error && (
-          <div className="practice-error">
-            <span className="error-icon">!</span>
-            <span>{error}</span>
-          </div>
-        )}
-
-        {/* ===================================================
-            STEP 01
-            =================================================== */}
-
-        <section className="practice-section">
+        {/* =================================================
+            LEARNING AREA
+            ================================================= */}
+        <section className="practice-panel">
 
           <div className="practice-section-heading">
-
-            <div className="practice-step">
-              <span>01</span>
+            <div>
+              <span className="section-number">01</span>
               <div>
-                <strong>
-                  {isUniversity
-                    ? 'Choose your course'
-                    : 'Choose your subject'}
-                </strong>
-
-                <small>
-                  Start with the area you want to improve.
-                </small>
+                <h2>What are you studying?</h2>
+                <p>
+                  Select from the subjects and courses available
+                  in your question bank.
+                </p>
               </div>
             </div>
-
-            <div className="step-status">
-              {selectedName}
-            </div>
-
           </div>
 
-          {isUniversity ? (
 
-            courses.length > 0 ? (
-              <div className="subject-grid">
+          <div className="practice-selection-grid">
 
-                {courses.map((course) => (
-                  <button
-                    type="button"
-                    key={course.id}
-                    className={`subject-card ${
-                      selectedCourse?.id === course.id
-                        ? 'selected'
-                        : ''
-                    }`}
-                    onClick={() => {
-                      setSelectedCourse(course)
-                      setTopic('mixed')
+            {/* Secondary */}
+            {learningRoute === "secondary" && (
+              <div className="practice-field">
+
+                <label htmlFor="subject">
+                  Subject
+                </label>
+
+                <div className="practice-select-wrap">
+
+                  <select
+                    id="subject"
+                    value={selectedSubject}
+                    onChange={(event) => {
+                      setSelectedSubject(event.target.value);
+                      setSelectedTopic("mixed");
                     }}
+                    className="practice-select"
                   >
+                    <option value="">
+                      Choose subject
+                    </option>
 
-                    <div className="subject-icon">
-                      {getCourseIcon(course.code)}
-                    </div>
-
-                    <div className="subject-card-content">
-                      <strong>
-                        {course.code}
-                      </strong>
-
-                      <small>
-                        {course.name}
-                      </small>
-                    </div>
-
-                    {selectedCourse?.id === course.id && (
-                      <span className="selected-mark">
-                        ✓
-                      </span>
-                    )}
-
-                  </button>
-                ))}
-
-              </div>
-            ) : (
-              <div className="empty-practice-state">
-                <strong>No courses available yet</strong>
-                <span>
-                  Add university courses to Supabase before
-                  starting a university practice session.
-                </span>
-              </div>
-            )
-
-          ) : (
-
-            subjects.length > 0 ? (
-              <div className="subject-grid">
-
-                {subjects.map((subject) => (
-                  <button
-                    type="button"
-                    key={subject}
-                    className={`subject-card ${
-                      selectedSubject === subject
-                        ? 'selected'
-                        : ''
-                    }`}
-                    onClick={() => {
-                      setSelectedSubject(subject)
-                      setTopic('mixed')
-                    }}
-                  >
-
-                    <div
-                      className={`subject-icon ${
-                        getSubjectIconClass(subject)
-                      }`}
-                    >
-                      {getSubjectIcon(subject)}
-                    </div>
-
-                    <div className="subject-card-content">
-                      <strong>
+                    {subjects.map((subject) => (
+                      <option
+                        value={subject}
+                        key={subject}
+                      >
                         {subject}
-                      </strong>
+                      </option>
+                    ))}
+                  </select>
 
-                      <small>
-                        {profile?.exam_type || 'Exam preparation'}
-                      </small>
-                    </div>
+                  <span className="practice-select-arrow">
+                    ↓
+                  </span>
 
-                    {selectedSubject === subject && (
-                      <span className="selected-mark">
-                        ✓
-                      </span>
-                    )}
-
-                  </button>
-                ))}
-
-              </div>
-            ) : (
-              <div className="empty-practice-state">
-                <strong>No subjects available</strong>
-                <span>
-                  Add active questions to your question bank
-                  to populate this section.
-                </span>
-              </div>
-            )
-
-          )}
-
-        </section>
-
-        {/* ===================================================
-            STEP 02
-            =================================================== */}
-
-        <section className="practice-section">
-
-          <div className="practice-section-heading">
-
-            <div className="practice-step">
-              <span>02</span>
-
-              <div>
-                <strong>
-                  Choose a topic
-                </strong>
+                </div>
 
                 <small>
-                  Focus your practice or let Overmaths mix it.
+                  Subjects are loaded from your question bank.
                 </small>
-              </div>
-            </div>
-
-            <div className="step-status">
-              {topic === 'mixed'
-                ? 'Mixed topics'
-                : topic}
-            </div>
-
-          </div>
-
-          <div className="topic-wrapper">
-
-            <button
-              type="button"
-              className={`topic-card topic-mixed ${
-                topic === 'mixed' ? 'selected' : ''
-              }`}
-              onClick={() => setTopic('mixed')}
-            >
-
-              <div className="topic-main">
-                <strong>Mixed topics</strong>
-                <small>
-                  Questions from across this subject.
-                </small>
-              </div>
-
-              {topic === 'mixed' && (
-                <span className="selected-mark">
-                  ✓
-                </span>
-              )}
-
-            </button>
-
-            {loadingTopics ? (
-
-              <div className="topics-loading">
-                <span />
-                Loading topics...
-              </div>
-
-            ) : topics.length > 0 ? (
-
-              <div className="topic-list">
-
-                {topics.map((item) => (
-                  <button
-                    type="button"
-                    key={item}
-                    className={`topic-pill ${
-                      topic === item ? 'selected' : ''
-                    }`}
-                    onClick={() => setTopic(item)}
-                  >
-                    {item}
-                  </button>
-                ))}
 
               </div>
-
-            ) : (
-
-              <div className="topics-empty">
-                No specific topics available yet. Mixed practice
-                will use all available questions.
-              </div>
-
             )}
 
+
+            {/* University */}
+            {learningRoute === "university" && (
+              <div className="practice-field">
+
+                <label htmlFor="course">
+                  Course
+                </label>
+
+                <div className="practice-select-wrap">
+
+                  <select
+                    id="course"
+                    value={selectedCourseId}
+                    onChange={(event) => {
+                      setSelectedCourseId(event.target.value);
+                      setSelectedTopic("mixed");
+                    }}
+                    className="practice-select"
+                  >
+                    <option value="">
+                      Choose course
+                    </option>
+
+                    {courses.map((course) => (
+                      <option
+                        value={course.id}
+                        key={course.id}
+                      >
+                        {course.code
+                          ? `${course.code} — ${course.name}`
+                          : course.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <span className="practice-select-arrow">
+                    ↓
+                  </span>
+
+                </div>
+
+                <small>
+                  Courses are loaded from your university course bank.
+                </small>
+
+              </div>
+            )}
+
+
+            {/* Topic */}
+            <div className="practice-field">
+
+              <label htmlFor="topic">
+                Topic
+              </label>
+
+              <div className="practice-select-wrap">
+
+                <select
+                  id="topic"
+                  value={selectedTopic}
+                  onChange={(event) =>
+                    setSelectedTopic(event.target.value)
+                  }
+                  className="practice-select"
+                  disabled={
+                    learningRoute === "secondary"
+                      ? !selectedSubject
+                      : !selectedCourseId
+                  }
+                >
+                  <option value="mixed">
+                    Mixed Topics
+                  </option>
+
+                  {topics.map((topic) => (
+                    <option
+                      value={topic}
+                      key={topic}
+                    >
+                      {topic}
+                    </option>
+                  ))}
+                </select>
+
+                <span className="practice-select-arrow">
+                  ↓
+                </span>
+
+              </div>
+
+              <small>
+                Mixed Topics pulls questions from all available
+                topics in your selection.
+              </small>
+
+            </div>
+
           </div>
 
         </section>
 
-        {/* ===================================================
-            STEP 03
-            =================================================== */}
 
-        <section className="practice-section">
+        {/* =================================================
+            MODE
+            ================================================= */}
+        <section className="practice-panel">
 
           <div className="practice-section-heading">
-
-            <div className="practice-step">
-              <span>03</span>
+            <div>
+              <span className="section-number">02</span>
 
               <div>
-                <strong>
-                  Choose your mode
-                </strong>
+                <h2>Choose your mode</h2>
 
-                <small>
-                  Decide how Overmaths should respond to your answers.
-                </small>
+                <p>
+                  Decide whether you want instant learning
+                  feedback or a real examination experience.
+                </p>
               </div>
             </div>
-
           </div>
 
-          <div className="mode-grid">
 
+          <div className="practice-mode-grid">
+
+            {/* Practice */}
             <button
               type="button"
-              className={`mode-card ${
-                mode === 'practice' ? 'selected' : ''
+              className={`practice-mode-card ${
+                mode === "practice" ? "selected" : ""
               }`}
-              onClick={() => setMode('practice')}
+              onClick={() => setMode("practice")}
             >
 
               <div className="mode-icon">
-                ⚡
+                🧠
               </div>
 
-              <span>
-                <strong>Practice Mode</strong>
+              <div className="mode-content">
 
-                <small>
-                  Get instant feedback and explanations
-                  after every answer.
-                </small>
-              </span>
+                <div className="mode-title-row">
+                  <h3>Practice Mode</h3>
 
-              {mode === 'practice' && (
-                <span className="selected-mark">
-                  ✓
-                </span>
-              )}
+                  {mode === "practice" && (
+                    <span className="selected-badge">
+                      Selected
+                    </span>
+                  )}
+                </div>
+
+                <p>
+                  Learn as you go. Get immediate feedback
+                  after answering each question and see the
+                  explanation.
+                </p>
+
+                <div className="mode-feature">
+                  <span>✓</span>
+                  Instant answer feedback
+                </div>
+
+                <div className="mode-feature">
+                  <span>✓</span>
+                  Detailed explanations
+                </div>
+
+              </div>
 
             </button>
 
+
+            {/* Examination */}
             <button
               type="button"
-              className={`mode-card ${
-                mode === 'quiz' ? 'selected' : ''
+              className={`practice-mode-card examination ${
+                mode === "examination" ? "selected" : ""
               }`}
-              onClick={() => setMode('quiz')}
+              onClick={() => setMode("examination")}
             >
 
               <div className="mode-icon">
-                ◈
+                🎯
               </div>
 
-              <span>
-                <strong>Quiz Mode</strong>
+              <div className="mode-content">
 
-                <small>
-                  Simulate an exam and review your
-                  performance afterwards.
-                </small>
-              </span>
+                <div className="mode-title-row">
+                  <h3>Examination Mode</h3>
 
-              {mode === 'quiz' && (
-                <span className="selected-mark">
-                  ✓
-                </span>
-              )}
+                  {mode === "examination" && (
+                    <span className="selected-badge">
+                      Selected
+                    </span>
+                  )}
+                </div>
+
+                <p>
+                  Simulate a real examination. Your answers
+                  stay private until you submit the session.
+                </p>
+
+                <div className="mode-feature">
+                  <span>✓</span>
+                  No answers revealed during exam
+                </div>
+
+                <div className="mode-feature">
+                  <span>✓</span>
+                  Performance analysis after submission
+                </div>
+
+              </div>
 
             </button>
 
@@ -889,227 +864,222 @@ export default function Practice() {
 
         </section>
 
-        {/* ===================================================
-            STEP 04
-            =================================================== */}
 
-        <section className="practice-section">
+        {/* =================================================
+            QUESTIONS
+            ================================================= */}
+        <section className="practice-panel">
 
           <div className="practice-section-heading">
-
-            <div className="practice-step">
-              <span>04</span>
+            <div>
+              <span className="section-number">03</span>
 
               <div>
-                <strong>
-                  Session size
-                </strong>
+                <h2>How many questions?</h2>
 
-                <small>
-                  How many questions do you want to tackle?
-                </small>
+                <p>
+                  Set the size of your session.
+                </p>
               </div>
             </div>
-
-            <div className="step-status">
-              {questionCount} questions
-            </div>
-
           </div>
 
-          <div className="question-count-grid">
 
-            {[5, 10, 20, 30].map((count) => (
+          <div className="practice-choice-grid">
+
+            {QUESTION_COUNTS.map((count) => (
               <button
                 type="button"
                 key={count}
-                className={`question-count-card ${
-                  questionCount === count
-                    ? 'selected'
-                    : ''
+                className={`practice-choice ${
+                  questionCount === count ? "selected" : ""
                 }`}
                 onClick={() => setQuestionCount(count)}
               >
+
                 <strong>{count}</strong>
-                <span>Questions</span>
-
-                {questionCount === count && (
-                  <span className="selected-mark">
-                    ✓
-                  </span>
-                )}
-              </button>
-            ))}
-
-          </div>
-
-        </section>
-
-        {/* ===================================================
-            STEP 05
-            =================================================== */}
-
-        <section className="practice-section">
-
-          <div className="practice-section-heading">
-
-            <div className="practice-step">
-              <span>05</span>
-
-              <div>
-                <strong>
-                  Speed challenge
-                </strong>
-
-                <small>
-                  Set the maximum time available for each question.
-                </small>
-              </div>
-            </div>
-
-            <div className="step-status">
-              {timePerQuestion}s / question
-            </div>
-
-          </div>
-
-          <div className="time-grid">
-
-            {[10, 20, 30, 45, 60].map((seconds) => (
-              <button
-                type="button"
-                key={seconds}
-                className={`time-card ${
-                  timePerQuestion === seconds
-                    ? 'selected'
-                    : ''
-                }`}
-                onClick={() => setTimePerQuestion(seconds)}
-              >
-
-                <strong>{seconds}s</strong>
 
                 <span>
-                  {seconds === 60
-                    ? 'Maximum'
-                    : seconds <= 20
-                      ? 'Fast'
-                      : 'Balanced'}
+                  Questions
                 </span>
-
-                {timePerQuestion === seconds && (
-                  <span className="selected-mark">
-                    ✓
-                  </span>
-                )}
 
               </button>
             ))}
 
           </div>
 
-          <div className="speed-note">
-            <span>i</span>
-            <p>
-              The timer resets for every question. If time
-              runs out, the question is automatically marked
-              unanswered and the session continues.
-            </p>
+        </section>
+
+
+        {/* =================================================
+            SPEED
+            ================================================= */}
+        <section className="practice-panel">
+
+          <div className="practice-section-heading">
+            <div>
+              <span className="section-number">04</span>
+
+              <div>
+                <h2>Set your speed</h2>
+
+                <p>
+                  Choose how much time you get for each question.
+                </p>
+              </div>
+            </div>
+          </div>
+
+
+          <div className="practice-speed-grid">
+
+            {SPEED_OPTIONS.map((option) => (
+              <button
+                type="button"
+                key={option.value}
+                className={`practice-speed-card ${
+                  timePerQuestion === option.value
+                    ? "selected"
+                    : ""
+                }`}
+                onClick={() =>
+                  setTimePerQuestion(option.value)
+                }
+              >
+
+                <strong>
+                  {option.label}
+                </strong>
+
+                <span>
+                  {option.description}
+                </span>
+
+              </button>
+            ))}
+
           </div>
 
         </section>
 
-        {/* ===================================================
-            SESSION SUMMARY
-            =================================================== */}
 
-        <section className="practice-summary">
+        {/* =================================================
+            SESSION PREVIEW
+            ================================================= */}
+        <section className="practice-preview">
 
-          <div className="summary-content">
+          <div className="preview-top">
 
-            <div className="summary-kicker">
-              YOUR SESSION
+            <div>
+
+              <span className="preview-label">
+                SESSION PREVIEW
+              </span>
+
+              <h2>
+                Ready when you are.
+              </h2>
+
+              <p>
+                Your session will be created using the
+                selections below.
+              </p>
+
             </div>
 
-            <h2>
-              Ready to start?
-            </h2>
-
-            <p>
-              Your session is configured. Focus on the questions,
-              learn from every attempt, and keep moving forward.
-            </p>
-
-            <div className="summary-details">
-
-              <div>
-                <span>Subject</span>
-                <strong>
-                  {selectedCode}
-                </strong>
-              </div>
-
-              <div>
-                <span>Topic</span>
-                <strong>
-                  {topic === 'mixed'
-                    ? 'Mixed'
-                    : topic}
-                </strong>
-              </div>
-
-              <div>
-                <span>Mode</span>
-                <strong>
-                  {mode === 'practice'
-                    ? 'Practice'
-                    : 'Quiz'}
-                </strong>
-              </div>
-
-              <div>
-                <span>Questions</span>
-                <strong>
-                  {questionCount}
-                </strong>
-              </div>
-
+            <div className="preview-icon">
+              →
             </div>
 
           </div>
+
+
+          <div className="preview-details">
+
+            <div className="preview-detail">
+              <span>Study</span>
+              <strong>{previewName}</strong>
+            </div>
+
+            <div className="preview-detail">
+              <span>Topic</span>
+              <strong>{previewTopic}</strong>
+            </div>
+
+            <div className="preview-detail">
+              <span>Mode</span>
+              <strong>{previewMode}</strong>
+            </div>
+
+            <div className="preview-detail">
+              <span>Questions</span>
+              <strong>{questionCount}</strong>
+            </div>
+
+            <div className="preview-detail">
+              <span>Speed</span>
+              <strong>{previewSpeed}/question</strong>
+            </div>
+
+          </div>
+
+
+          {mode === "examination" && (
+            <div className="examination-note">
+              <span>🎯</span>
+
+              <div>
+                <strong>Examination mode is active</strong>
+
+                <p>
+                  Answers and explanations will remain hidden
+                  until you submit the examination. Your result
+                  will then be analyzed.
+                </p>
+              </div>
+            </div>
+          )}
+
 
           <button
             type="button"
-            className="start-session-button"
+            className="start-practice-btn"
             onClick={handleStart}
+            disabled={starting}
           >
-            <span>Start Session</span>
-            <strong>→</strong>
+            {starting ? (
+              <>
+                <span className="button-spinner"></span>
+                Preparing session...
+              </>
+            ) : (
+              <>
+                Start Session
+                <span>→</span>
+              </>
+            )}
           </button>
 
         </section>
 
       </main>
 
+
       {/* =====================================================
           FOOTER
           ===================================================== */}
-
       <footer className="practice-footer">
-
-        <div>
-          <strong>OVERMATHS</strong>
-          <span>
-            Learn smarter. Practice better.
-          </span>
-        </div>
-
         <span>
           © {new Date().getFullYear()} Overmaths
         </span>
 
+        <span>
+          Learn smarter. Perform better.
+        </span>
       </footer>
 
     </div>
-  )
+  );
 }
+
+export default Practice;
