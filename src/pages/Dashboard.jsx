@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import { getDashboardSummary } from './dashboard/dashboardApi'
 import './Dashboard.css'
 
 function Dashboard() {
@@ -9,6 +10,9 @@ function Dashboard() {
 
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+
+  const [dashboardData, setDashboardData] = useState(null)
+  const [dashboardLoading, setDashboardLoading] = useState(true)
 
   useEffect(() => {
     const loadDashboard = async () => {
@@ -35,6 +39,18 @@ function Dashboard() {
         }
 
         setProfile(data)
+
+        try {
+          const summary = await getDashboardSummary(user.id)
+          setDashboardData(summary)
+        } catch (dashboardError) {
+          console.error(
+            'Dashboard statistics error:',
+            dashboardError
+          )
+        } finally {
+          setDashboardLoading(false)
+        }
       } catch (error) {
         console.error('Dashboard error:', error)
       } finally {
@@ -76,13 +92,27 @@ function Dashboard() {
     : `Let's make today's ${examType} preparation count.`
 
   /*
-    IMPORTANT PRACTICE FLOW
-
-    The Dashboard does not know or care which
-    subjects or courses are available.
-
-    All practice selection happens inside /practice.
+    DASHBOARD DATA
   */
+
+  const overview = dashboardData?.overview || {}
+  const performance = dashboardData?.performance || {}
+  const weaknesses = dashboardData?.weaknesses || []
+  const strengths = dashboardData?.strengths || []
+  const encouragement = dashboardData?.encouragement || null
+
+  const questionsAnswered =
+    overview.questions_answered || 0
+
+  const accuracy =
+    overview.accuracy || 0
+
+  const studyStreak =
+    overview.study_streak || 0
+
+  const examReadiness =
+    overview.exam_readiness || 0
+
   const handleStartPractice = () => {
     navigate('/practice')
   }
@@ -188,6 +218,37 @@ function Dashboard() {
           </div>
 
         </section>
+
+        {/* ENCOURAGEMENT */}
+        {encouragement && !dashboardLoading && (
+          <section className="dashboard-section">
+
+            <div className="mission-card">
+
+              <div className="mission-icon maths-icon">
+                ↑
+              </div>
+
+              <div className="mission-info">
+
+                <span>
+                  OVERMATHS COACH
+                </span>
+
+                <strong>
+                  {encouragement.title}
+                </strong>
+
+                <p>
+                  {encouragement.message}
+                </p>
+
+              </div>
+
+            </div>
+
+          </section>
+        )}
 
         {/* EXAM / PREMIUM CARD */}
         <section className="exam-card">
@@ -300,7 +361,6 @@ function Dashboard() {
 
           <div className="mission-grid">
 
-            {/* MISSION 1 */}
             <div className="mission-card">
 
               <div className="mission-icon physics-icon">
@@ -324,7 +384,6 @@ function Dashboard() {
 
             </div>
 
-            {/* MISSION 2 */}
             <div className="mission-card">
 
               <div className="mission-icon maths-icon">
@@ -348,7 +407,6 @@ function Dashboard() {
 
             </div>
 
-            {/* MISSION 3 */}
             <div className="mission-card">
 
               <div className="mission-icon english-icon">
@@ -415,10 +473,16 @@ function Dashboard() {
               QUESTIONS ANSWERED
             </span>
 
-            <strong>0</strong>
+            <strong>
+              {dashboardLoading
+                ? '—'
+                : questionsAnswered}
+            </strong>
 
             <p>
-              Start your first mission
+              {questionsAnswered > 0
+                ? 'Questions completed so far'
+                : 'Start your first mission'}
             </p>
 
           </div>
@@ -429,7 +493,11 @@ function Dashboard() {
               ACCURACY
             </span>
 
-            <strong>—</strong>
+            <strong>
+              {dashboardLoading
+                ? '—'
+                : `${accuracy}%`}
+            </strong>
 
             <p>
               Your average performance
@@ -444,7 +512,13 @@ function Dashboard() {
             </span>
 
             <strong>
-              0 <small>days</small>
+              {dashboardLoading
+                ? '—'
+                : studyStreak}
+
+              {!dashboardLoading && (
+                <small> days</small>
+              )}
             </strong>
 
             <p>
@@ -459,10 +533,14 @@ function Dashboard() {
               EXAM READINESS
             </span>
 
-            <strong>—</strong>
+            <strong>
+              {dashboardLoading
+                ? '—'
+                : `${examReadiness}%`}
+            </strong>
 
             <p>
-              Complete more practice
+              Based on your practice
             </p>
 
           </div>
@@ -504,16 +582,35 @@ function Dashboard() {
               <div className="chart-empty">
 
                 <div className="chart-circle">
-                  <span>0%</span>
+
+                  <span>
+                    {dashboardLoading
+                      ? '—'
+                      : `${accuracy}%`}
+                  </span>
+
                 </div>
 
                 <strong>
-                  Your progress starts here.
+
+                  {dashboardLoading
+                    ? 'Loading your performance...'
+                    : accuracy > 0
+                      ? 'Your performance is being tracked.'
+                      : 'Your progress starts here.'}
+
                 </strong>
 
                 <p>
-                  Complete your first practice session
-                  to begin tracking your performance.
+
+                  {dashboardLoading
+                    ? 'Preparing your learning statistics.'
+                    : performance.trend > 0
+                      ? `You're improving. Your latest score is ${performance.trend}% higher than your previous attempt.`
+                      : performance.trend < 0
+                        ? `Your latest score dropped by ${Math.abs(performance.trend)}%. Use your weak areas as your next study guide.`
+                        : 'Complete more practice sessions to reveal your performance trend.'}
+
                 </p>
 
               </div>
@@ -559,21 +656,132 @@ function Dashboard() {
 
               </div>
 
-              <strong>
-                Your weak areas will appear here.
-              </strong>
+              {dashboardLoading ? (
+                <>
+                  <strong>
+                    Analysing your performance...
+                  </strong>
 
-              <p>
-                Once you complete enough questions,
-                Overmaths will identify the topics
-                that need your attention.
-              </p>
+                  <p>
+                    Overmaths is looking for the topics
+                    that need your attention.
+                  </p>
+                </>
+              ) : weaknesses.length === 0 ? (
+                <>
+                  <strong>
+                    No major weak areas yet.
+                  </strong>
+
+                  <p>
+                    Keep practising. Overmaths will identify
+                    topics that need attention as more answers
+                    are recorded.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <strong>
+                    Here's where you can improve.
+                  </strong>
+
+                  <div
+                    style={{
+                      width: '100%',
+                      marginTop: '12px',
+                    }}
+                  >
+
+                    {weaknesses.map((item) => (
+                      <div
+                        key={item.topic}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '8px 0',
+                          borderBottom:
+                            '1px solid rgba(255,255,255,0.08)',
+                        }}
+                      >
+
+                        <span>
+                          {item.topic}
+                        </span>
+
+                        <strong>
+                          {item.accuracy}%
+                        </strong>
+
+                      </div>
+                    ))}
+
+                  </div>
+                </>
+              )}
 
             </div>
 
           </div>
 
         </section>
+
+        {/* STRONG AREAS */}
+        {!dashboardLoading && strengths.length > 0 && (
+          <section className="dashboard-section">
+
+            <div className="section-heading">
+
+              <div>
+
+                <p className="section-kicker">
+                  YOUR ADVANTAGE
+                </p>
+
+                <h2>
+                  Strong Areas
+                </h2>
+
+              </div>
+
+            </div>
+
+            <div className="mission-grid">
+
+              {strengths.map((item) => (
+                <div
+                  className="mission-card"
+                  key={item.topic}
+                >
+
+                  <div className="mission-icon english-icon">
+                    ✓
+                  </div>
+
+                  <div className="mission-info">
+
+                    <span>
+                      {item.accuracy}% ACCURACY
+                    </span>
+
+                    <strong>
+                      {item.topic}
+                    </strong>
+
+                    <p>
+                      You're showing strong performance
+                      in this area. Keep it sharp.
+                    </p>
+
+                  </div>
+
+                </div>
+              ))}
+
+            </div>
+
+          </section>
+        )}
 
         {/* KEEP MOVING */}
         <section className="dashboard-section">
@@ -719,9 +927,9 @@ function Dashboard() {
               <path
                 d="M5 12h14M13 6l6 6-6 6"
                 stroke="currentColor"
-                strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                strokeWidth="2"
               />
             </svg>
 
@@ -749,3 +957,4 @@ function Dashboard() {
 }
 
 export default Dashboard
+

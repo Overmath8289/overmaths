@@ -5,7 +5,7 @@ import requests
 import random
 import re
 from dotenv import load_dotenv
-
+from dashboard_api import dashboard_api
 
 # ============================================================
 # ENVIRONMENT
@@ -897,7 +897,11 @@ def home():
 # START SERVER
 # ============================================================
 
+app.register_blueprint(dashboard_api)
+
+
 if __name__ == "__main__":
+    
 
     port = int(
         os.environ.get(
