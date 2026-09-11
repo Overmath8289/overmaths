@@ -15,6 +15,8 @@ dashboard_api = Blueprint(
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 
+EXAM_MODE = "Examination Mode"
+
 
 def supabase_headers():
     return {
@@ -28,8 +30,11 @@ def supabase_get(table, params=None):
     """
     Read data from Supabase using the server-side service key.
     """
+
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        raise RuntimeError("Supabase environment variables are missing.")
+        raise RuntimeError(
+            "Supabase environment variables are missing."
+        )
 
     url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/{table}"
 
@@ -60,43 +65,62 @@ def get_encouragement(score, attempts):
     if attempts == 0:
         return {
             "title": "Your journey starts here.",
-            "message": "Complete your first practice session and Overmaths will start learning your strengths and weaknesses."
+            "message": (
+                "Complete your first examination session and "
+                "Overmaths will start learning your performance."
+            )
         }
 
     if score >= 90:
         return {
             "title": "Excellent work.",
-            "message": "You're performing at a very high level. Keep challenging yourself with harder questions."
+            "message": (
+                "You're performing at a very high level. "
+                "Keep challenging yourself."
+            )
         }
 
     if score >= 80:
         return {
             "title": "You're doing very well.",
-            "message": "Your understanding is becoming strong. Keep practising consistently and push your accuracy even higher."
+            "message": (
+                "Your understanding is becoming strong. "
+                "Keep practising consistently."
+            )
         }
 
     if score >= 70:
         return {
             "title": "Good progress.",
-            "message": "You're building a solid foundation. Focus on the areas where you lose marks and you'll improve quickly."
+            "message": (
+                "You're building a solid foundation. "
+                "Focus on the areas where you lose marks."
+            )
         }
 
     if score >= 50:
         return {
             "title": "You're making progress.",
-            "message": "Don't be discouraged by mistakes. Every wrong answer gives you information about what to improve next."
+            "message": (
+                "Don't be discouraged by mistakes. "
+                "Every wrong answer shows you what to improve."
+            )
         }
 
     return {
         "title": "Every attempt is progress.",
-        "message": "Use your mistakes as a study guide. Keep practising and focus on understanding why each answer is correct."
+        "message": (
+            "Use your mistakes as a study guide. "
+            "Keep going and focus on understanding."
+        )
     }
 
 
 def calculate_streak(attempts):
     """
-    Calculate consecutive study days from the attempt timestamps.
+    Calculate consecutive study days from Examination Mode attempts.
     """
+
     if not attempts:
         return 0
 
@@ -110,7 +134,14 @@ def calculate_streak(attempts):
 
         try:
             date_text = created_at[:10]
-            dates.add(datetime.strptime(date_text, "%Y-%m-%d").date())
+
+            dates.add(
+                datetime.strptime(
+                    date_text,
+                    "%Y-%m-%d"
+                ).date()
+            )
+
         except Exception:
             continue
 
@@ -119,11 +150,12 @@ def calculate_streak(attempts):
 
     today = datetime.now(timezone.utc).date()
 
-    # If the student hasn't practised today, start from yesterday.
     if today in dates:
         current = today
+
     elif today - timedelta(days=1) in dates:
         current = today - timedelta(days=1)
+
     else:
         return 0
 
@@ -140,6 +172,10 @@ def calculate_streak(attempts):
 def dashboard_summary():
     """
     Return the complete dashboard summary for one authenticated user.
+
+    IMPORTANT:
+    Only Examination Mode attempts are included in official
+    dashboard analytics. Practice Mode is deliberately excluded.
     """
 
     user_id = request.args.get("user_id")
@@ -150,23 +186,26 @@ def dashboard_summary():
         }), 400
 
     try:
-        # ---------------------------------------------------------
-        # 1. GET QUIZ ATTEMPTS
-        # ---------------------------------------------------------
+
+        # =========================================================
+        # 1. GET EXAMINATION ATTEMPTS ONLY
+        # =========================================================
 
         attempts = supabase_get(
             "quiz_attempts",
             {
                 "user_id": f"eq.{user_id}",
+                "mode": f"eq.{EXAM_MODE}",
                 "order": "created_at.desc",
             },
         )
 
-        # ---------------------------------------------------------
-        # 2. NO ATTEMPTS YET
-        # ---------------------------------------------------------
+        # =========================================================
+        # 2. NO EXAMINATION ATTEMPTS YET
+        # =========================================================
 
         if not attempts:
+
             return jsonify({
                 "success": True,
 
@@ -190,6 +229,8 @@ def dashboard_summary():
 
                 "strengths": [],
 
+                "subjects": [],
+
                 "topics": [],
 
                 "recent_activity": [],
@@ -197,9 +238,9 @@ def dashboard_summary():
                 "encouragement": get_encouragement(0, 0),
             })
 
-        # ---------------------------------------------------------
-        # 3. GET ANSWERS
-        # ---------------------------------------------------------
+        # =========================================================
+        # 3. GET ANSWERS FOR EXAMINATION ATTEMPTS
+        # =========================================================
 
         attempt_ids = [
             attempt.get("id")
@@ -210,7 +251,11 @@ def dashboard_summary():
         answers = []
 
         if attempt_ids:
-            ids_string = ",".join(str(value) for value in attempt_ids)
+
+            ids_string = ",".join(
+                str(value)
+                for value in attempt_ids
+            )
 
             answers = supabase_get(
                 "quiz_answers",
@@ -219,12 +264,12 @@ def dashboard_summary():
                 },
             )
 
-        # ---------------------------------------------------------
+        # =========================================================
         # 4. GET QUESTIONS
         #
-        # quiz_answers stores question_id.
-        # We use questions to discover the actual topic/course.
-        # ---------------------------------------------------------
+        # We need the question information to determine the
+        # subject attached to each answer.
+        # =========================================================
 
         question_ids = list({
             answer.get("question_id")
@@ -235,7 +280,11 @@ def dashboard_summary():
         questions = []
 
         if question_ids:
-            ids_string = ",".join(str(value) for value in question_ids)
+
+            ids_string = ",".join(
+                str(value)
+                for value in question_ids
+            )
 
             questions = supabase_get(
                 "questions",
@@ -250,31 +299,44 @@ def dashboard_summary():
             for question in questions
         }
 
-        # ---------------------------------------------------------
-        # 5. OVERALL STATISTICS
-        # ---------------------------------------------------------
+        # =========================================================
+        # 5. OVERALL EXAM STATISTICS
+        #
+        # Only questions that actually received an answer are
+        # counted as answered questions.
+        # =========================================================
 
-        total_questions = 0
+        total_questions_answered = 0
         total_correct = 0
 
         for answer in answers:
-            total_questions += 1
+
+            selected_answer = answer.get(
+                "selected_answer"
+            )
+
+            # A null selected_answer means skipped/unanswered.
+            if selected_answer is None:
+                continue
+
+            total_questions_answered += 1
 
             if answer.get("is_correct") is True:
                 total_correct += 1
 
         overall_accuracy = percentage(
             total_correct,
-            total_questions
+            total_questions_answered
         )
 
-        # ---------------------------------------------------------
+        # =========================================================
         # 6. PERFORMANCE HISTORY
-        # ---------------------------------------------------------
+        # =========================================================
 
         performance_history = []
 
         for attempt in reversed(attempts):
+
             score = attempt.get("score") or 0
 
             try:
@@ -305,104 +367,135 @@ def dashboard_summary():
 
         trend = current_score - previous_score
 
-        # ---------------------------------------------------------
-        # 7. TOPIC PERFORMANCE
-        # ---------------------------------------------------------
+        # =========================================================
+        # 7. SUBJECT PERFORMANCE
+        #
+        # Dashboard analysis is now subject-based.
+        # We deliberately do not use topics here because many
+        # topics currently contain only a small number of questions.
+        # =========================================================
 
-        topic_stats = {}
+        subject_stats = {}
 
         for answer in answers:
-            question = question_map.get(answer.get("question_id"))
+
+            # Do not include skipped questions.
+            if answer.get("selected_answer") is None:
+                continue
+
+            question = question_map.get(
+                answer.get("question_id")
+            )
 
             if not question:
                 continue
 
-            topic = question.get("topic") or "General"
+            subject = (
+                question.get("subject")
+                or "General"
+            )
 
-            if topic not in topic_stats:
-                topic_stats[topic] = {
-                    "topic": topic,
+            if subject not in subject_stats:
+
+                subject_stats[subject] = {
+                    "subject": subject,
                     "answered": 0,
                     "correct": 0,
                 }
 
-            topic_stats[topic]["answered"] += 1
+            subject_stats[subject]["answered"] += 1
 
             if answer.get("is_correct") is True:
-                topic_stats[topic]["correct"] += 1
+                subject_stats[subject]["correct"] += 1
 
-        topics = []
+        subjects = []
 
-        for topic_data in topic_stats.values():
-            answered = topic_data["answered"]
-            correct = topic_data["correct"]
+        for subject_data in subject_stats.values():
 
-            topic_data["accuracy"] = percentage(
+            answered = subject_data["answered"]
+            correct = subject_data["correct"]
+
+            subject_data["accuracy"] = percentage(
                 correct,
                 answered
             )
 
-            topics.append(topic_data)
+            subjects.append(subject_data)
 
-        topics.sort(
+        subjects.sort(
             key=lambda item: item["accuracy"]
         )
 
-        # ---------------------------------------------------------
-        # 8. AREAS OF WEAKNESS
+        # =========================================================
+        # 8. AREAS TO IMPROVE
         #
-        # Only show topics with enough evidence.
-        # ---------------------------------------------------------
+        # Only show subjects with enough evidence.
+        # =========================================================
 
         weaknesses = []
 
-        for topic in topics:
+        for subject in subjects:
+
             if (
-                topic["answered"] >= 2
-                and topic["accuracy"] < 70
+                subject["answered"] >= 2
+                and subject["accuracy"] < 70
             ):
+
                 weaknesses.append({
-                    "topic": topic["topic"],
-                    "accuracy": topic["accuracy"],
-                    "questions": topic["answered"],
+                    "topic": subject["subject"],
+                    "subject": subject["subject"],
+                    "accuracy": subject["accuracy"],
+                    "questions": subject["answered"],
                 })
 
         weaknesses = weaknesses[:5]
 
-        # ---------------------------------------------------------
+        # =========================================================
         # 9. STRONG AREAS
-        # ---------------------------------------------------------
+        # =========================================================
 
-        strengths = [
-            {
-                "topic": topic["topic"],
-                "accuracy": topic["accuracy"],
-                "questions": topic["answered"],
-            }
-            for topic in sorted(
-                topics,
-                key=lambda item: item["accuracy"],
-                reverse=True
-            )
-            if topic["answered"] >= 2
-            and topic["accuracy"] >= 80
-        ]
+        strengths = []
+
+        for subject in sorted(
+            subjects,
+            key=lambda item: item["accuracy"],
+            reverse=True
+        ):
+
+            if (
+                subject["answered"] >= 2
+                and subject["accuracy"] >= 80
+            ):
+
+                strengths.append({
+                    "topic": subject["subject"],
+                    "subject": subject["subject"],
+                    "accuracy": subject["accuracy"],
+                    "questions": subject["answered"],
+                })
 
         strengths = strengths[:5]
 
-        # ---------------------------------------------------------
+        # =========================================================
         # 10. STUDY STREAK
-        # ---------------------------------------------------------
+        #
+        # Only Examination Mode sessions count.
+        # =========================================================
 
-        study_streak = calculate_streak(attempts)
+        study_streak = calculate_streak(
+            attempts
+        )
 
-        # ---------------------------------------------------------
+        # =========================================================
         # 11. EXAM READINESS
         #
-        # A simple initial readiness model:
-        # accuracy contributes most,
-        # consistency contributes the rest.
-        # ---------------------------------------------------------
+        # Initial model:
+        #
+        # 70% = overall exam accuracy
+        # 30% = consistency
+        #
+        # Consistency reaches 100 after 10 exam sessions.
+        # =========================================================
 
         attempt_count = len(attempts)
 
@@ -416,13 +509,14 @@ def dashboard_summary():
             + (consistency_score * 0.3)
         )
 
-        # ---------------------------------------------------------
+        # =========================================================
         # 12. RECENT ACTIVITY
-        # ---------------------------------------------------------
+        # =========================================================
 
         recent_activity = []
 
         for attempt in attempts[:5]:
+
             recent_activity.append({
                 "id": attempt.get("id"),
                 "score": attempt.get("score") or 0,
@@ -435,51 +529,84 @@ def dashboard_summary():
                 "created_at": attempt.get("created_at"),
             })
 
-        # ---------------------------------------------------------
+        # =========================================================
         # 13. ENCOURAGEMENT
-        # ---------------------------------------------------------
+        # =========================================================
 
         encouragement = get_encouragement(
             overall_accuracy,
             attempt_count
         )
 
-        # ---------------------------------------------------------
+        # =========================================================
         # 14. FINAL RESPONSE
-        # ---------------------------------------------------------
+        # =========================================================
 
         return jsonify({
+
             "success": True,
 
             "overview": {
-                "questions_answered": total_questions,
-                "correct_answers": total_correct,
-                "accuracy": overall_accuracy,
-                "study_streak": study_streak,
-                "exam_readiness": exam_readiness,
-                "attempts": attempt_count,
+                "questions_answered":
+                    total_questions_answered,
+
+                "correct_answers":
+                    total_correct,
+
+                "accuracy":
+                    overall_accuracy,
+
+                "study_streak":
+                    study_streak,
+
+                "exam_readiness":
+                    exam_readiness,
+
+                "attempts":
+                    attempt_count,
             },
 
             "performance": {
-                "current": current_score,
-                "previous": previous_score,
-                "trend": trend,
-                "history": performance_history[-10:],
+                "current":
+                    current_score,
+
+                "previous":
+                    previous_score,
+
+                "trend":
+                    trend,
+
+                "history":
+                    performance_history[-10:],
             },
 
-            "weaknesses": weaknesses,
+            "weaknesses":
+                weaknesses,
 
-            "strengths": strengths,
+            "strengths":
+                strengths,
 
-            "topics": topics,
+            "subjects":
+                subjects,
 
-            "recent_activity": recent_activity,
+            # Kept for compatibility with the existing
+            # Dashboard.jsx and future features.
+            "topics":
+                [],
 
-            "encouragement": encouragement,
+            "recent_activity":
+                recent_activity,
+
+            "encouragement":
+                encouragement,
         })
 
     except Exception as error:
-        print("DASHBOARD API ERROR:", error)
+
+        print(
+            "DASHBOARD API ERROR:",
+            error
+        )
 
         return jsonify({
             "success": False,

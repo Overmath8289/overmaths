@@ -1,4 +1,3 @@
-
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -26,6 +25,9 @@ function Practice() {
   const [starting, setStarting] = useState(false);
 
   const [profile, setProfile] = useState(null);
+
+  // In-page notification
+  const [notice, setNotice] = useState("");
 
   // secondary | university
   const [learningRoute, setLearningRoute] = useState(
@@ -63,9 +65,30 @@ function Practice() {
 
   /*
    * ---------------------------------------------------------
+   * IN-PAGE NOTICE
+   * ---------------------------------------------------------
+   */
+
+  function showNotice(message) {
+    setNotice(message);
+  }
+
+  useEffect(() => {
+    if (!notice) return;
+
+    const timeout = setTimeout(() => {
+      setNotice("");
+    }, 3200);
+
+    return () => clearTimeout(timeout);
+  }, [notice]);
+
+  /*
+   * ---------------------------------------------------------
    * LOAD USER + PROFILE
    * ---------------------------------------------------------
    */
+
   useEffect(() => {
     let mounted = true;
 
@@ -106,6 +129,7 @@ function Practice() {
          * may intentionally send the student here for a
          * particular subject/course.
          */
+
         if (!incomingState.learningRoute && data?.learning_route) {
           setLearningRoute(data.learning_route);
         }
@@ -145,6 +169,7 @@ function Practice() {
    * LOAD SECONDARY SUBJECTS FROM PYTHON API
    * ---------------------------------------------------------
    */
+
   useEffect(() => {
     if (learningRoute !== "secondary") {
       setSubjects([]);
@@ -184,6 +209,7 @@ function Practice() {
         /*
          * Keep Dashboard-selected subject if it exists.
          */
+
         if (
           selectedSubject &&
           uniqueSubjects.includes(selectedSubject)
@@ -194,6 +220,7 @@ function Practice() {
         /*
          * Otherwise choose the first available subject.
          */
+
         if (uniqueSubjects.length > 0) {
           setSelectedSubject(uniqueSubjects[0]);
         } else {
@@ -223,6 +250,7 @@ function Practice() {
    * LOAD UNIVERSITY COURSES FROM PYTHON API
    * ---------------------------------------------------------
    */
+
   useEffect(() => {
     if (learningRoute !== "university") {
       setCourses([]);
@@ -254,6 +282,7 @@ function Practice() {
         /*
          * Keep Dashboard-selected course where possible.
          */
+
         const incomingCourseExists = loadedCourses.some(
           (course) =>
             String(course.id) ===
@@ -303,6 +332,7 @@ function Practice() {
    * sent as an actual database topic.
    * ---------------------------------------------------------
    */
+
   useEffect(() => {
     let mounted = true;
 
@@ -382,6 +412,7 @@ function Practice() {
    * SELECTED COURSE
    * ---------------------------------------------------------
    */
+
   const selectedCourse = useMemo(() => {
     return courses.find(
       (course) =>
@@ -395,6 +426,7 @@ function Practice() {
    * SESSION PREVIEW
    * ---------------------------------------------------------
    */
+
   const previewName =
     learningRoute === "university"
       ? selectedCourse?.code ||
@@ -424,6 +456,7 @@ function Practice() {
    * START SESSION
    * ---------------------------------------------------------
    */
+
   async function handleStart() {
     if (starting) return;
 
@@ -431,7 +464,7 @@ function Practice() {
       learningRoute === "secondary" &&
       !selectedSubject
     ) {
-      alert("Please choose a subject.");
+      showNotice("Please choose a subject before starting.");
       return;
     }
 
@@ -439,7 +472,7 @@ function Practice() {
       learningRoute === "university" &&
       !selectedCourseId
     ) {
-      alert("Please choose a course.");
+      showNotice("Please choose a course before starting.");
       return;
     }
 
@@ -496,6 +529,7 @@ function Practice() {
    * LOGOUT
    * ---------------------------------------------------------
    */
+
   async function handleLogout() {
     await supabase.auth.signOut();
     navigate("/login");
@@ -506,6 +540,7 @@ function Practice() {
    * LOADING
    * ---------------------------------------------------------
    */
+
   if (loading) {
     return (
       <div className="practice-page">
@@ -524,6 +559,7 @@ function Practice() {
    * PAGE
    * ---------------------------------------------------------
    */
+
   return (
     <div className="practice-page">
 
@@ -531,9 +567,32 @@ function Practice() {
       <div className="practice-glow practice-glow-one"></div>
       <div className="practice-glow practice-glow-two"></div>
 
+      {/* In-page notice */}
+      {notice && (
+        <div
+          className="practice-notice"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="practice-notice-icon">!</span>
+
+          <span>{notice}</span>
+
+          <button
+            type="button"
+            className="practice-notice-close"
+            onClick={() => setNotice("")}
+            aria-label="Close message"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {/* =====================================================
           HEADER
           ===================================================== */}
+
       <header className="practice-header">
 
         <button
@@ -593,9 +652,11 @@ function Practice() {
       {/* =====================================================
           MAIN
           ===================================================== */}
+
       <main className="practice-main">
 
         {/* Hero */}
+
         <section className="practice-hero">
 
           <div className="practice-eyebrow">
@@ -618,15 +679,19 @@ function Practice() {
         {/* =================================================
             LEARNING AREA
             ================================================= */}
+
         <section className="practice-panel">
 
           <div className="practice-section-heading">
+
             <div>
+
               <span className="section-number">
                 01
               </span>
 
               <div>
+
                 <h2>
                   What are you studying?
                 </h2>
@@ -635,14 +700,19 @@ function Practice() {
                   Select from the subjects and courses
                   available in your question bank.
                 </p>
+
               </div>
+
             </div>
+
           </div>
 
           <div className="practice-selection-grid">
 
             {/* Secondary */}
+
             {learningRoute === "secondary" && (
+
               <div className="practice-field">
 
                 <label htmlFor="subject">
@@ -691,10 +761,13 @@ function Practice() {
                 </small>
 
               </div>
+
             )}
 
             {/* University */}
+
             {learningRoute === "university" && (
+
               <div className="practice-field">
 
                 <label htmlFor="course">
@@ -745,9 +818,11 @@ function Practice() {
                 </small>
 
               </div>
+
             )}
 
             {/* Topic */}
+
             <div className="practice-field">
 
               <label htmlFor="topic">
@@ -807,15 +882,19 @@ function Practice() {
         {/* =================================================
             MODE
             ================================================= */}
+
         <section className="practice-panel">
 
           <div className="practice-section-heading">
+
             <div>
+
               <span className="section-number">
                 02
               </span>
 
               <div>
+
                 <h2>
                   Choose your mode
                 </h2>
@@ -824,13 +903,17 @@ function Practice() {
                   Decide whether you want instant learning
                   feedback or a real examination experience.
                 </p>
+
               </div>
+
             </div>
+
           </div>
 
           <div className="practice-mode-grid">
 
             {/* Practice */}
+
             <button
               type="button"
               className={`practice-mode-card ${
@@ -850,6 +933,7 @@ function Practice() {
               <div className="mode-content">
 
                 <div className="mode-title-row">
+
                   <h3>
                     Practice Mode
                   </h3>
@@ -859,6 +943,7 @@ function Practice() {
                       Selected
                     </span>
                   )}
+
                 </div>
 
                 <p>
@@ -882,6 +967,7 @@ function Practice() {
             </button>
 
             {/* Examination */}
+
             <button
               type="button"
               className={`practice-mode-card examination ${
@@ -901,6 +987,7 @@ function Practice() {
               <div className="mode-content">
 
                 <div className="mode-title-row">
+
                   <h3>
                     Examination Mode
                   </h3>
@@ -910,6 +997,7 @@ function Practice() {
                       Selected
                     </span>
                   )}
+
                 </div>
 
                 <p>
@@ -938,15 +1026,19 @@ function Practice() {
         {/* =================================================
             QUESTIONS
             ================================================= */}
+
         <section className="practice-panel">
 
           <div className="practice-section-heading">
+
             <div>
+
               <span className="section-number">
                 03
               </span>
 
               <div>
+
                 <h2>
                   How many questions?
                 </h2>
@@ -954,8 +1046,11 @@ function Practice() {
                 <p>
                   Set the size of your session.
                 </p>
+
               </div>
+
             </div>
+
           </div>
 
           <div className="practice-choice-grid">
@@ -992,15 +1087,19 @@ function Practice() {
         {/* =================================================
             SPEED
             ================================================= */}
+
         <section className="practice-panel">
 
           <div className="practice-section-heading">
+
             <div>
+
               <span className="section-number">
                 04
               </span>
 
               <div>
+
                 <h2>
                   Set your speed
                 </h2>
@@ -1009,8 +1108,11 @@ function Practice() {
                   Choose how much time you get for each
                   question.
                 </p>
+
               </div>
+
             </div>
+
           </div>
 
           <div className="practice-speed-grid">
@@ -1049,6 +1151,7 @@ function Practice() {
         {/* =================================================
             SESSION PREVIEW
             ================================================= */}
+
         <section className="practice-preview">
 
           <div className="preview-top">
@@ -1165,6 +1268,7 @@ function Practice() {
       {/* =====================================================
           FOOTER
           ===================================================== */}
+
       <footer className="practice-footer">
 
         <span>
