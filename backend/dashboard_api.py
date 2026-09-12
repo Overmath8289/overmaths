@@ -62,6 +62,7 @@ def percentage(correct, total):
 
 
 def get_encouragement(score, attempts):
+
     if attempts == 0:
         return {
             "title": "Your journey starts here.",
@@ -117,9 +118,6 @@ def get_encouragement(score, attempts):
 
 
 def calculate_streak(attempts):
-    """
-    Calculate consecutive study days from Examination Mode attempts.
-    """
 
     if not attempts:
         return 0
@@ -127,6 +125,7 @@ def calculate_streak(attempts):
     dates = set()
 
     for attempt in attempts:
+
         created_at = attempt.get("created_at")
 
         if not created_at:
@@ -168,19 +167,33 @@ def calculate_streak(attempts):
     return streak
 
 
+def get_public_user_id(auth_user_id):
+    """
+    Convert the Supabase Auth UUID into the bigint ID
+    used by the public.users and quiz_attempts tables.
+    """
+
+    users = supabase_get(
+        "users",
+        {
+            "auth_user_id": f"eq.{auth_user_id}",
+            "select": "id",
+            "limit": "1",
+        },
+    )
+
+    if not users:
+        return None
+
+    return users[0].get("id")
+
+
 @dashboard_api.route("/summary", methods=["GET"])
 def dashboard_summary():
-    """
-    Return the complete dashboard summary for one authenticated user.
 
-    IMPORTANT:
-    Only Examination Mode attempts are included in official
-    dashboard analytics. Practice Mode is deliberately excluded.
-    """
+    auth_user_id = request.args.get("user_id")
 
-    user_id = request.args.get("user_id")
-
-    if not user_id:
+    if not auth_user_id:
         return jsonify({
             "error": "user_id is required"
         }), 400
@@ -188,25 +201,43 @@ def dashboard_summary():
     try:
 
         # =========================================================
-        # 1. GET EXAMINATION ATTEMPTS ONLY
+        # 1. RESOLVE AUTH UUID → PUBLIC USER BIGINT
+        # =========================================================
+
+        public_user_id = get_public_user_id(
+            auth_user_id
+        )
+
+        if public_user_id is None:
+            return jsonify({
+                "success": False,
+                "error": (
+                    "Overmaths user profile was not found "
+                    "for this authenticated user."
+                ),
+            }), 404
+
+        # =========================================================
+        # 2. GET EXAMINATION ATTEMPTS ONLY
         # =========================================================
 
         attempts = supabase_get(
             "quiz_attempts",
             {
-                "user_id": f"eq.{user_id}",
+                "user_id": f"eq.{public_user_id}",
                 "mode": f"eq.{EXAM_MODE}",
                 "order": "created_at.desc",
             },
         )
 
         # =========================================================
-        # 2. NO EXAMINATION ATTEMPTS YET
+        # 3. NO EXAMINATION ATTEMPTS YET
         # =========================================================
 
         if not attempts:
 
             return jsonify({
+
                 "success": True,
 
                 "overview": {
@@ -235,11 +266,12 @@ def dashboard_summary():
 
                 "recent_activity": [],
 
-                "encouragement": get_encouragement(0, 0),
+                "encouragement":
+                    get_encouragement(0, 0),
             })
 
         # =========================================================
-        # 3. GET ANSWERS FOR EXAMINATION ATTEMPTS
+        # 4. GET ANSWERS
         # =========================================================
 
         attempt_ids = [
@@ -265,10 +297,7 @@ def dashboard_summary():
             )
 
         # =========================================================
-        # 4. GET QUESTIONS
-        #
-        # We need the question information to determine the
-        # subject attached to each answer.
+        # 5. GET QUESTIONS
         # =========================================================
 
         question_ids = list({
@@ -300,10 +329,7 @@ def dashboard_summary():
         }
 
         # =========================================================
-        # 5. OVERALL EXAM STATISTICS
-        #
-        # Only questions that actually received an answer are
-        # counted as answered questions.
+        # 6. OVERALL STATISTICS
         # =========================================================
 
         total_questions_answered = 0
@@ -311,12 +337,7 @@ def dashboard_summary():
 
         for answer in answers:
 
-            selected_answer = answer.get(
-                "selected_answer"
-            )
-
-            # A null selected_answer means skipped/unanswered.
-            if selected_answer is None:
+            if answer.get("selected_answer") is None:
                 continue
 
             total_questions_answered += 1
@@ -330,7 +351,7 @@ def dashboard_summary():
         )
 
         # =========================================================
-        # 6. PERFORMANCE HISTORY
+        # 7. PERFORMANCE HISTORY
         # =========================================================
 
         performance_history = []
@@ -368,18 +389,13 @@ def dashboard_summary():
         trend = current_score - previous_score
 
         # =========================================================
-        # 7. SUBJECT PERFORMANCE
-        #
-        # Dashboard analysis is now subject-based.
-        # We deliberately do not use topics here because many
-        # topics currently contain only a small number of questions.
+        # 8. SUBJECT PERFORMANCE
         # =========================================================
 
         subject_stats = {}
 
         for answer in answers:
 
-            # Do not include skipped questions.
             if answer.get("selected_answer") is None:
                 continue
 
@@ -427,9 +443,7 @@ def dashboard_summary():
         )
 
         # =========================================================
-        # 8. AREAS TO IMPROVE
-        #
-        # Only show subjects with enough evidence.
+        # 9. AREAS TO IMPROVE
         # =========================================================
 
         weaknesses = []
@@ -451,7 +465,7 @@ def dashboard_summary():
         weaknesses = weaknesses[:5]
 
         # =========================================================
-        # 9. STRONG AREAS
+        # 10. STRONG AREAS
         # =========================================================
 
         strengths = []
@@ -477,9 +491,7 @@ def dashboard_summary():
         strengths = strengths[:5]
 
         # =========================================================
-        # 10. STUDY STREAK
-        #
-        # Only Examination Mode sessions count.
+        # 11. STUDY STREAK
         # =========================================================
 
         study_streak = calculate_streak(
@@ -487,14 +499,7 @@ def dashboard_summary():
         )
 
         # =========================================================
-        # 11. EXAM READINESS
-        #
-        # Initial model:
-        #
-        # 70% = overall exam accuracy
-        # 30% = consistency
-        #
-        # Consistency reaches 100 after 10 exam sessions.
+        # 12. EXAM READINESS
         # =========================================================
 
         attempt_count = len(attempts)
@@ -510,7 +515,7 @@ def dashboard_summary():
         )
 
         # =========================================================
-        # 12. RECENT ACTIVITY
+        # 13. RECENT ACTIVITY
         # =========================================================
 
         recent_activity = []
@@ -530,7 +535,7 @@ def dashboard_summary():
             })
 
         # =========================================================
-        # 13. ENCOURAGEMENT
+        # 14. ENCOURAGEMENT
         # =========================================================
 
         encouragement = get_encouragement(
@@ -539,7 +544,7 @@ def dashboard_summary():
         )
 
         # =========================================================
-        # 14. FINAL RESPONSE
+        # 15. FINAL RESPONSE
         # =========================================================
 
         return jsonify({
@@ -589,8 +594,6 @@ def dashboard_summary():
             "subjects":
                 subjects,
 
-            # Kept for compatibility with the existing
-            # Dashboard.jsx and future features.
             "topics":
                 [],
 
