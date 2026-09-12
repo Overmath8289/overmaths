@@ -1,4 +1,5 @@
-import { useState } from 'react'
+
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import './StudentProfile.css'
@@ -7,17 +8,36 @@ function StudentProfile() {
   const navigate = useNavigate()
 
   const [step, setStep] = useState(1)
-  const [fullName, setFullName] = useState('')
+  const [nickname, setNickname] = useState('')
   const [learningRoute, setLearningRoute] = useState('')
   const [examType, setExamType] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
 
+  // Load any existing nickname from Supabase Auth metadata.
+  useEffect(() => {
+    const loadProfile = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      const savedNickname = user.user_metadata?.nickname
+
+      if (savedNickname) {
+        setNickname(savedNickname)
+      }
+    }
+
+    loadProfile()
+  }, [])
+
   const handleNext = () => {
     setMessage('')
 
-    if (!fullName.trim()) {
-      setMessage('Please enter your full name.')
+    if (!nickname.trim()) {
+      setMessage('Please tell us what you would like us to call you.')
       return
     }
 
@@ -56,13 +76,28 @@ function StudentProfile() {
         return
       }
 
+      // Save nickname in Supabase Auth metadata.
+      const { error: nicknameError } = await supabase.auth.updateUser({
+        data: {
+          nickname: nickname.trim(),
+        },
+      })
+
+      if (nicknameError) {
+        console.error(nicknameError)
+        setMessage(nicknameError.message)
+        setLoading(false)
+        return
+      }
+
+      // Keep the existing users table structure.
+      // We deliberately do NOT create or update a nickname column.
       const { error } = await supabase
         .from('users')
         .upsert(
           {
             auth_user_id: user.id,
             email: user.email,
-            full_name: fullName.trim(),
             learning_route: learningRoute,
             exam_type: examType,
           },
@@ -132,22 +167,23 @@ function StudentProfile() {
                 <span className="step-number">01</span>
 
                 <div>
-                  <h2>Tell us your name</h2>
+                  <h2>What should we call you around here? 😎</h2>
                   <p>
-                    This is how Overmaths will address you
-                    throughout your learning journey.
+                    Pick a name you like. This is how Overmaths
+                    will address you throughout your learning journey.
                   </p>
                 </div>
               </div>
 
               <div className="profile-field">
-                <label>FULL NAME</label>
+                <label>NICKNAME</label>
 
                 <input
                   type="text"
-                  placeholder="Enter your full name"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="e.g. Mathlord, Ace, Scholar..."
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value)}
+                  maxLength={30}
                 />
               </div>
 
