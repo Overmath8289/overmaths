@@ -710,102 +710,144 @@ export default function Quiz() {
     }
 
     try {
-      if (user) {
-        const attemptPayload = {
-          user_id: user.id,
-          score,
-          total_questions:
-            questions.length,
-          subject:
-            subject || null,
-          topic:
-            topic || null,
-          mode:
-            "Examination Mode",
-        };
+      if (!user) {
+        console.warn(
+          "QUIZ SAVE WARNING: No authenticated user found."
+        );
+        return;
+      }
+
+      /*
+       * Supabase Auth user.id is a UUID.
+       *
+       * quiz_attempts.user_id expects
+       * the bigint ID from public.users.
+       *
+       * Resolve the Auth UUID to the
+       * corresponding public.users record.
+       */
+      const {
+        data: appUser,
+        error: appUserError,
+      } = await supabase
+        .from("users")
+        .select("id")
+        .eq("auth_user_id", user.id)
+        .single();
+
+      if (appUserError || !appUser) {
+        console.error(
+          "Unable to find Overmaths user:",
+          appUserError
+        );
+
+        throw new Error(
+          "Unable to identify your Overmaths profile."
+        );
+      }
+
+      /*
+       * Save the official examination attempt.
+       */
+      const attemptPayload = {
+        user_id: appUser.id,
+        score,
+        total_questions:
+          questions.length,
+        subject:
+          subject || null,
+        topic:
+          topic || null,
+        mode:
+          "Examination Mode",
+      };
+
+      const {
+        data: attempt,
+        error: attemptError,
+      } =
+        await supabase
+          .from(
+            "quiz_attempts"
+          )
+          .insert(
+            attemptPayload
+          )
+          .select()
+          .single();
+
+      if (attemptError) {
+        console.warn(
+          "QUIZ ATTEMPT SAVE WARNING:",
+          attemptError
+        );
+      }
+
+      /*
+       * Only save individual answers
+       * if the examination attempt
+       * was created successfully.
+       */
+      if (
+        attempt &&
+        !attemptError
+      ) {
+        const answerRows =
+          questions.map(
+            (question) => {
+              const answer =
+                finalAnswers?.[
+                  question.id
+                ];
+
+              return {
+                attempt_id:
+                  attempt.id,
+
+                question_id:
+                  question.id,
+
+                selected_answer:
+                  answer ===
+                    TIMEOUT_ANSWER ||
+                  answer ===
+                    SKIPPED_ANSWER
+                    ? null
+                    : answer ??
+                      null,
+
+                is_correct:
+                  isAnswerCorrect(
+                    answer,
+                    question.correction_answer
+                  ),
+
+                time_taken:
+                  answerTimesRef
+                    .current?.[
+                    question.id
+                  ] ?? null,
+              };
+            }
+          );
 
         const {
-          data: attempt,
-          error: attemptError,
+          error:
+            answersError,
         } =
           await supabase
             .from(
-              "quiz_attempts"
+              "quiz_answers"
             )
             .insert(
-              attemptPayload
-            )
-            .select()
-            .single();
+              answerRows
+            );
 
-        if (attemptError) {
+        if (answersError) {
           console.warn(
-            "QUIZ ATTEMPT SAVE WARNING:",
-            attemptError
+            "QUIZ ANSWERS SAVE WARNING:",
+            answersError
           );
-        }
-
-        if (
-          attempt &&
-          !attemptError
-        ) {
-          const answerRows =
-            questions.map(
-              (question) => {
-                const answer =
-                  finalAnswers?.[
-                    question.id
-                  ];
-
-                return {
-                  attempt_id:
-                    attempt.id,
-
-                  question_id:
-                    question.id,
-
-                  selected_answer:
-                    answer ===
-                      TIMEOUT_ANSWER ||
-                    answer ===
-                      SKIPPED_ANSWER
-                      ? null
-                      : answer ??
-                        null,
-
-                  is_correct:
-                    isAnswerCorrect(
-                      answer,
-                      question.correction_answer
-                    ),
-
-                  time_taken:
-                    answerTimesRef
-                      .current?.[
-                      question.id
-                    ] ?? null,
-                };
-              }
-            );
-
-          const {
-            error:
-              answersError,
-          } =
-            await supabase
-              .from(
-                "quiz_answers"
-              )
-              .insert(
-                answerRows
-              );
-
-          if (answersError) {
-            console.warn(
-              "QUIZ ANSWERS SAVE WARNING:",
-              answersError
-            );
-          }
         }
       }
     } catch (error) {
