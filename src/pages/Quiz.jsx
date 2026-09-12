@@ -749,18 +749,31 @@ export default function Quiz() {
       /*
        * Save the official examination attempt.
        */
+
+
       const attemptPayload = {
         user_id: appUser.id,
         score,
-        total_questions:
-          questions.length,
-        subject:
-          subject || null,
-        topic:
-          topic || null,
-        mode:
-          "Examination Mode",
+        total_questions: questions.length,
+        mode: "Examination Mode",
       };
+
+
+
+
+
+      // const attemptPayload = {
+      //   user_id: appUser.id,
+      //   score,
+      //   total_questions:
+      //     questions.length,
+      //   subject:
+      //     subject || null,
+      //   topic:
+      //     topic || null,
+      //   mode:
+      //     "Examination Mode",
+      // };
 
       const {
         data: attempt,
