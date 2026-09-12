@@ -1,4 +1,3 @@
-
 import React, {
   useEffect,
   useMemo,
@@ -205,6 +204,16 @@ export default function Quiz() {
   const skippedRef =
     useRef({});
 
+  /*
+   * Keep the authenticated user in a ref.
+   *
+   * This prevents a race where the quiz
+   * finishes before React has updated
+   * the user state.
+   */
+  const userRef =
+    useRef(null);
+
   const [timeLeft, setTimeLeft] =
     useState(parsedTimePerQuestion);
 
@@ -252,6 +261,16 @@ export default function Quiz() {
 
   /*
    * Load authenticated user.
+   *
+   * IMPORTANT:
+   * Use getSession() instead of getUser().
+   *
+   * getUser() makes a request to
+   * /auth/v1/user, which was returning
+   * 504 Gateway Timeout in the deployed app.
+   *
+   * getSession() uses the existing
+   * Supabase session stored by the client.
    */
   useEffect(() => {
     let mounted = true;
@@ -259,15 +278,30 @@ export default function Quiz() {
     async function loadUser() {
       try {
         const {
-          data: { user: authUser },
-        } = await supabase.auth.getUser();
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
+
+        if (error) {
+          console.error(
+            "QUIZ SESSION ERROR:",
+            error
+          );
+          return;
+        }
+
+        const authUser =
+          session?.user || null;
+
+        userRef.current =
+          authUser;
 
         if (mounted) {
-          setUser(authUser || null);
+          setUser(authUser);
         }
       } catch (error) {
         console.error(
-          "QUIZ AUTH ERROR:",
+          "QUIZ SESSION ERROR:",
           error
         );
       }
@@ -761,9 +795,20 @@ export default function Quiz() {
     }
 
     try {
-      if (!user) {
+      /*
+       * Use the cached authenticated
+       * user from the Supabase session.
+       *
+       * Do NOT call supabase.auth.getUser()
+       * here because that was producing
+       * 504 Gateway Timeout.
+       */
+      const currentUser =
+        userRef.current || user;
+
+      if (!currentUser) {
         console.warn(
-          "QUIZ SAVE WARNING: No authenticated user found."
+          "QUIZ SAVE WARNING: No authenticated session found."
         );
 
         return;
@@ -786,7 +831,7 @@ export default function Quiz() {
         .select("id")
         .eq(
           "auth_user_id",
-          user.id
+          currentUser.id
         )
         .single();
 
@@ -2262,4 +2307,3 @@ export default function Quiz() {
     </main>
   );
 }
-
