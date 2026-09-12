@@ -1,15 +1,20 @@
+
 import React, {
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+
 import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
+
 import { supabase } from "../supabaseClient";
+
 import MathText from "../components/MathText";
+
 import "./Quiz.css";
 
 const API_URL = "https://overmaths.onrender.com";
@@ -20,7 +25,9 @@ const SKIPPED_ANSWER = "__SKIPPED__";
 function normalizeAnswer(answer) {
   if (!answer) return null;
 
-  const value = String(answer).trim().toLowerCase();
+  const value = String(answer)
+    .trim()
+    .toLowerCase();
 
   if (
     value === "a" ||
@@ -61,9 +68,15 @@ function normalizeAnswer(answer) {
   return null;
 }
 
-function isAnswerCorrect(selectedAnswer, correctAnswer) {
-  const selected = normalizeAnswer(selectedAnswer);
-  const correct = normalizeAnswer(correctAnswer);
+function isAnswerCorrect(
+  selectedAnswer,
+  correctAnswer
+) {
+  const selected =
+    normalizeAnswer(selectedAnswer);
+
+  const correct =
+    normalizeAnswer(correctAnswer);
 
   return Boolean(
     selected &&
@@ -75,12 +88,19 @@ function isAnswerCorrect(selectedAnswer, correctAnswer) {
 function shuffleArray(array) {
   const shuffled = [...array];
 
-  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+  for (
+    let i = shuffled.length - 1;
+    i > 0;
+    i -= 1
+  ) {
     const randomIndex = Math.floor(
       Math.random() * (i + 1)
     );
 
-    [shuffled[i], shuffled[randomIndex]] = [
+    [
+      shuffled[i],
+      shuffled[randomIndex],
+    ] = [
       shuffled[randomIndex],
       shuffled[i],
     ];
@@ -114,7 +134,8 @@ export default function Quiz() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const navigationState = location.state || {};
+  const navigationState =
+    location.state || {};
 
   const {
     subject = "",
@@ -137,41 +158,55 @@ export default function Quiz() {
       .toLowerCase()
       .includes("exam");
 
-  const parsedQuestionCount = Math.max(
-    1,
-    Math.min(
-      Number(questionCount) || 10,
-      100
-    )
-  );
+  const parsedQuestionCount =
+    Math.max(
+      1,
+      Math.min(
+        Number(questionCount) || 10,
+        100
+      )
+    );
 
-  const parsedTimePerQuestion = Math.max(
-    5,
-    Number(timePerQuestion) || 30
-  );
+  const parsedTimePerQuestion =
+    Math.max(
+      5,
+      Number(timePerQuestion) || 30
+    );
 
-  const [questions, setQuestions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [questions, setQuestions] =
+    useState([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
   const [loadingError, setLoadingError] =
     useState("");
 
   const [currentIndex, setCurrentIndex] =
     useState(0);
 
-  const [answers, setAnswers] = useState({});
+  const [answers, setAnswers] =
+    useState({});
+
   const [answerTimes, setAnswerTimes] =
     useState({});
 
-  const [skippedQuestions, setSkippedQuestions] =
-    useState({});
+  const [
+    skippedQuestions,
+    setSkippedQuestions,
+  ] = useState({});
 
-  const answersRef = useRef({});
-  const answerTimesRef = useRef({});
-  const skippedRef = useRef({});
+  const answersRef =
+    useRef({});
 
-  const [timeLeft, setTimeLeft] = useState(
-    parsedTimePerQuestion
-  );
+  const answerTimesRef =
+    useRef({});
+
+  const skippedRef =
+    useRef({});
+
+  const [timeLeft, setTimeLeft] =
+    useState(parsedTimePerQuestion);
 
   const [showFeedback, setShowFeedback] =
     useState(false);
@@ -179,19 +214,24 @@ export default function Quiz() {
   const [feedbackType, setFeedbackType] =
     useState("");
 
-  const [sessionFinished, setSessionFinished] =
-    useState(false);
+  const [
+    sessionFinished,
+    setSessionFinished,
+  ] = useState(false);
 
   const [finalScore, setFinalScore] =
     useState(0);
 
-  const [user, setUser] = useState(null);
+  const [user, setUser] =
+    useState(null);
 
   const [saving, setSaving] =
     useState(false);
 
-  const [showQuitModal, setShowQuitModal] =
-    useState(false);
+  const [
+    showQuitModal,
+    setShowQuitModal,
+  ] = useState(false);
 
   const currentQuestion =
     questions[currentIndex];
@@ -260,7 +300,10 @@ export default function Quiz() {
             String(courseId)
           );
         } else if (subject) {
-          params.set("subject", subject);
+          params.set(
+            "subject",
+            subject
+          );
         } else {
           throw new Error(
             "No subject or course was selected."
@@ -271,7 +314,10 @@ export default function Quiz() {
           topic &&
           topic !== "mixed"
         ) {
-          params.set("topic", topic);
+          params.set(
+            "topic",
+            topic
+          );
         }
 
         params.set(
@@ -279,9 +325,10 @@ export default function Quiz() {
           String(parsedQuestionCount)
         );
 
-        const response = await fetch(
-          `${API_URL}/api/questions?${params.toString()}`
-        );
+        const response =
+          await fetch(
+            `${API_URL}/api/questions?${params.toString()}`
+          );
 
         if (!response.ok) {
           let message =
@@ -296,7 +343,7 @@ export default function Quiz() {
                 errorData.error;
             }
           } catch {
-            // Keep default.
+            // Keep default message.
           }
 
           throw new Error(message);
@@ -312,7 +359,9 @@ export default function Quiz() {
             ? data.questions
             : [];
 
-        if (!loadedQuestions.length) {
+        if (
+          !loadedQuestions.length
+        ) {
           throw new Error(
             "No questions are available for this selection yet."
           );
@@ -330,6 +379,7 @@ export default function Quiz() {
           setQuestions(
             shuffledQuestions
           );
+
           setCurrentIndex(0);
         }
       } catch (error) {
@@ -364,7 +414,8 @@ export default function Quiz() {
   ]);
 
   /*
-   * Reset timer whenever question changes.
+   * Reset timer whenever
+   * question changes.
    */
   useEffect(() => {
     if (
@@ -468,6 +519,7 @@ export default function Quiz() {
       nextAnswerTimes;
 
     setAnswers(nextAnswers);
+
     setAnswerTimes(
       nextAnswerTimes
     );
@@ -671,7 +723,6 @@ export default function Quiz() {
   /*
    * Finish session.
    *
-   * IMPORTANT:
    * Practice sessions are NOT
    * saved as official attempts.
    *
@@ -714,6 +765,7 @@ export default function Quiz() {
         console.warn(
           "QUIZ SAVE WARNING: No authenticated user found."
         );
+
         return;
       }
 
@@ -732,10 +784,16 @@ export default function Quiz() {
       } = await supabase
         .from("users")
         .select("id")
-        .eq("auth_user_id", user.id)
+        .eq(
+          "auth_user_id",
+          user.id
+        )
         .single();
 
-      if (appUserError || !appUser) {
+      if (
+        appUserError ||
+        !appUser
+      ) {
         console.error(
           "Unable to find Overmaths user:",
           appUserError
@@ -747,42 +805,28 @@ export default function Quiz() {
       }
 
       /*
-       * Save the official examination attempt.
+       * Save the official
+       * examination attempt.
+       *
+       * IMPORTANT:
+       * quiz_attempts does not have
+       * subject/topic columns.
        */
-
-
       const attemptPayload = {
         user_id: appUser.id,
         score,
-        total_questions: questions.length,
-        mode: "Examination Mode",
+        total_questions:
+          questions.length,
+        mode:
+          "Examination Mode",
       };
-
-
-
-
-
-      // const attemptPayload = {
-      //   user_id: appUser.id,
-      //   score,
-      //   total_questions:
-      //     questions.length,
-      //   subject:
-      //     subject || null,
-      //   topic:
-      //     topic || null,
-      //   mode:
-      //     "Examination Mode",
-      // };
 
       const {
         data: attempt,
         error: attemptError,
       } =
         await supabase
-          .from(
-            "quiz_attempts"
-          )
+          .from("quiz_attempts")
           .insert(
             attemptPayload
           )
@@ -800,6 +844,10 @@ export default function Quiz() {
        * Only save individual answers
        * if the examination attempt
        * was created successfully.
+       *
+       * IMPORTANT:
+       * quiz_answers does not have
+       * a time_taken column.
        */
       if (
         attempt &&
@@ -826,32 +874,22 @@ export default function Quiz() {
                   answer ===
                     SKIPPED_ANSWER
                     ? null
-                    : answer ??
-                      null,
+                    : answer ?? null,
 
                 is_correct:
                   isAnswerCorrect(
                     answer,
                     question.correction_answer
                   ),
-
-                time_taken:
-                  answerTimesRef
-                    .current?.[
-                    question.id
-                  ] ?? null,
               };
             }
           );
 
         const {
-          error:
-            answersError,
+          error: answersError,
         } =
           await supabase
-            .from(
-              "quiz_answers"
-            )
+            .from("quiz_answers")
             .insert(
               answerRows
             );
@@ -914,6 +952,7 @@ export default function Quiz() {
         [currentQuestion.id]:
           SKIPPED_ANSWER,
       });
+
       return;
     }
 
@@ -1189,9 +1228,7 @@ export default function Quiz() {
               type="button"
               className="quiz-action primary"
               onClick={() =>
-                navigate(
-                  "/practice"
-                )
+                navigate("/practice")
               }
             >
               Back to Practice
@@ -1224,9 +1261,7 @@ export default function Quiz() {
               type="button"
               className="quiz-action primary"
               onClick={() =>
-                navigate(
-                  "/practice"
-                )
+                navigate("/practice")
               }
             >
               Back to Practice
@@ -1244,7 +1279,6 @@ export default function Quiz() {
     return (
       <main className="quiz-page quiz-review-page">
         <div className="quiz-container">
-
           <header className="quiz-topbar">
             <div className="quiz-topbar-left">
               <div className="quiz-brand-mark">
@@ -1350,7 +1384,6 @@ export default function Quiz() {
           </section>
 
           <section className="quiz-review-section">
-
             <div className="quiz-section-heading">
               <div>
                 <span>
@@ -1370,7 +1403,6 @@ export default function Quiz() {
             </div>
 
             <div className="quiz-review-list">
-
               {questions.map(
                 (
                   question,
@@ -1410,7 +1442,8 @@ export default function Quiz() {
                   const statusClass =
                     correct
                       ? "correct"
-                      : skipped || timedOut
+                      : skipped ||
+                        timedOut
                       ? "unanswered"
                       : "incorrect";
 
@@ -1439,9 +1472,7 @@ export default function Quiz() {
                       }
                       className={`quiz-review-card ${statusClass}`}
                     >
-
                       <div className="quiz-review-header">
-
                         <div className="quiz-review-number">
                           Q{index + 1}
                         </div>
@@ -1454,7 +1485,6 @@ export default function Quiz() {
                             ? "• Not answered"
                             : "× Incorrect"}
                         </div>
-
                       </div>
 
                       <div className="quiz-review-question">
@@ -1485,7 +1515,6 @@ export default function Quiz() {
                       )}
 
                       <div className="quiz-review-answer-grid">
-
                         <div
                           className={`quiz-review-answer-box ${
                             correct
@@ -1524,11 +1553,9 @@ export default function Quiz() {
                               : "Unavailable"}
                           </strong>
                         </div>
-
                       </div>
 
                       <div className="quiz-review-options">
-
                         {buildOptions(
                           question
                         ).map(
@@ -1587,7 +1614,6 @@ export default function Quiz() {
                             );
                           }
                         )}
-
                       </div>
 
                       {question.explanation && (
@@ -1603,24 +1629,19 @@ export default function Quiz() {
                           </MathText>
                         </div>
                       )}
-
                     </article>
                   );
                 }
               )}
-
             </div>
           </section>
 
           <div className="quiz-review-footer">
-
             <button
               type="button"
               className="quiz-action primary"
               onClick={() =>
-                navigate(
-                  "/practice"
-                )
+                navigate("/practice")
               }
             >
               Take Another Quiz
@@ -1631,16 +1652,12 @@ export default function Quiz() {
               type="button"
               className="quiz-action secondary"
               onClick={() =>
-                navigate(
-                  "/dashboard"
-                )
+                navigate("/dashboard")
               }
             >
               Back to Dashboard
             </button>
-
           </div>
-
         </div>
       </main>
     );
@@ -1649,12 +1666,9 @@ export default function Quiz() {
   return (
     <main className="quiz-page">
       <div className="quiz-container">
-
         {/* TOP BAR */}
         <header className="quiz-topbar">
-
           <div className="quiz-topbar-left">
-
             <div className="quiz-brand-mark">
               O
             </div>
@@ -1675,7 +1689,6 @@ export default function Quiz() {
                   : "Mixed Practice"}
               </div>
             </div>
-
           </div>
 
           <div className="quiz-mode-badge">
@@ -1683,14 +1696,11 @@ export default function Quiz() {
               ? "Examination Mode"
               : "Practice Mode"}
           </div>
-
         </header>
 
         {/* SESSION HEADER */}
         <section className="quiz-session-header">
-
           <div className="quiz-session-title">
-
             <span>
               {learningRoute ===
               "university"
@@ -1716,7 +1726,6 @@ export default function Quiz() {
                 {questions.length}
               </strong>
             </p>
-
           </div>
 
           <div
@@ -1748,14 +1757,11 @@ export default function Quiz() {
               ).padStart(2, "0")}
             </strong>
           </div>
-
         </section>
 
         {/* PROGRESS */}
         <section className="quiz-progress-section">
-
           <div className="quiz-progress-header">
-
             <span className="quiz-question-label">
               SESSION PROGRESS
             </span>
@@ -1763,28 +1769,22 @@ export default function Quiz() {
             <span className="quiz-question-number">
               {answeredCount} answered
             </span>
-
           </div>
 
           <div className="quiz-progress-track">
-
             <div
               className="quiz-progress-fill"
               style={{
                 width: `${progressPercentage}%`,
               }}
             />
-
           </div>
-
         </section>
 
         {/* QUESTION NAVIGATOR */}
         {isExaminationMode && (
           <section className="quiz-question-navigator">
-
             <div className="quiz-question-navigator-header">
-
               <div>
                 <span>
                   QUESTION MAP
@@ -1797,7 +1797,6 @@ export default function Quiz() {
               </div>
 
               <div className="quiz-question-legend">
-
                 <span>
                   <i className="legend-dot answered" />
                   Answered
@@ -1812,13 +1811,10 @@ export default function Quiz() {
                   <i className="legend-dot skipped" />
                   Skipped
                 </span>
-
               </div>
-
             </div>
 
             <div className="quiz-question-numbers">
-
               {questions.map(
                 (
                   question,
@@ -1876,17 +1872,13 @@ export default function Quiz() {
                   );
                 }
               )}
-
             </div>
-
           </section>
         )}
 
         {/* QUESTION CARD */}
         <section className="quiz-question-card">
-
           <div className="quiz-question-card-top">
-
             <span className="quiz-question-index">
               {currentIndex + 1}
             </span>
@@ -1894,7 +1886,6 @@ export default function Quiz() {
             <span className="quiz-question-label">
               QUESTION
             </span>
-
           </div>
 
           <div className="quiz-question-text">
@@ -1907,7 +1898,6 @@ export default function Quiz() {
 
           {currentQuestion.image_url && (
             <div className="quiz-question-image-wrapper">
-
               <img
                 className="quiz-question-image"
                 src={
@@ -1923,14 +1913,11 @@ export default function Quiz() {
                     "none";
                 }}
               />
-
             </div>
           )}
 
           <div className="quiz-options-section">
-
             <div className="quiz-options">
-
               {buildOptions(
                 currentQuestion
               ).map(
@@ -1952,9 +1939,7 @@ export default function Quiz() {
                   let optionClass =
                     "quiz-option";
 
-                  if (
-                    isSelected
-                  ) {
+                  if (isSelected) {
                     optionClass +=
                       " is-selected";
                   }
@@ -2024,14 +2009,11 @@ export default function Quiz() {
                             ×
                           </span>
                         )}
-
                     </button>
                   );
                 }
               )}
-
             </div>
-
           </div>
 
           {/* PRACTICE FEEDBACK */}
@@ -2049,7 +2031,6 @@ export default function Quiz() {
                 }`}
               >
                 <div className="quiz-feedback-heading">
-
                   {feedbackType ===
                   "correct"
                     ? "✓ Correct!"
@@ -2057,7 +2038,6 @@ export default function Quiz() {
                       "wrong"
                     ? "× Not quite."
                     : "⏱ Time's up."}
-
                 </div>
 
                 {feedbackType ===
@@ -2104,17 +2084,13 @@ export default function Quiz() {
                     </MathText>
                   </div>
                 )}
-
               </div>
             )}
-
         </section>
 
         {/* NAVIGATION */}
         <footer className="quiz-navigation">
-
           <div className="quiz-navigation-group">
-
             <button
               type="button"
               className="quiz-nav-button secondary"
@@ -2145,7 +2121,6 @@ export default function Quiz() {
                   Skip
                 </button>
               )}
-
           </div>
 
           <div className="quiz-navigation-counter">
@@ -2153,14 +2128,18 @@ export default function Quiz() {
               {answeredCount}
             </strong>{" "}
             answered
+
             <span>•</span>
+
             <strong>
               {unansweredCount}
             </strong>{" "}
             unanswered
+
             {isExaminationMode && (
               <>
                 <span>•</span>
+
                 <strong>
                   {skippedCount}
                 </strong>{" "}
@@ -2170,7 +2149,6 @@ export default function Quiz() {
           </div>
 
           <div className="quiz-navigation-group right">
-
             <button
               type="button"
               className="quiz-nav-button primary"
@@ -2192,14 +2170,11 @@ export default function Quiz() {
                   : "View Results"
                 : "Next →"}
             </button>
-
           </div>
-
         </footer>
 
         {/* QUIT */}
         <div className="quiz-quit-row">
-
           <button
             type="button"
             className="quiz-quit-button"
@@ -2211,7 +2186,6 @@ export default function Quiz() {
           >
             Quit Quiz
           </button>
-
         </div>
 
         {isExaminationMode && (
@@ -2244,7 +2218,6 @@ export default function Quiz() {
                 event.stopPropagation()
               }
             >
-
               <div className="quiz-modal-icon">
                 !
               </div>
@@ -2260,7 +2233,6 @@ export default function Quiz() {
               </p>
 
               <div className="quiz-modal-actions">
-
                 <button
                   type="button"
                   className="quiz-nav-button secondary"
@@ -2282,14 +2254,12 @@ export default function Quiz() {
                 >
                   Quit Quiz
                 </button>
-
               </div>
-
             </div>
           </div>
         )}
-
       </div>
     </main>
   );
 }
+
