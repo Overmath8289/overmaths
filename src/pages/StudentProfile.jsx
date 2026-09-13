@@ -14,7 +14,6 @@ function StudentProfile() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
 
-  // Load any existing nickname from Supabase Auth metadata.
   useEffect(() => {
     const loadProfile = async () => {
       const {
@@ -76,7 +75,10 @@ function StudentProfile() {
         return
       }
 
-      // Save nickname in Supabase Auth metadata.
+      /*
+       * First save the nickname in Supabase Auth metadata.
+       * This does not require a new database column.
+       */
       const { error: nicknameError } = await supabase.auth.updateUser({
         data: {
           nickname: nickname.trim(),
@@ -90,14 +92,42 @@ function StudentProfile() {
         return
       }
 
-      // Keep the existing users table structure.
-      // We deliberately do NOT create or update a nickname column.
+      /*
+       * Preserve the existing full_name in public.users.
+       * We do not replace it with the nickname.
+       */
+      const { data: existingUser, error: existingUserError } =
+        await supabase
+          .from('users')
+          .select('full_name')
+          .eq('email', user.email)
+          .maybeSingle()
+
+      if (existingUserError) {
+        console.error(existingUserError)
+        setMessage(existingUserError.message)
+        setLoading(false)
+        return
+      }
+
+      const existingFullName =
+        existingUser?.full_name ||
+        user.user_metadata?.full_name ||
+        user.user_metadata?.name ||
+        'Student'
+
+      /*
+       * Keep the existing users table structure.
+       * full_name remains in the database.
+       * nickname stays in Auth metadata.
+       */
       const { error } = await supabase
         .from('users')
         .upsert(
           {
             auth_user_id: user.id,
             email: user.email,
+            full_name: existingFullName,
             learning_route: learningRoute,
             exam_type: examType,
           },
@@ -167,7 +197,38 @@ function StudentProfile() {
                 <span className="step-number">01</span>
 
                 <div>
-                  <h2>What should we call you around here? 😎</h2>
+                  <h2>
+                    What should we call you around here?
+
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      aria-hidden="true"
+                      style={{
+                        marginLeft: '8px',
+                        verticalAlign: 'middle',
+                      }}
+                    >
+                      <path
+                        d="M12 2.8l1.45 4.42a2 2 0 0 0 1.33 1.33L19.2 10l-4.42 1.45a2 2 0 0 0-1.33 1.33L12 17.2l-1.45-4.42a2 2 0 0 0-1.33-1.33L4.8 10l4.42-1.45a2 2 0 0 0 1.33-1.33L12 2.8Z"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+
+                      <path
+                        d="M19 16.5l.55 1.68a1 1 0 0 0 .67.67L21.9 19.4l-1.68.55a1 1 0 0 0-.67.67L19 22.3l-.55-1.68a1 1 0 0 0-.67-.67l-1.68-.55 1.68-.55a1 1 0 0 0 .67-.67L19 16.5Z"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </h2>
+
                   <p>
                     Pick a name you like. This is how Overmaths
                     will address you throughout your learning journey.
@@ -408,3 +469,4 @@ function StudentProfile() {
 }
 
 export default StudentProfile
+
