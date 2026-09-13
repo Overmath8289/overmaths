@@ -313,7 +313,7 @@ def normalize_latex(text):
     # Common multiplication symbol
     # --------------------------------------------------------
 
-    text = text.replace("*", r" \times ")
+    # text = text.replace("*", r" \times ")
 
     # Avoid excessive spaces created above
     text = re.sub(r"[ \t]{2,}", " ", text)
