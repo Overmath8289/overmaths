@@ -17,6 +17,7 @@ import StudentProfile from './pages/StudentProfile'
 import Dashboard from './pages/Dashboard'
 import Practice from './pages/Practice'
 import Quiz from './pages/Quiz'
+import AdminDashboard from './pages/AdminDashboard'
 
 
 function ProtectedRoute({ children, user, loading }) {
@@ -40,6 +41,68 @@ function ProtectedRoute({ children, user, loading }) {
 
   if (!user) {
     return <Navigate to="/login" replace />
+  }
+
+  return children
+}
+
+
+function AdminRoute({ children, user, loading }) {
+  const [checkingAdmin, setCheckingAdmin] = useState(true)
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  useEffect(() => {
+    async function checkAdmin() {
+      if (!user) {
+        setCheckingAdmin(false)
+        return
+      }
+
+      const { data, error } = await supabase
+        .from('users')
+        .select('role')
+        .eq('auth_user_id', user.id)
+        .single()
+
+      if (error) {
+        console.error('Admin check error:', error)
+        setIsAdmin(false)
+      } else {
+        setIsAdmin(data?.role === 'admin')
+      }
+
+      setCheckingAdmin(false)
+    }
+
+    if (!loading) {
+      checkAdmin()
+    }
+  }, [user, loading])
+
+  if (loading || checkingAdmin) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#070b14',
+          color: '#ffffff',
+          fontFamily: 'Inter, sans-serif',
+        }}
+      >
+        Checking admin access...
+      </div>
+    )
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />
+  }
+
+  if (!isAdmin) {
+    return <Navigate to="/dashboard" replace />
   }
 
   return children
@@ -110,6 +173,7 @@ function App() {
       <Routes>
 
         {/* Public pages */}
+
         <Route path="/" element={<LandingPage />} />
 
         <Route path="/register" element={<Register />} />
@@ -128,7 +192,8 @@ function App() {
           element={<ResetPassword />}
         />
 
-        {/* Protected pages */}
+
+        {/* Student pages */}
 
         <Route
           path="/student-profile"
@@ -175,6 +240,21 @@ function App() {
             >
               <Quiz />
             </ProtectedRoute>
+          }
+        />
+
+
+        {/* Admin */}
+
+        <Route
+          path="/admin"
+          element={
+            <AdminRoute
+              user={user}
+              loading={authLoading}
+            >
+              <AdminDashboard />
+            </AdminRoute>
           }
         />
 
