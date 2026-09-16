@@ -6,6 +6,7 @@ import random
 import re
 from dotenv import load_dotenv
 from dashboard_api import dashboard_api
+from dashboard_api import dashboard_api
 
 # ============================================================
 # ENVIRONMENT
@@ -898,6 +899,7 @@ def home():
 # ============================================================
 
 app.register_blueprint(dashboard_api)
+app.register_blueprint(admin_api)
 
 
 if __name__ == "__main__":
