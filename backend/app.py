@@ -6,7 +6,7 @@ import random
 import re
 from dotenv import load_dotenv
 from dashboard_api import dashboard_api
-from dashboard_api import dashboard_api
+from admin_api import admin_api
 
 # ============================================================
 # ENVIRONMENT
