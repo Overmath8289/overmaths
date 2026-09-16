@@ -1,3 +1,4 @@
+
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
@@ -41,6 +42,7 @@ function Login() {
     setLoading(true)
 
     try {
+      // 1. Sign in with Supabase Authentication
       const { data, error } =
         await supabase.auth.signInWithPassword({
           email: email.trim(),
@@ -49,7 +51,15 @@ function Login() {
 
       if (error) {
         setMessage(error.message)
-        setLoading(false)
+        return
+      }
+
+      const authUser = data?.user
+
+      if (!authUser) {
+        setMessage(
+          'Login could not be completed. Please try again.'
+        )
         return
       }
 
@@ -60,21 +70,71 @@ function Login() {
         This additional check gives us a safe layer for
         future authentication rules.
       */
-      if (data?.user && !data.user.email_confirmed_at) {
+      if (!authUser.email_confirmed_at) {
         await supabase.auth.signOut()
 
         setMessage(
           'Please verify your email address before signing in. Check your inbox for the verification email.'
         )
 
-        setLoading(false)
         return
       }
 
-      // Temporary destination.
-      // Later this will become /dashboard.
-      navigate('/student-profile')
+      /*
+        2. Find the user's record in the public.users table.
+
+        auth_user_id in public.users must match
+        the authenticated Supabase user's ID.
+      */
+      const { data: profile, error: profileError } =
+        await supabase
+          .from('users')
+          .select('role')
+          .eq('auth_user_id', authUser.id)
+          .single()
+
+      if (profileError) {
+        console.error(
+          'Profile lookup error:',
+          profileError
+        )
+
+        await supabase.auth.signOut()
+
+        setMessage(
+          'Your account profile could not be found. Please contact Overmaths support.'
+        )
+
+        return
+      }
+
+      /*
+        3. Route according to the role stored in
+        public.users.
+      */
+
+      if (profile.role === 'admin') {
+        navigate('/admin')
+        return
+      }
+
+      if (profile.role === 'student') {
+        navigate('/student-profile')
+        return
+      }
+
+      /*
+        If a role exists but is not one of the roles
+        supported by the application.
+      */
+      await supabase.auth.signOut()
+
+      setMessage(
+        'Your account role is not recognized. Please contact Overmaths support.'
+      )
     } catch (error) {
+      console.error('Login error:', error)
+
       setMessage(
         error?.message ||
           'Something went wrong while signing in. Please try again.'
@@ -173,3 +233,4 @@ function Login() {
 }
 
 export default Login
+
