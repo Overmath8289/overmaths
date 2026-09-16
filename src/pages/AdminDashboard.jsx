@@ -42,11 +42,12 @@ function AdminDashboard() {
           }
         )
       } catch (err) {
-        console.error('ADMIN OVERVIEW ERROR:', err)
-        setError(
-          err.message || 'Unable to load admin overview.'
-        )
-      } finally {
+  console.error('ADMIN OVERVIEW ERROR:', err)
+
+  setError(
+    'Unable to load dashboard statistics. Please refresh the page.'
+  )
+} finally {
         setLoading(false)
       }
     }
