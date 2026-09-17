@@ -56,17 +56,14 @@ def supabase_get(table, params=None):
         )
 
         raise RuntimeError(
-            f"Supabase request failed for {table}."
+            f"Supabase request failed for {table}: "
+            f"{response.text}"
         )
 
     return response.json()
 
 
-def supabase_patch(
-    table,
-    params,
-    payload
-):
+def supabase_patch(table, params, payload):
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
         raise RuntimeError(
             "Supabase server configuration is missing."
@@ -98,11 +95,16 @@ def supabase_patch(
         )
 
         raise RuntimeError(
-            f"Supabase update failed for {table}."
+            f"Supabase update failed for {table}: "
+            f"{response.text}"
         )
 
     return response.json()
 
+
+# ==========================================================
+# GET QUESTIONS
+# ==========================================================
 
 @question_api.route("", methods=["GET"])
 def get_questions():
@@ -116,7 +118,6 @@ def get_questions():
 
         if error_response:
             return error_response
-
 
         # --------------------------------------------------
         # QUERY PARAMETERS
@@ -147,7 +148,6 @@ def get_questions():
             ""
         ).strip()
 
-
         # --------------------------------------------------
         # GET QUESTIONS
         # --------------------------------------------------
@@ -172,36 +172,30 @@ def get_questions():
             "order": "id.desc",
         }
 
-
         if subject:
             question_params["subject"] = (
                 f"eq.{subject}"
             )
-
 
         if course_id:
             question_params["course_id"] = (
                 f"eq.{course_id}"
             )
 
-
         if topic:
             question_params["topic"] = (
                 f"eq.{topic}"
             )
-
 
         if is_active in ["true", "false"]:
             question_params["is_active"] = (
                 f"eq.{is_active}"
             )
 
-
         questions = supabase_get(
             "questions",
             question_params
         )
-
 
         # --------------------------------------------------
         # SEARCH
@@ -233,7 +227,6 @@ def get_questions():
                 )
             ]
 
-
         # --------------------------------------------------
         # GET COURSES
         # --------------------------------------------------
@@ -252,7 +245,6 @@ def get_questions():
             }
         )
 
-
         # --------------------------------------------------
         # GET EXAM TYPES
         # --------------------------------------------------
@@ -270,7 +262,6 @@ def get_questions():
             }
         )
 
-
         # --------------------------------------------------
         # GET QUESTION-EXAM RELATIONSHIPS
         # --------------------------------------------------
@@ -286,7 +277,6 @@ def get_questions():
             }
         )
 
-
         # --------------------------------------------------
         # MAP COURSES
         # --------------------------------------------------
@@ -296,7 +286,6 @@ def get_questions():
             for course in courses
         }
 
-
         # --------------------------------------------------
         # MAP EXAMS
         # --------------------------------------------------
@@ -305,7 +294,6 @@ def get_questions():
             str(exam["id"]): exam
             for exam in exam_types
         }
-
 
         # --------------------------------------------------
         # MAP QUESTION EXAMS
@@ -335,7 +323,6 @@ def get_questions():
                 exam
             )
 
-
         # --------------------------------------------------
         # ATTACH RELATED DATA
         # --------------------------------------------------
@@ -355,7 +342,6 @@ def get_questions():
                 )
             )
 
-
         return jsonify({
             "success": True,
             "questions": questions,
@@ -363,7 +349,6 @@ def get_questions():
             "courses": courses,
             "exam_types": exam_types,
         })
-
 
     except Exception as error:
 
@@ -374,7 +359,7 @@ def get_questions():
 
         return jsonify({
             "success": False,
-            "error": "Unable to load question bank."
+            "error": str(error)
         }), 500
 
 
@@ -398,7 +383,6 @@ def update_question(question_id):
         if error_response:
             return error_response
 
-
         # --------------------------------------------------
         # READ REQUEST BODY
         # --------------------------------------------------
@@ -410,7 +394,6 @@ def update_question(question_id):
                 "success": False,
                 "error": "Invalid request data."
             }), 400
-
 
         # --------------------------------------------------
         # ALLOWED FIELDS
@@ -431,20 +414,19 @@ def update_question(question_id):
             "course_id",
         }
 
-
         update_data = {
             key: value
             for key, value in data.items()
             if key in allowed_fields
         }
 
-
         if not update_data:
             return jsonify({
                 "success": False,
-                "error": "No valid question fields were supplied."
+                "error": (
+                    "No valid question fields were supplied."
+                )
             }), 400
-
 
         # --------------------------------------------------
         # VALIDATE REQUIRED TEXT FIELDS
@@ -460,7 +442,6 @@ def update_question(question_id):
             "correction_answer",
         ]
 
-
         for field in required_fields:
 
             if field in update_data:
@@ -475,7 +456,6 @@ def update_question(question_id):
                             f"{field} cannot be empty."
                         )
                     }), 400
-
 
         # --------------------------------------------------
         # VALIDATE CORRECT ANSWER
@@ -498,6 +478,36 @@ def update_question(question_id):
 
             update_data["correction_answer"] = answer
 
+        # --------------------------------------------------
+        # NORMALIZE COURSE ID
+        # --------------------------------------------------
+
+        if "course_id" in update_data:
+
+            course_value = update_data["course_id"]
+
+            # Empty select value means O-Level/no course.
+            if (
+                course_value is None
+                or str(course_value).strip() == ""
+            ):
+                update_data["course_id"] = None
+
+            else:
+
+                try:
+                    update_data["course_id"] = int(
+                        course_value
+                    )
+
+                except (TypeError, ValueError):
+
+                    return jsonify({
+                        "success": False,
+                        "error": (
+                            "Course ID must be a valid course."
+                        )
+                    }), 400
 
         # --------------------------------------------------
         # NORMALIZE OPTIONAL TEXT FIELDS
@@ -510,14 +520,12 @@ def update_question(question_id):
                     update_data["explanation"]
                 ).strip()
 
-
         if "image_url" in update_data:
 
             if update_data["image_url"] is not None:
                 update_data["image_url"] = str(
                     update_data["image_url"]
                 ).strip()
-
 
         if "subject" in update_data:
 
@@ -526,18 +534,17 @@ def update_question(question_id):
                     update_data["subject"]
                 ).strip()
 
-
         if "topic" in update_data:
+
             update_data["topic"] = str(
                 update_data["topic"]
             ).strip()
 
-
         if "question_text" in update_data:
+
             update_data["question_text"] = str(
                 update_data["question_text"]
             ).strip()
-
 
         for option in [
             "option_a",
@@ -545,15 +552,21 @@ def update_question(question_id):
             "option_c",
             "option_d",
         ]:
+
             if option in update_data:
+
                 update_data[option] = str(
                     update_data[option]
                 ).strip()
 
+        # --------------------------------------------------
+        # UPDATE QUESTION IN SUPABASE
+        # --------------------------------------------------
 
-        # --------------------------------------------------
-        # UPDATE QUESTION
-        # --------------------------------------------------
+        print(
+            f"UPDATING QUESTION {question_id}:",
+            update_data
+        )
 
         updated_questions = supabase_patch(
             "questions",
@@ -563,20 +576,30 @@ def update_question(question_id):
             update_data
         )
 
+        # --------------------------------------------------
+        # QUESTION NOT FOUND
+        # --------------------------------------------------
 
         if not updated_questions:
 
             return jsonify({
                 "success": False,
-                "error": "Question was not found."
+                "error": (
+                    "Question was not found."
+                )
             }), 404
 
+        # --------------------------------------------------
+        # SUCCESS
+        # --------------------------------------------------
 
         return jsonify({
             "success": True,
+            "message": (
+                "Question updated successfully."
+            ),
             "question": updated_questions[0]
         })
-
 
     except Exception as error:
 
@@ -587,6 +610,6 @@ def update_question(question_id):
 
         return jsonify({
             "success": False,
-            "error": "Unable to update question."
+            "error": str(error)
         }), 500
 
