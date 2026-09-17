@@ -1,3 +1,4 @@
+
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -166,7 +167,7 @@ function Practice() {
 
   /*
    * ---------------------------------------------------------
-   * LOAD SECONDARY SUBJECTS FROM PYTHON API
+   * LOAD SECONDARY SUBJECTS
    * ---------------------------------------------------------
    */
 
@@ -207,12 +208,15 @@ function Practice() {
         setSubjects(uniqueSubjects);
 
         /*
-         * Keep Dashboard-selected subject if it exists.
+         * Keep the currently selected subject if it
+         * actually exists in the API response.
          */
 
         if (
           selectedSubject &&
-          uniqueSubjects.includes(selectedSubject)
+          uniqueSubjects.includes(
+            String(selectedSubject).trim()
+          )
         ) {
           return;
         }
@@ -234,6 +238,7 @@ function Practice() {
 
         if (mounted) {
           setSubjects([]);
+          setSelectedSubject("");
         }
       }
     }
@@ -247,7 +252,7 @@ function Practice() {
 
   /*
    * ---------------------------------------------------------
-   * LOAD UNIVERSITY COURSES FROM PYTHON API
+   * LOAD UNIVERSITY COURSES
    * ---------------------------------------------------------
    */
 
@@ -275,12 +280,15 @@ function Practice() {
 
         if (!mounted) return;
 
-        const loadedCourses = result.courses || [];
+        const loadedCourses = Array.isArray(result.courses)
+          ? result.courses
+          : [];
 
         setCourses(loadedCourses);
 
         /*
-         * Keep Dashboard-selected course where possible.
+         * Keep the currently selected course if it
+         * exists in the API response.
          */
 
         const incomingCourseExists = loadedCourses.some(
@@ -293,8 +301,14 @@ function Practice() {
           return;
         }
 
+        /*
+         * Otherwise select the first available course.
+         */
+
         if (loadedCourses.length > 0) {
-          setSelectedCourseId(loadedCourses[0].id);
+          setSelectedCourseId(
+            String(loadedCourses[0].id)
+          );
         } else {
           setSelectedCourseId("");
         }
@@ -306,6 +320,7 @@ function Practice() {
 
         if (mounted) {
           setCourses([]);
+          setSelectedCourseId("");
         }
       }
     }
@@ -319,17 +334,7 @@ function Practice() {
 
   /*
    * ---------------------------------------------------------
-   * LOAD TOPICS FROM PYTHON API
-   * ---------------------------------------------------------
-   *
-   * Secondary:
-   *   /api/practice/topics?subject=Physics
-   *
-   * University:
-   *   /api/practice/topics?course_id=1
-   *
-   * Mixed Topics is handled by the question API and is not
-   * sent as an actual database topic.
+   * LOAD TOPICS
    * ---------------------------------------------------------
    */
 
@@ -344,19 +349,28 @@ function Practice() {
         let url = "";
 
         if (learningRoute === "secondary") {
-          if (!selectedSubject) return;
+          const cleanSubject =
+            String(selectedSubject || "").trim();
+
+          if (!cleanSubject) return;
 
           url =
             `${API_URL}/api/practice/topics?subject=` +
-            encodeURIComponent(selectedSubject);
+            encodeURIComponent(cleanSubject);
         }
 
         if (learningRoute === "university") {
-          if (!selectedCourseId) return;
+          const cleanCourseId =
+            selectedCourseId !== null &&
+            selectedCourseId !== undefined
+              ? String(selectedCourseId).trim()
+              : "";
+
+          if (!cleanCourseId) return;
 
           url =
             `${API_URL}/api/practice/topics?course_id=` +
-            encodeURIComponent(selectedCourseId);
+            encodeURIComponent(cleanCourseId);
         }
 
         if (!url) return;
@@ -455,24 +469,86 @@ function Practice() {
    * ---------------------------------------------------------
    * START SESSION
    * ---------------------------------------------------------
+   *
+   * IMPORTANT:
+   * We normalize every value before sending it to Quiz.
+   * Quiz needs either:
+   *
+   *   Secondary  -> subject
+   *
+   *   University -> courseId
+   *
+   * This prevents the "No subject or course was selected"
+   * error caused by empty/undefined navigation values.
+   * ---------------------------------------------------------
    */
 
   async function handleStart() {
     if (starting) return;
 
-    if (
-      learningRoute === "secondary" &&
-      !selectedSubject
-    ) {
-      showNotice("Please choose a subject before starting.");
-      return;
+    const cleanRoute =
+      String(learningRoute || "").trim();
+
+    const cleanSubject =
+      String(selectedSubject || "").trim();
+
+    const cleanCourseId =
+      selectedCourseId !== null &&
+      selectedCourseId !== undefined &&
+      String(selectedCourseId).trim() !== ""
+        ? String(selectedCourseId).trim()
+        : "";
+
+    const cleanCourseCode =
+      String(selectedCourse?.code || "").trim();
+
+    const cleanCourseName =
+      String(selectedCourse?.name || "").trim();
+
+    const cleanTopic =
+      String(selectedTopic || "mixed").trim() ||
+      "mixed";
+
+    const cleanExamType =
+      String(examType || "").trim();
+
+    /*
+     * Validate SECONDARY selection.
+     */
+
+    if (cleanRoute === "secondary") {
+      if (!cleanSubject) {
+        showNotice(
+          "Please choose a subject before starting."
+        );
+        return;
+      }
     }
 
+    /*
+     * Validate UNIVERSITY selection.
+     */
+
+    if (cleanRoute === "university") {
+      if (!cleanCourseId) {
+        showNotice(
+          "Please choose a course before starting."
+        );
+        return;
+      }
+    }
+
+    /*
+     * Safety check for unexpected route values.
+     */
+
     if (
-      learningRoute === "university" &&
-      !selectedCourseId
+      cleanRoute !== "secondary" &&
+      cleanRoute !== "university"
     ) {
-      showNotice("Please choose a course before starting.");
+      showNotice(
+        "Please select a valid learning route."
+      );
       return;
     }
 
@@ -480,45 +556,77 @@ function Practice() {
 
     try {
       const quizState = {
-        learningRoute,
+        learningRoute: cleanRoute,
 
+        /*
+         * SECONDARY
+         */
         subject:
-          learningRoute === "secondary"
-            ? selectedSubject
+          cleanRoute === "secondary"
+            ? cleanSubject
             : "",
 
+        /*
+         * UNIVERSITY
+         */
         courseId:
-          learningRoute === "university"
-            ? selectedCourseId
+          cleanRoute === "university"
+            ? cleanCourseId
             : "",
 
         courseCode:
-          learningRoute === "university"
-            ? selectedCourse?.code || ""
+          cleanRoute === "university"
+            ? cleanCourseCode
             : "",
 
         courseName:
-          learningRoute === "university"
-            ? selectedCourse?.name || ""
+          cleanRoute === "university"
+            ? cleanCourseName
             : "",
 
-        topic: selectedTopic,
+        /*
+         * COMMON
+         */
+        topic: cleanTopic,
 
-        questionCount,
+        questionCount:
+          Number(questionCount) || 10,
 
         mode,
 
-        timePerQuestion,
+        timePerQuestion:
+          Number(timePerQuestion) || 30,
 
         examType:
-          learningRoute === "secondary"
-            ? examType
+          cleanRoute === "secondary"
+            ? cleanExamType
             : "",
       };
+
+      /*
+       * VERY IMPORTANT DEBUG LOG.
+       *
+       * If Quiz ever reports the selection error again,
+       * this tells us exactly what Practice sent.
+       */
+
+      console.log(
+        "OVERMATHS QUIZ STATE:",
+        quizState
+      );
 
       navigate("/quiz", {
         state: quizState,
       });
+    } catch (error) {
+      console.error(
+        "Unable to start Overmaths session:",
+        error
+      );
+
+      showNotice(
+        "Unable to start the session. Please try again."
+      );
     } finally {
       setStarting(false);
     }
@@ -546,6 +654,7 @@ function Practice() {
       <div className="practice-page">
         <div className="practice-loading">
           <div className="practice-loader"></div>
+
           <p>
             Preparing your practice studio...
           </p>
@@ -574,7 +683,9 @@ function Practice() {
           role="status"
           aria-live="polite"
         >
-          <span className="practice-notice-icon">!</span>
+          <span className="practice-notice-icon">
+            !
+          </span>
 
           <span>{notice}</span>
 
@@ -1183,6 +1294,7 @@ function Practice() {
 
             <div className="preview-detail">
               <span>Study</span>
+
               <strong>
                 {previewName}
               </strong>
@@ -1190,6 +1302,7 @@ function Practice() {
 
             <div className="preview-detail">
               <span>Topic</span>
+
               <strong>
                 {previewTopic}
               </strong>
@@ -1197,6 +1310,7 @@ function Practice() {
 
             <div className="preview-detail">
               <span>Mode</span>
+
               <strong>
                 {previewMode}
               </strong>
@@ -1204,6 +1318,7 @@ function Practice() {
 
             <div className="preview-detail">
               <span>Questions</span>
+
               <strong>
                 {questionCount}
               </strong>
@@ -1211,6 +1326,7 @@ function Practice() {
 
             <div className="preview-detail">
               <span>Speed</span>
+
               <strong>
                 {previewSpeed}/question
               </strong>
@@ -1286,3 +1402,4 @@ function Practice() {
 }
 
 export default Practice;
+
