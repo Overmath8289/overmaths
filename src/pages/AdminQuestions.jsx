@@ -9,6 +9,13 @@ import './AdminQuestions.css'
 
 const API_URL = 'https://overmaths.onrender.com'
 
+const normalizeCorrectionAnswer = (value) => {
+  return String(value || '')
+    .trim()
+    .replace(/^OPTION\s+/i, '')
+    .toUpperCase()
+}
+
 const EMPTY_FORM = {
   question_text: '',
   option_a: '',
@@ -223,7 +230,9 @@ function AdminQuestions() {
       option_d:
         question.option_d || '',
       correction_answer:
-        question.correction_answer || 'A',
+        normalizeCorrectionAnswer(
+          question.correction_answer
+        ) || 'A',
       topic:
         question.topic || '',
       explanation:
@@ -445,18 +454,14 @@ function AdminQuestions() {
       // --------------------------------------------------
 
       const originalAnswer =
-        String(
-          original.correction_answer || ''
+        normalizeCorrectionAnswer(
+          original.correction_answer
         )
-          .trim()
-          .toUpperCase()
 
       const newAnswer =
-        String(
-          editForm.correction_answer || ''
+        normalizeCorrectionAnswer(
+          editForm.correction_answer
         )
-          .trim()
-          .toUpperCase()
 
       if (
         newAnswer !==

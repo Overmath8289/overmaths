@@ -1,4 +1,3 @@
-
 import os
 import requests
 
@@ -76,7 +75,6 @@ def supabase_patch(table, params, payload):
 
     headers = supabase_headers()
 
-    # Ask Supabase to return the updated record.
     headers["Prefer"] = "return=representation"
 
     response = requests.patch(
@@ -110,6 +108,7 @@ def supabase_patch(table, params, payload):
 def get_questions():
 
     try:
+
         # --------------------------------------------------
         # ADMIN AUTHENTICATION
         # --------------------------------------------------
@@ -224,6 +223,14 @@ def get_questions():
                             ""
                         )
                     ).lower()
+                    or
+                    search_lower
+                    in str(
+                        question.get(
+                            "id",
+                            ""
+                        )
+                    ).lower()
                 )
             ]
 
@@ -335,6 +342,14 @@ def get_questions():
 
             question["course"] = course
 
+            # Also expose course information directly.
+            if course:
+                question["course_code"] = course.get("code")
+                question["course_name"] = course.get("name")
+            else:
+                question["course_code"] = None
+                question["course_name"] = None
+
             question["exam_types"] = (
                 question_exam_map.get(
                     str(question.get("id")),
@@ -374,6 +389,7 @@ def get_questions():
 def update_question(question_id):
 
     try:
+
         # --------------------------------------------------
         # ADMIN AUTHENTICATION
         # --------------------------------------------------
@@ -390,6 +406,7 @@ def update_question(question_id):
         data = request.get_json(silent=True)
 
         if not isinstance(data, dict):
+
             return jsonify({
                 "success": False,
                 "error": "Invalid request data."
@@ -414,6 +431,10 @@ def update_question(question_id):
             "course_id",
         }
 
+        # --------------------------------------------------
+        # ONLY ACCEPT FIELDS THAT WERE SENT
+        # --------------------------------------------------
+
         update_data = {
             key: value
             for key, value in data.items()
@@ -421,6 +442,7 @@ def update_question(question_id):
         }
 
         if not update_data:
+
             return jsonify({
                 "success": False,
                 "error": (
@@ -429,36 +451,36 @@ def update_question(question_id):
             }), 400
 
         # --------------------------------------------------
-        # VALIDATE REQUIRED TEXT FIELDS
+        # VALIDATE ONLY TEXT FIELDS BEING UPDATED
         # --------------------------------------------------
 
-        required_fields = [
+        text_fields = [
             "topic",
             "question_text",
             "option_a",
             "option_b",
             "option_c",
             "option_d",
-            "correction_answer",
         ]
 
-        for field in required_fields:
+        for field in text_fields:
 
-            if field in update_data:
+            if field not in update_data:
+                continue
 
-                value = update_data[field]
+            value = update_data[field]
 
-                if value is None or not str(value).strip():
+            if value is None or not str(value).strip():
 
-                    return jsonify({
-                        "success": False,
-                        "error": (
-                            f"{field} cannot be empty."
-                        )
-                    }), 400
+                return jsonify({
+                    "success": False,
+                    "error": (
+                        f"{field} cannot be empty."
+                    )
+                }), 400
 
         # --------------------------------------------------
-        # VALIDATE CORRECT ANSWER
+        # VALIDATE CORRECT ANSWER ONLY IF IT IS UPDATED
         # --------------------------------------------------
 
         if "correction_answer" in update_data:
@@ -467,7 +489,19 @@ def update_question(question_id):
                 update_data["correction_answer"]
             ).strip().upper()
 
-            if answer not in ["A", "B", "C", "D"]:
+            if answer.startswith("OPTION " ):
+                answer = answer.replace(
+                    "OPTION ",
+                    "",
+                    1
+                ).strip()
+
+            if answer not in [
+                "A",
+                "B",
+                "C",
+                "D"
+            ]:
 
                 return jsonify({
                     "success": False,
@@ -486,16 +520,18 @@ def update_question(question_id):
 
             course_value = update_data["course_id"]
 
-            # Empty select value means O-Level/no course.
+            # Empty value means O-Level / no course.
             if (
                 course_value is None
                 or str(course_value).strip() == ""
             ):
+
                 update_data["course_id"] = None
 
             else:
 
                 try:
+
                     update_data["course_id"] = int(
                         course_value
                     )
@@ -510,29 +546,53 @@ def update_question(question_id):
                     }), 400
 
         # --------------------------------------------------
-        # NORMALIZE OPTIONAL TEXT FIELDS
+        # NORMALIZE EXPLANATION
         # --------------------------------------------------
 
         if "explanation" in update_data:
 
             if update_data["explanation"] is not None:
+
                 update_data["explanation"] = str(
                     update_data["explanation"]
                 ).strip()
 
+                if not update_data["explanation"]:
+                    update_data["explanation"] = None
+
+        # --------------------------------------------------
+        # NORMALIZE IMAGE URL
+        # --------------------------------------------------
+
         if "image_url" in update_data:
 
             if update_data["image_url"] is not None:
+
                 update_data["image_url"] = str(
                     update_data["image_url"]
                 ).strip()
 
+                if not update_data["image_url"]:
+                    update_data["image_url"] = None
+
+        # --------------------------------------------------
+        # NORMALIZE SUBJECT
+        # --------------------------------------------------
+
         if "subject" in update_data:
 
             if update_data["subject"] is not None:
+
                 update_data["subject"] = str(
                     update_data["subject"]
                 ).strip()
+
+                if not update_data["subject"]:
+                    update_data["subject"] = None
+
+        # --------------------------------------------------
+        # NORMALIZE TOPIC
+        # --------------------------------------------------
 
         if "topic" in update_data:
 
@@ -540,11 +600,19 @@ def update_question(question_id):
                 update_data["topic"]
             ).strip()
 
+        # --------------------------------------------------
+        # NORMALIZE QUESTION TEXT
+        # --------------------------------------------------
+
         if "question_text" in update_data:
 
             update_data["question_text"] = str(
                 update_data["question_text"]
             ).strip()
+
+        # --------------------------------------------------
+        # NORMALIZE OPTIONS
+        # --------------------------------------------------
 
         for option in [
             "option_a",
@@ -560,7 +628,7 @@ def update_question(question_id):
                 ).strip()
 
         # --------------------------------------------------
-        # UPDATE QUESTION IN SUPABASE
+        # UPDATE ONLY THE SUPPLIED FIELDS
         # --------------------------------------------------
 
         print(
@@ -612,4 +680,3 @@ def update_question(question_id):
             "success": False,
             "error": str(error)
         }), 500
-
