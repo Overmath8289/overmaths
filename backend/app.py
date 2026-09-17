@@ -7,7 +7,7 @@ import re
 from dotenv import load_dotenv
 from dashboard_api import dashboard_api
 from admin_api import admin_api
-
+from question_api import question_api
 # ============================================================
 # ENVIRONMENT
 # ============================================================
@@ -900,7 +900,7 @@ def home():
 
 app.register_blueprint(dashboard_api)
 app.register_blueprint(admin_api)
-
+app.register_blueprint(question_api)
 
 if __name__ == "__main__":
     
