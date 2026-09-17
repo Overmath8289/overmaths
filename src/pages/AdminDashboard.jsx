@@ -1,11 +1,14 @@
 
 import React, { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import './AdminDashboard.css'
 import { supabase } from '../supabaseClient'
 
 const API_URL = 'https://overmaths.onrender.com'
 
 function AdminDashboard() {
+  const navigate = useNavigate()
+
   const [overview, setOverview] = useState({
     total_questions: 0,
     students: 0,
@@ -137,12 +140,18 @@ function AdminDashboard() {
 
         <nav className="admin-nav">
 
-          <button className="admin-nav-item active">
+          <button
+            className="admin-nav-item active"
+            onClick={() => navigate('/admin')}
+          >
             <span>⌂</span>
             Overview
           </button>
 
-          <button className="admin-nav-item">
+          <button
+            className="admin-nav-item"
+            onClick={() => navigate('/admin/questions')}
+          >
             <span>▣</span>
             Questions
           </button>
@@ -310,6 +319,7 @@ function AdminDashboard() {
 
           <div className="admin-management-grid">
 
+            {/* Question Bank */}
             <div className="admin-management-card">
 
               <div className="management-icon">
@@ -324,12 +334,15 @@ function AdminDashboard() {
                 Search, review and correct questions in the database.
               </p>
 
-              <button>
+              <button
+                onClick={() => navigate('/admin/questions')}
+              >
                 Manage Questions →
               </button>
 
             </div>
 
+            {/* Courses */}
             <div className="admin-management-card">
 
               <div className="management-icon">
@@ -350,6 +363,7 @@ function AdminDashboard() {
 
             </div>
 
+            {/* Students */}
             <div className="admin-management-card">
 
               <div className="management-icon">
@@ -370,6 +384,7 @@ function AdminDashboard() {
 
             </div>
 
+            {/* Quiz Activity */}
             <div className="admin-management-card">
 
               <div className="management-icon">
@@ -401,4 +416,6 @@ function AdminDashboard() {
 }
 
 export default AdminDashboard
+
+
 
