@@ -1,3 +1,4 @@
+
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import os
@@ -8,6 +9,7 @@ from dotenv import load_dotenv
 from dashboard_api import dashboard_api
 from admin_api import admin_api
 from question_api import question_api
+
 # ============================================================
 # ENVIRONMENT
 # ============================================================
@@ -514,10 +516,13 @@ def normalize_question(question):
 
     return {
         "id": question.get("id"),
+
         "subject": clean_basic_text(
             question.get("subject")
         ),
+
         "course_id": question.get("course_id"),
+
         "topic": clean_basic_text(
             question.get("topic")
         ),
@@ -622,15 +627,19 @@ def get_practice_courses():
 
         courses.append({
             "id": row.get("id"),
+
             "name": clean_basic_text(
                 row.get("name")
             ),
+
             "code": clean_basic_text(
                 row.get("code")
             ),
+
             "description": clean_basic_text(
                 row.get("description")
             ),
+
             "is_active": row.get("is_active"),
         })
 
@@ -651,6 +660,7 @@ def get_practice_topics():
     course_id = request.args.get("course_id")
 
     if not subject and not course_id:
+
         return jsonify({
             "error": "Subject or course_id is required"
         }), 400
@@ -669,9 +679,12 @@ def get_practice_topics():
     if subject:
 
         if course_id:
+
             return jsonify({
                 "error": "Use either subject or course_id, not both"
             }), 400
+
+        subject = clean_basic_text(subject)
 
         params["subject"] = f"eq.{subject}"
         params["course_id"] = "is.null"
@@ -683,6 +696,7 @@ def get_practice_topics():
     if course_id:
 
         try:
+
             course_id = int(course_id)
 
         except (ValueError, TypeError):
@@ -726,6 +740,7 @@ def get_questions():
     subject = request.args.get("subject")
     course_id = request.args.get("course_id")
     topic = request.args.get("topic")
+
     mode = request.args.get(
         "mode",
         "practice"
@@ -767,6 +782,25 @@ def get_questions():
         }), 400
 
     # --------------------------------------------------------
+    # CLEAN REQUEST VALUES
+    #
+    # This prevents accidental leading/trailing spaces from
+    # causing a mismatch.
+    # --------------------------------------------------------
+
+    clean_subject = (
+        clean_basic_text(subject)
+        if subject
+        else None
+    )
+
+    clean_topic = (
+        clean_basic_text(topic)
+        if topic
+        else None
+    )
+
+    # --------------------------------------------------------
     # SUPABASE QUERY
     # --------------------------------------------------------
 
@@ -788,21 +822,18 @@ def get_questions():
 
         "is_active": "eq.true",
 
-        # Fetch enough records for proper mixed-topic
-        # randomization.
-        "limit": max(
-            limit,
-            100
-        ),
+        # Fetch enough records so that topic normalization can
+        # safely happen in Python.
+        "limit": 1000,
     }
 
     # --------------------------------------------------------
     # SECONDARY / O-LEVEL
     # --------------------------------------------------------
 
-    if subject:
+    if clean_subject:
 
-        params["subject"] = f"eq.{subject}"
+        params["subject"] = f"eq.{clean_subject}"
 
         # O-Level questions have no course_id
         params["course_id"] = "is.null"
@@ -826,15 +857,13 @@ def get_questions():
         params["course_id"] = f"eq.{course_id}"
 
     # --------------------------------------------------------
-    # TOPIC
-    # --------------------------------------------------------
-
-    if topic and topic.lower() != "mixed":
-
-        params["topic"] = f"eq.{topic}"
-
-    # --------------------------------------------------------
     # GET DATA
+    #
+    # IMPORTANT:
+    # We intentionally do NOT send topic directly to Supabase.
+    #
+    # The reason is that some existing database records contain
+    # accidental leading/trailing spaces in their topic values.
     # --------------------------------------------------------
 
     rows, error, status = supabase_get(
@@ -846,6 +875,42 @@ def get_questions():
         return jsonify(error), status
 
     # --------------------------------------------------------
+    # TOPIC FILTER
+    #
+    # Compare cleaned topic values instead of raw database
+    # values.
+    #
+    # Example:
+    #
+    # Database:
+    # "Indices, Logarithms and Standard form "
+    #
+    # Request:
+    # "Indices, Logarithms and Standard form"
+    #
+    # Both become:
+    # "Indices, Logarithms and Standard form"
+    # --------------------------------------------------------
+
+    if clean_topic and clean_topic.casefold() != "mixed":
+
+        normalized_topic = clean_topic.casefold()
+
+        filtered_rows = []
+
+        for row in rows:
+
+            database_topic = clean_basic_text(
+                row.get("topic")
+            )
+
+            if database_topic.casefold() == normalized_topic:
+
+                filtered_rows.append(row)
+
+        rows = filtered_rows
+
+    # --------------------------------------------------------
     # NORMALIZE
     # --------------------------------------------------------
 
@@ -855,10 +920,7 @@ def get_questions():
     ]
 
     # --------------------------------------------------------
-    # MIXED TOPICS / RANDOM QUESTIONS
-    #
-    # Randomize on the server so mixed-topic practice really
-    # behaves as mixed practice.
+    # RANDOMIZE QUESTIONS
     # --------------------------------------------------------
 
     random.shuffle(
@@ -875,9 +937,9 @@ def get_questions():
         "questions": questions,
         "count": len(questions),
         "mode": mode,
-        "subject": subject,
+        "subject": clean_subject,
         "course_id": course_id,
-        "topic": topic or "mixed"
+        "topic": clean_topic or "mixed"
     })
 
 
@@ -902,8 +964,8 @@ app.register_blueprint(dashboard_api)
 app.register_blueprint(admin_api)
 app.register_blueprint(question_api)
 
+
 if __name__ == "__main__":
-    
 
     port = int(
         os.environ.get(
