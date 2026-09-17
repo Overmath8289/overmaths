@@ -2,7 +2,7 @@
 import os
 import requests
 from datetime import datetime, timezone
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -22,7 +22,9 @@ admin_api = Blueprint(
 # ============================================================
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+SUPABASE_SERVICE_KEY = os.getenv(
+    "SUPABASE_SERVICE_KEY"
+)
 
 
 # ============================================================
@@ -78,6 +80,144 @@ def supabase_get(table, params=None):
 
 
 # ============================================================
+# VERIFY SUPABASE AUTH USER
+# ============================================================
+
+def get_authenticated_user():
+    """
+    Verify the Supabase access token sent by the frontend.
+
+    Returns:
+        Supabase authenticated user object
+        or None when the token is missing/invalid.
+    """
+
+    authorization = request.headers.get(
+        "Authorization",
+        ""
+    )
+
+    if not authorization.startswith("Bearer "):
+        return None
+
+    access_token = authorization.split(
+        " ",
+        1
+    )[1].strip()
+
+    if not access_token:
+        return None
+
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        raise RuntimeError(
+            "Supabase server configuration is missing."
+        )
+
+    url = (
+        f"{SUPABASE_URL.rstrip('/')}"
+        f"/auth/v1/user"
+    )
+
+    headers = {
+        "apikey": SUPABASE_SERVICE_KEY,
+        "Authorization": f"Bearer {access_token}",
+    }
+
+    try:
+        response = requests.get(
+            url,
+            headers=headers,
+            timeout=15,
+        )
+    except requests.RequestException as error:
+        print(
+            "SUPABASE AUTH ERROR:",
+            error
+        )
+        return None
+
+    if response.status_code != 200:
+        print(
+            "SUPABASE AUTH VERIFICATION FAILED:",
+            response.status_code
+        )
+        return None
+
+    try:
+        return response.json()
+    except ValueError:
+        return None
+
+
+# ============================================================
+# VERIFY ADMIN ROLE
+# ============================================================
+
+def require_admin():
+    """
+    Verify that the authenticated Supabase user
+    has role = admin in the public.users table.
+
+    Returns:
+        (user, None) when authorized
+        (None, response) when unauthorized
+    """
+
+    auth_user = get_authenticated_user()
+
+    if not auth_user:
+        return None, (
+            jsonify({
+                "success": False,
+                "error": "Authentication required."
+            }),
+            401
+        )
+
+    auth_user_id = auth_user.get("id")
+
+    if not auth_user_id:
+        return None, (
+            jsonify({
+                "success": False,
+                "error": "Invalid authenticated user."
+            }),
+            401
+        )
+
+    users = supabase_get(
+        "users",
+        {
+            "select": "id,auth_user_id,role",
+            "auth_user_id": f"eq.{auth_user_id}",
+            "limit": "1",
+        }
+    )
+
+    if not users:
+        return None, (
+            jsonify({
+                "success": False,
+                "error": "Admin profile not found."
+            }),
+            403
+        )
+
+    profile = users[0]
+
+    if profile.get("role") != "admin":
+        return None, (
+            jsonify({
+                "success": False,
+                "error": "Administrator access required."
+            }),
+            403
+        )
+
+    return auth_user, None
+
+
+# ============================================================
 # ADMIN OVERVIEW
 # ============================================================
 
@@ -88,6 +228,15 @@ def supabase_get(table, params=None):
 def admin_overview():
 
     try:
+
+        # ====================================================
+        # ADMIN AUTHORIZATION
+        # ====================================================
+
+        auth_user, error_response = require_admin()
+
+        if error_response:
+            return error_response
 
         # ====================================================
         # TOTAL ACTIVE QUESTIONS
@@ -138,15 +287,6 @@ def admin_overview():
 
         # ====================================================
         # ACTIVE SUBSCRIPTIONS
-        # ====================================================
-        #
-        # IMPORTANT:
-        # Your actual database column is:
-        #
-        # expires_at
-        #
-        # NOT:
-        # expire_at
         # ====================================================
 
         subscriptions = supabase_get(
@@ -223,9 +363,6 @@ def admin_overview():
             "ADMIN OVERVIEW API ERROR:",
             error
         )
-
-        # Do NOT expose the internal Supabase
-        # error details to the administrator.
 
         return jsonify({
             "success": False,

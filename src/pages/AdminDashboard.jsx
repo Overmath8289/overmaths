@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState } from 'react'
 import './AdminDashboard.css'
+import { supabase } from '../supabaseClient'
 
 const API_URL = 'https://overmaths.onrender.com'
 
@@ -21,17 +22,79 @@ function AdminDashboard() {
         setLoading(true)
         setError('')
 
+        // ==================================================
+        // GET CURRENT SUPABASE SESSION
+        // ==================================================
+
+        const {
+          data: sessionData,
+          error: sessionError,
+        } = await supabase.auth.getSession()
+
+        if (sessionError) {
+          throw new Error(
+            'Your login session could not be verified.'
+          )
+        }
+
+        const session = sessionData?.session
+
+        if (!session?.access_token) {
+          throw new Error(
+            'Please log in again to access the admin dashboard.'
+          )
+        }
+
+        // ==================================================
+        // CALL PROTECTED ADMIN API
+        // ==================================================
+
         const response = await fetch(
-          `${API_URL}/api/admin/overview`
+          `${API_URL}/api/admin/overview`,
+          {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+              'Content-Type': 'application/json',
+            },
+          }
         )
 
         const data = await response.json()
 
-        if (!response.ok || !data.success) {
+        // ==================================================
+        // HANDLE UNAUTHORIZED
+        // ==================================================
+
+        if (response.status === 401) {
           throw new Error(
-            data.error || 'Unable to load admin overview.'
+            'Your login session has expired. Please log in again.'
           )
         }
+
+        // ==================================================
+        // HANDLE FORBIDDEN
+        // ==================================================
+
+        if (response.status === 403) {
+          throw new Error(
+            'Administrator access is required.'
+          )
+        }
+
+        // ==================================================
+        // HANDLE OTHER ERRORS
+        // ==================================================
+
+        if (!response.ok || !data.success) {
+          throw new Error(
+            'Unable to load dashboard statistics.'
+          )
+        }
+
+        // ==================================================
+        // STORE OVERVIEW
+        // ==================================================
 
         setOverview(
           data.overview || {
@@ -41,13 +104,19 @@ function AdminDashboard() {
             active_subscriptions: 0,
           }
         )
-      } catch (err) {
-  console.error('ADMIN OVERVIEW ERROR:', err)
 
-  setError(
-    'Unable to load dashboard statistics. Please refresh the page.'
-  )
-} finally {
+      } catch (err) {
+        console.error(
+          'ADMIN OVERVIEW ERROR:',
+          err
+        )
+
+        setError(
+          err.message ||
+          'Unable to load dashboard statistics.'
+        )
+
+      } finally {
         setLoading(false)
       }
     }
@@ -107,33 +176,44 @@ function AdminDashboard() {
 
       </aside>
 
-
       {/* Main Content */}
       <main className="admin-main">
 
         <header className="admin-header">
 
           <div>
-            <p className="admin-label">OVERMATHS CONTROL CENTRE</p>
-            <h1>Admin Dashboard</h1>
+            <p className="admin-label">
+              OVERMATHS CONTROL CENTRE
+            </p>
+
+            <h1>
+              Admin Dashboard
+            </h1>
+
             <p className="admin-subtitle">
               Manage questions, students, courses and platform activity.
             </p>
           </div>
 
           <div className="admin-user">
+
             <div className="admin-avatar">
               A
             </div>
 
             <div>
-              <strong>Administrator</strong>
-              <span>Admin</span>
+              <strong>
+                Administrator
+              </strong>
+
+              <span>
+                Admin
+              </span>
             </div>
+
           </div>
 
         </header>
-
 
         {/* Error Message */}
         {error && (
@@ -141,7 +221,6 @@ function AdminDashboard() {
             {error}
           </div>
         )}
-
 
         {/* Statistics */}
         <section className="admin-stats">
@@ -162,7 +241,6 @@ function AdminDashboard() {
             </small>
           </div>
 
-
           <div className="admin-stat-card">
             <span className="stat-title">
               Students
@@ -179,7 +257,6 @@ function AdminDashboard() {
             </small>
           </div>
 
-
           <div className="admin-stat-card">
             <span className="stat-title">
               Quiz Attempts
@@ -195,7 +272,6 @@ function AdminDashboard() {
               Total attempts
             </small>
           </div>
-
 
           <div className="admin-stat-card">
             <span className="stat-title">
@@ -215,12 +291,12 @@ function AdminDashboard() {
 
         </section>
 
-
         {/* Management */}
         <section className="admin-section">
 
           <div className="section-heading">
             <div>
+
               <p className="admin-label">
                 MANAGEMENT
               </p>
@@ -228,9 +304,9 @@ function AdminDashboard() {
               <h2>
                 Control Overmaths
               </h2>
+
             </div>
           </div>
-
 
           <div className="admin-management-grid">
 
@@ -254,7 +330,6 @@ function AdminDashboard() {
 
             </div>
 
-
             <div className="admin-management-card">
 
               <div className="management-icon">
@@ -275,7 +350,6 @@ function AdminDashboard() {
 
             </div>
 
-
             <div className="admin-management-card">
 
               <div className="management-icon">
@@ -295,7 +369,6 @@ function AdminDashboard() {
               </button>
 
             </div>
-
 
             <div className="admin-management-card">
 
