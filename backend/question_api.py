@@ -62,6 +62,48 @@ def supabase_get(table, params=None):
     return response.json()
 
 
+def supabase_patch(
+    table,
+    params,
+    payload
+):
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        raise RuntimeError(
+            "Supabase server configuration is missing."
+        )
+
+    url = (
+        f"{SUPABASE_URL.rstrip('/')}"
+        f"/rest/v1/{table}"
+    )
+
+    headers = supabase_headers()
+
+    # Ask Supabase to return the updated record.
+    headers["Prefer"] = "return=representation"
+
+    response = requests.patch(
+        url,
+        headers=headers,
+        params=params,
+        json=payload,
+        timeout=20,
+    )
+
+    if not response.ok:
+        print(
+            f"SUPABASE PATCH ERROR [{table}]:",
+            response.status_code,
+            response.text
+        )
+
+        raise RuntimeError(
+            f"Supabase update failed for {table}."
+        )
+
+    return response.json()
+
+
 @question_api.route("", methods=["GET"])
 def get_questions():
 
@@ -131,19 +173,11 @@ def get_questions():
         }
 
 
-        # --------------------------------------------------
-        # FILTER: SUBJECT
-        # --------------------------------------------------
-
         if subject:
             question_params["subject"] = (
                 f"eq.{subject}"
             )
 
-
-        # --------------------------------------------------
-        # FILTER: COURSE
-        # --------------------------------------------------
 
         if course_id:
             question_params["course_id"] = (
@@ -151,19 +185,11 @@ def get_questions():
             )
 
 
-        # --------------------------------------------------
-        # FILTER: TOPIC
-        # --------------------------------------------------
-
         if topic:
             question_params["topic"] = (
                 f"eq.{topic}"
             )
 
-
-        # --------------------------------------------------
-        # FILTER: ACTIVE STATUS
-        # --------------------------------------------------
 
         if is_active in ["true", "false"]:
             question_params["is_active"] = (
@@ -179,10 +205,6 @@ def get_questions():
 
         # --------------------------------------------------
         # SEARCH
-        #
-        # We perform this in Python so the search can cover
-        # both question text and topic without changing the
-        # database.
         # --------------------------------------------------
 
         if search:
@@ -266,7 +288,7 @@ def get_questions():
 
 
         # --------------------------------------------------
-        # ATTACH COURSE INFORMATION
+        # MAP COURSES
         # --------------------------------------------------
 
         course_map = {
@@ -275,6 +297,10 @@ def get_questions():
         }
 
 
+        # --------------------------------------------------
+        # MAP EXAMS
+        # --------------------------------------------------
+
         exam_map = {
             str(exam["id"]): exam
             for exam in exam_types
@@ -282,7 +308,7 @@ def get_questions():
 
 
         # --------------------------------------------------
-        # ATTACH EXAM INFORMATION TO QUESTIONS
+        # MAP QUESTION EXAMS
         # --------------------------------------------------
 
         question_exam_map = {}
@@ -311,7 +337,7 @@ def get_questions():
 
 
         # --------------------------------------------------
-        # BUILD FINAL QUESTION RESPONSE
+        # ATTACH RELATED DATA
         # --------------------------------------------------
 
         for question in questions:
@@ -349,5 +375,218 @@ def get_questions():
         return jsonify({
             "success": False,
             "error": "Unable to load question bank."
+        }), 500
+
+
+# ==========================================================
+# UPDATE QUESTION
+# ==========================================================
+
+@question_api.route(
+    "/<int:question_id>",
+    methods=["PATCH"]
+)
+def update_question(question_id):
+
+    try:
+        # --------------------------------------------------
+        # ADMIN AUTHENTICATION
+        # --------------------------------------------------
+
+        auth_user, error_response = require_admin()
+
+        if error_response:
+            return error_response
+
+
+        # --------------------------------------------------
+        # READ REQUEST BODY
+        # --------------------------------------------------
+
+        data = request.get_json(silent=True)
+
+        if not isinstance(data, dict):
+            return jsonify({
+                "success": False,
+                "error": "Invalid request data."
+            }), 400
+
+
+        # --------------------------------------------------
+        # ALLOWED FIELDS
+        # --------------------------------------------------
+
+        allowed_fields = {
+            "topic",
+            "question_text",
+            "option_a",
+            "option_b",
+            "option_c",
+            "option_d",
+            "correction_answer",
+            "explanation",
+            "image_url",
+            "is_active",
+            "subject",
+            "course_id",
+        }
+
+
+        update_data = {
+            key: value
+            for key, value in data.items()
+            if key in allowed_fields
+        }
+
+
+        if not update_data:
+            return jsonify({
+                "success": False,
+                "error": "No valid question fields were supplied."
+            }), 400
+
+
+        # --------------------------------------------------
+        # VALIDATE REQUIRED TEXT FIELDS
+        # --------------------------------------------------
+
+        required_fields = [
+            "topic",
+            "question_text",
+            "option_a",
+            "option_b",
+            "option_c",
+            "option_d",
+            "correction_answer",
+        ]
+
+
+        for field in required_fields:
+
+            if field in update_data:
+
+                value = update_data[field]
+
+                if value is None or not str(value).strip():
+
+                    return jsonify({
+                        "success": False,
+                        "error": (
+                            f"{field} cannot be empty."
+                        )
+                    }), 400
+
+
+        # --------------------------------------------------
+        # VALIDATE CORRECT ANSWER
+        # --------------------------------------------------
+
+        if "correction_answer" in update_data:
+
+            answer = str(
+                update_data["correction_answer"]
+            ).strip().upper()
+
+            if answer not in ["A", "B", "C", "D"]:
+
+                return jsonify({
+                    "success": False,
+                    "error": (
+                        "Correct answer must be A, B, C or D."
+                    )
+                }), 400
+
+            update_data["correction_answer"] = answer
+
+
+        # --------------------------------------------------
+        # NORMALIZE OPTIONAL TEXT FIELDS
+        # --------------------------------------------------
+
+        if "explanation" in update_data:
+
+            if update_data["explanation"] is not None:
+                update_data["explanation"] = str(
+                    update_data["explanation"]
+                ).strip()
+
+
+        if "image_url" in update_data:
+
+            if update_data["image_url"] is not None:
+                update_data["image_url"] = str(
+                    update_data["image_url"]
+                ).strip()
+
+
+        if "subject" in update_data:
+
+            if update_data["subject"] is not None:
+                update_data["subject"] = str(
+                    update_data["subject"]
+                ).strip()
+
+
+        if "topic" in update_data:
+            update_data["topic"] = str(
+                update_data["topic"]
+            ).strip()
+
+
+        if "question_text" in update_data:
+            update_data["question_text"] = str(
+                update_data["question_text"]
+            ).strip()
+
+
+        for option in [
+            "option_a",
+            "option_b",
+            "option_c",
+            "option_d",
+        ]:
+            if option in update_data:
+                update_data[option] = str(
+                    update_data[option]
+                ).strip()
+
+
+        # --------------------------------------------------
+        # UPDATE QUESTION
+        # --------------------------------------------------
+
+        updated_questions = supabase_patch(
+            "questions",
+            {
+                "id": f"eq.{question_id}"
+            },
+            update_data
+        )
+
+
+        if not updated_questions:
+
+            return jsonify({
+                "success": False,
+                "error": "Question was not found."
+            }), 404
+
+
+        return jsonify({
+            "success": True,
+            "question": updated_questions[0]
+        })
+
+
+    except Exception as error:
+
+        print(
+            "QUESTION UPDATE API ERROR:",
+            error
+        )
+
+        return jsonify({
+            "success": False,
+            "error": "Unable to update question."
         }), 500
 
