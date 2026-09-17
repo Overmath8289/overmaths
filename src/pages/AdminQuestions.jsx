@@ -1,4 +1,3 @@
-
 import React, {
   useEffect,
   useMemo,
@@ -270,6 +269,10 @@ function AdminQuestions() {
     }))
   }
 
+  // --------------------------------------------------
+  // SAVE QUESTION
+  // --------------------------------------------------
+
   const saveQuestion = async (event) => {
     event.preventDefault()
 
@@ -299,58 +302,328 @@ function AdminQuestions() {
         )
       }
 
-      const payload = {
-        question_text:
-          editForm.question_text.trim(),
+      // --------------------------------------------------
+      // ONLY SEND FIELDS THAT ACTUALLY CHANGED
+      // --------------------------------------------------
 
-        option_a:
-          editForm.option_a.trim(),
+      const payload = {}
 
-        option_b:
-          editForm.option_b.trim(),
+      const original = editingQuestion
 
-        option_c:
-          editForm.option_c.trim(),
+      // --------------------------------------------------
+      // QUESTION TEXT
+      // --------------------------------------------------
 
-        option_d:
-          editForm.option_d.trim(),
+      const originalQuestion =
+        String(
+          original.question_text || ''
+        ).trim()
 
-        correction_answer:
-          editForm.correction_answer,
-
-        topic:
-          editForm.topic.trim(),
-
-        explanation:
-          editForm.explanation.trim() || null,
-
-        image_url:
-          editForm.image_url.trim() || null,
-
-        subject:
-          editForm.subject.trim() || null,
-
-        course_id:
-          editForm.course_id
-            ? Number(editForm.course_id)
-            : null,
-
-        is_active:
-          editForm.is_active,
-      }
+      const newQuestion =
+        editForm.question_text.trim()
 
       if (
-        !payload.question_text ||
-        !payload.option_a ||
-        !payload.option_b ||
-        !payload.option_c ||
-        !payload.option_d ||
-        !payload.topic
+        newQuestion !==
+        originalQuestion
+      ) {
+        if (!newQuestion) {
+          throw new Error(
+            'Question text cannot be empty.'
+          )
+        }
+
+        payload.question_text =
+          newQuestion
+      }
+
+      // --------------------------------------------------
+      // OPTION A
+      // --------------------------------------------------
+
+      const originalOptionA =
+        String(
+          original.option_a || ''
+        ).trim()
+
+      const newOptionA =
+        editForm.option_a.trim()
+
+      if (
+        newOptionA !==
+        originalOptionA
+      ) {
+        if (!newOptionA) {
+          throw new Error(
+            'Option A cannot be empty.'
+          )
+        }
+
+        payload.option_a =
+          newOptionA
+      }
+
+      // --------------------------------------------------
+      // OPTION B
+      // --------------------------------------------------
+
+      const originalOptionB =
+        String(
+          original.option_b || ''
+        ).trim()
+
+      const newOptionB =
+        editForm.option_b.trim()
+
+      if (
+        newOptionB !==
+        originalOptionB
+      ) {
+        if (!newOptionB) {
+          throw new Error(
+            'Option B cannot be empty.'
+          )
+        }
+
+        payload.option_b =
+          newOptionB
+      }
+
+      // --------------------------------------------------
+      // OPTION C
+      // --------------------------------------------------
+
+      const originalOptionC =
+        String(
+          original.option_c || ''
+        ).trim()
+
+      const newOptionC =
+        editForm.option_c.trim()
+
+      if (
+        newOptionC !==
+        originalOptionC
+      ) {
+        if (!newOptionC) {
+          throw new Error(
+            'Option C cannot be empty.'
+          )
+        }
+
+        payload.option_c =
+          newOptionC
+      }
+
+      // --------------------------------------------------
+      // OPTION D
+      // --------------------------------------------------
+
+      const originalOptionD =
+        String(
+          original.option_d || ''
+        ).trim()
+
+      const newOptionD =
+        editForm.option_d.trim()
+
+      if (
+        newOptionD !==
+        originalOptionD
+      ) {
+        if (!newOptionD) {
+          throw new Error(
+            'Option D cannot be empty.'
+          )
+        }
+
+        payload.option_d =
+          newOptionD
+      }
+
+      // --------------------------------------------------
+      // CORRECT ANSWER
+      // --------------------------------------------------
+
+      const originalAnswer =
+        String(
+          original.correction_answer || ''
+        )
+          .trim()
+          .toUpperCase()
+
+      const newAnswer =
+        String(
+          editForm.correction_answer || ''
+        )
+          .trim()
+          .toUpperCase()
+
+      if (
+        newAnswer !==
+        originalAnswer
+      ) {
+        if (
+          ![
+            'A',
+            'B',
+            'C',
+            'D'
+          ].includes(newAnswer)
+        ) {
+          throw new Error(
+            'Correct answer must be A, B, C or D.'
+          )
+        }
+
+        payload.correction_answer =
+          newAnswer
+      }
+
+      // --------------------------------------------------
+      // TOPIC
+      // --------------------------------------------------
+
+      const originalTopic =
+        String(
+          original.topic || ''
+        ).trim()
+
+      const newTopic =
+        editForm.topic.trim()
+
+      if (
+        newTopic !==
+        originalTopic
+      ) {
+        if (!newTopic) {
+          throw new Error(
+            'Topic cannot be empty.'
+          )
+        }
+
+        payload.topic =
+          newTopic
+      }
+
+      // --------------------------------------------------
+      // EXPLANATION
+      // --------------------------------------------------
+
+      const originalExplanation =
+        String(
+          original.explanation || ''
+        ).trim()
+
+      const newExplanation =
+        editForm.explanation.trim()
+
+      if (
+        newExplanation !==
+        originalExplanation
+      ) {
+        payload.explanation =
+          newExplanation || null
+      }
+
+      // --------------------------------------------------
+      // IMAGE URL
+      // --------------------------------------------------
+
+      const originalImage =
+        String(
+          original.image_url || ''
+        ).trim()
+
+      const newImage =
+        editForm.image_url.trim()
+
+      if (
+        newImage !==
+        originalImage
+      ) {
+        payload.image_url =
+          newImage || null
+      }
+
+      // --------------------------------------------------
+      // SUBJECT
+      // --------------------------------------------------
+
+      const originalSubject =
+        String(
+          original.subject || ''
+        ).trim()
+
+      const newSubject =
+        editForm.subject.trim()
+
+      if (
+        newSubject !==
+        originalSubject
+      ) {
+        payload.subject =
+          newSubject || null
+      }
+
+      // --------------------------------------------------
+      // COURSE
+      // --------------------------------------------------
+
+      const originalCourse =
+        original.course_id
+          ? String(original.course_id)
+          : ''
+
+      const newCourse =
+        editForm.course_id
+          ? String(editForm.course_id)
+          : ''
+
+      if (
+        newCourse !==
+        originalCourse
+      ) {
+        payload.course_id =
+          newCourse
+            ? Number(newCourse)
+            : null
+      }
+
+      // --------------------------------------------------
+      // ACTIVE STATUS
+      // --------------------------------------------------
+
+      const originalActive =
+        original.is_active === true
+
+      if (
+        editForm.is_active !==
+        originalActive
+      ) {
+        payload.is_active =
+          editForm.is_active
+      }
+
+      // --------------------------------------------------
+      // NOTHING CHANGED
+      // --------------------------------------------------
+
+      if (
+        Object.keys(payload).length === 0
       ) {
         throw new Error(
-          'Please complete the question, all four options and the topic.'
+          'No changes were made to this question.'
         )
       }
+
+      console.log(
+        `UPDATING QUESTION ${editingQuestion.id}:`,
+        payload
+      )
+
+      // --------------------------------------------------
+      // SEND PATCH REQUEST
+      // --------------------------------------------------
 
       const response = await fetch(
         `${API_URL}/api/admin/questions/${editingQuestion.id}`,
@@ -366,6 +639,10 @@ function AdminQuestions() {
 
       const data = await response.json()
 
+      // --------------------------------------------------
+      // AUTH ERRORS
+      // --------------------------------------------------
+
       if (response.status === 401) {
         throw new Error(
           'Your login session has expired. Please log in again.'
@@ -378,12 +655,20 @@ function AdminQuestions() {
         )
       }
 
+      // --------------------------------------------------
+      // API ERROR
+      // --------------------------------------------------
+
       if (!response.ok || !data.success) {
         throw new Error(
           data.error ||
           'Unable to save the question.'
         )
       }
+
+      // --------------------------------------------------
+      // SUCCESS
+      // --------------------------------------------------
 
       setEditingQuestion(null)
       setEditForm(EMPTY_FORM)
@@ -398,7 +683,9 @@ function AdminQuestions() {
         top: 0,
         behavior: 'smooth',
       })
+
     } catch (err) {
+
       console.error(
         'UPDATE QUESTION ERROR:',
         err
@@ -408,7 +695,9 @@ function AdminQuestions() {
         err.message ||
         'Unable to save the question.'
       )
+
     } finally {
+
       setSaving(false)
     }
   }
@@ -423,6 +712,7 @@ function AdminQuestions() {
       {/* SIDEBAR */}
 
       <aside className="admin-sidebar">
+
         <div className="admin-brand">
           <h2>OVERMATHS</h2>
           <span>ADMIN PANEL</span>
@@ -474,6 +764,7 @@ function AdminQuestions() {
           </button>
 
         </nav>
+
       </aside>
 
       {/* MAIN */}
@@ -481,28 +772,41 @@ function AdminQuestions() {
       <main className="admin-main">
 
         <header className="admin-header">
+
           <div>
+
             <p className="admin-label">
               QUESTION MANAGEMENT
             </p>
 
-            <h1>Question Bank</h1>
+            <h1>
+              Question Bank
+            </h1>
 
             <p className="admin-subtitle">
               Search, review and manage questions in Overmaths.
             </p>
+
           </div>
 
           <div className="admin-user">
+
             <div className="admin-avatar">
               A
             </div>
 
             <div>
-              <strong>Administrator</strong>
-              <span>Admin</span>
+              <strong>
+                Administrator
+              </strong>
+
+              <span>
+                Admin
+              </span>
             </div>
+
           </div>
+
         </header>
 
         {/* MESSAGES */}
@@ -524,7 +828,9 @@ function AdminQuestions() {
         <section className="admin-section">
 
           <div className="section-heading">
+
             <div>
+
               <p className="admin-label">
                 DATABASE
               </p>
@@ -532,14 +838,18 @@ function AdminQuestions() {
               <h2>
                 Manage Questions
               </h2>
+
             </div>
 
             <div className="question-count">
+
               {filteredQuestions.length} question
               {filteredQuestions.length !== 1
                 ? 's'
                 : ''}
+
             </div>
+
           </div>
 
           {/* FILTERS */}
@@ -547,6 +857,7 @@ function AdminQuestions() {
           <div className="question-filters">
 
             <div className="question-search">
+
               <input
                 type="text"
                 placeholder="Search question, topic or ID..."
@@ -555,6 +866,7 @@ function AdminQuestions() {
                   setSearch(event.target.value)
                 }
               />
+
             </div>
 
             <select
@@ -563,6 +875,7 @@ function AdminQuestions() {
                 setSubjectFilter(event.target.value)
               }
             >
+
               <option value="">
                 All Subjects
               </option>
@@ -575,6 +888,7 @@ function AdminQuestions() {
                   {subject}
                 </option>
               ))}
+
             </select>
 
             <select
@@ -583,6 +897,7 @@ function AdminQuestions() {
                 setCourseFilter(event.target.value)
               }
             >
+
               <option value="">
                 All Courses
               </option>
@@ -597,6 +912,7 @@ function AdminQuestions() {
                     : course.name}
                 </option>
               ))}
+
             </select>
 
             <select
@@ -605,6 +921,7 @@ function AdminQuestions() {
                 setStatusFilter(event.target.value)
               }
             >
+
               <option value="">
                 All Status
               </option>
@@ -616,6 +933,7 @@ function AdminQuestions() {
               <option value="inactive">
                 Inactive
               </option>
+
             </select>
 
           </div>
@@ -625,21 +943,31 @@ function AdminQuestions() {
           <div className="questions-table-wrapper">
 
             {loading ? (
+
               <div className="admin-loading">
                 Loading question bank...
               </div>
+
             ) : filteredQuestions.length === 0 ? (
+
               <div className="admin-empty">
-                <h3>No questions found</h3>
+
+                <h3>
+                  No questions found
+                </h3>
 
                 <p>
                   Try changing your search or filters.
                 </p>
+
               </div>
+
             ) : (
+
               <table className="questions-table">
 
                 <thead>
+
                   <tr>
                     <th>ID</th>
                     <th>Question</th>
@@ -649,12 +977,14 @@ function AdminQuestions() {
                     <th>Status</th>
                     <th>Action</th>
                   </tr>
+
                 </thead>
 
                 <tbody>
 
                   {filteredQuestions.map(
                     (question) => (
+
                       <tr key={question.id}>
 
                         <td>
@@ -680,6 +1010,7 @@ function AdminQuestions() {
                         </td>
 
                         <td>
+
                           <span
                             className={
                               question.is_active
@@ -687,13 +1018,17 @@ function AdminQuestions() {
                                 : 'status-badge inactive'
                             }
                           >
+
                             {question.is_active
                               ? 'Active'
                               : 'Inactive'}
+
                           </span>
+
                         </td>
 
                         <td>
+
                           <button
                             className="view-question-btn"
                             onClick={() =>
@@ -702,15 +1037,18 @@ function AdminQuestions() {
                           >
                             View
                           </button>
+
                         </td>
 
                       </tr>
+
                     )
                   )}
 
                 </tbody>
 
               </table>
+
             )}
 
           </div>
@@ -722,10 +1060,12 @@ function AdminQuestions() {
       {/* VIEW MODAL */}
 
       {selectedQuestion && (
+
         <div
           className="admin-modal-overlay"
           onClick={closeQuestion}
         >
+
           <div
             className="admin-modal"
             onClick={(event) =>
@@ -736,6 +1076,7 @@ function AdminQuestions() {
             <div className="admin-modal-header">
 
               <div>
+
                 <p className="admin-label">
                   QUESTION #{selectedQuestion.id}
                 </p>
@@ -743,6 +1084,7 @@ function AdminQuestions() {
                 <h2>
                   Question Details
                 </h2>
+
               </div>
 
               <button
@@ -757,27 +1099,40 @@ function AdminQuestions() {
             <div className="question-detail">
 
               <div className="detail-row">
-                <span>Question</span>
+
+                <span>
+                  Question
+                </span>
 
                 <p>
                   {selectedQuestion.question_text}
                 </p>
+
               </div>
 
               {selectedQuestion.image_url && (
+
                 <div className="detail-row">
-                  <span>Image</span>
+
+                  <span>
+                    Image
+                  </span>
 
                   <img
                     src={selectedQuestion.image_url}
                     alt="Question"
                     className="question-detail-image"
                   />
+
                 </div>
+
               )}
 
               <div className="detail-row">
-                <span>Options</span>
+
+                <span>
+                  Options
+                </span>
 
                 <div className="question-options">
 
@@ -802,57 +1157,81 @@ function AdminQuestions() {
                   </div>
 
                 </div>
+
               </div>
 
               <div className="detail-grid">
 
                 <div className="detail-row">
-                  <span>Correct Answer</span>
+
+                  <span>
+                    Correct Answer
+                  </span>
 
                   <strong className="correct-answer">
                     {selectedQuestion.correction_answer}
                   </strong>
+
                 </div>
 
                 <div className="detail-row">
-                  <span>Topic</span>
+
+                  <span>
+                    Topic
+                  </span>
 
                   <p>
                     {selectedQuestion.topic || '—'}
                   </p>
+
                 </div>
 
                 <div className="detail-row">
-                  <span>Subject</span>
+
+                  <span>
+                    Subject
+                  </span>
 
                   <p>
                     {selectedQuestion.subject || '—'}
                   </p>
+
                 </div>
 
                 <div className="detail-row">
-                  <span>Course</span>
+
+                  <span>
+                    Course
+                  </span>
 
                   <p>
                     {selectedQuestion.course_code ||
                       selectedQuestion.course_name ||
                       '—'}
                   </p>
+
                 </div>
 
               </div>
 
               <div className="detail-row">
-                <span>Explanation</span>
+
+                <span>
+                  Explanation
+                </span>
 
                 <p>
                   {selectedQuestion.explanation ||
                     'No explanation provided.'}
                 </p>
+
               </div>
 
               <div className="detail-row">
-                <span>Status</span>
+
+                <span>
+                  Status
+                </span>
 
                 <span
                   className={
@@ -861,10 +1240,13 @@ function AdminQuestions() {
                       : 'status-badge inactive'
                   }
                 >
+
                   {selectedQuestion.is_active
                     ? 'Active'
                     : 'Inactive'}
+
                 </span>
+
               </div>
 
               <div className="question-modal-actions">
@@ -892,16 +1274,20 @@ function AdminQuestions() {
             </div>
 
           </div>
+
         </div>
+
       )}
 
       {/* EDIT MODAL */}
 
       {editingQuestion && (
+
         <div
           className="admin-modal-overlay"
           onClick={closeEditQuestion}
         >
+
           <div
             className="admin-modal edit-question-modal"
             onClick={(event) =>
@@ -912,6 +1298,7 @@ function AdminQuestions() {
             <div className="admin-modal-header">
 
               <div>
+
                 <p className="admin-label">
                   EDIT QUESTION #{editingQuestion.id}
                 </p>
@@ -919,6 +1306,7 @@ function AdminQuestions() {
                 <h2>
                   Update Question
                 </h2>
+
               </div>
 
               <button
@@ -939,6 +1327,7 @@ function AdminQuestions() {
               {/* QUESTION */}
 
               <div className="edit-form-group full-width">
+
                 <label>
                   Question Text
                 </label>
@@ -950,6 +1339,7 @@ function AdminQuestions() {
                   rows="5"
                   required
                 />
+
               </div>
 
               {/* OPTIONS */}
@@ -963,7 +1353,10 @@ function AdminQuestions() {
                 <div className="edit-options-grid">
 
                   <div className="edit-form-group">
-                    <label>Option A</label>
+
+                    <label>
+                      Option A
+                    </label>
 
                     <textarea
                       name="option_a"
@@ -972,10 +1365,14 @@ function AdminQuestions() {
                       rows="3"
                       required
                     />
+
                   </div>
 
                   <div className="edit-form-group">
-                    <label>Option B</label>
+
+                    <label>
+                      Option B
+                    </label>
 
                     <textarea
                       name="option_b"
@@ -984,10 +1381,14 @@ function AdminQuestions() {
                       rows="3"
                       required
                     />
+
                   </div>
 
                   <div className="edit-form-group">
-                    <label>Option C</label>
+
+                    <label>
+                      Option C
+                    </label>
 
                     <textarea
                       name="option_c"
@@ -996,10 +1397,14 @@ function AdminQuestions() {
                       rows="3"
                       required
                     />
+
                   </div>
 
                   <div className="edit-form-group">
-                    <label>Option D</label>
+
+                    <label>
+                      Option D
+                    </label>
 
                     <textarea
                       name="option_d"
@@ -1008,6 +1413,7 @@ function AdminQuestions() {
                       rows="3"
                       required
                     />
+
                   </div>
 
                 </div>
@@ -1019,6 +1425,7 @@ function AdminQuestions() {
               <div className="edit-form-grid">
 
                 <div className="edit-form-group">
+
                   <label>
                     Correct Answer
                   </label>
@@ -1029,6 +1436,7 @@ function AdminQuestions() {
                     onChange={handleEditChange}
                     required
                   >
+
                     <option value="A">
                       A
                     </option>
@@ -1044,10 +1452,13 @@ function AdminQuestions() {
                     <option value="D">
                       D
                     </option>
+
                   </select>
+
                 </div>
 
                 <div className="edit-form-group">
+
                   <label>
                     Topic
                   </label>
@@ -1059,9 +1470,11 @@ function AdminQuestions() {
                     onChange={handleEditChange}
                     required
                   />
+
                 </div>
 
                 <div className="edit-form-group">
+
                   <label>
                     Subject
                   </label>
@@ -1073,9 +1486,11 @@ function AdminQuestions() {
                     onChange={handleEditChange}
                     placeholder="e.g. Mathematics"
                   />
+
                 </div>
 
                 <div className="edit-form-group">
+
                   <label>
                     Course
                   </label>
@@ -1085,21 +1500,28 @@ function AdminQuestions() {
                     value={editForm.course_id}
                     onChange={handleEditChange}
                   >
+
                     <option value="">
                       No Course / O-Level
                     </option>
 
                     {courses.map((course) => (
+
                       <option
                         key={course.id}
                         value={course.id}
                       >
+
                         {course.code
                           ? `${course.code} — ${course.name}`
                           : course.name}
+
                       </option>
+
                     ))}
+
                   </select>
+
                 </div>
 
               </div>
@@ -1107,6 +1529,7 @@ function AdminQuestions() {
               {/* EXPLANATION */}
 
               <div className="edit-form-group full-width">
+
                 <label>
                   Explanation
                 </label>
@@ -1118,11 +1541,13 @@ function AdminQuestions() {
                   rows="5"
                   placeholder="Explain the correct answer..."
                 />
+
               </div>
 
               {/* IMAGE */}
 
               <div className="edit-form-group full-width">
+
                 <label>
                   Image URL
                 </label>
@@ -1134,6 +1559,7 @@ function AdminQuestions() {
                   onChange={handleEditChange}
                   placeholder="Paste image URL if the question has an image"
                 />
+
               </div>
 
               {/* STATUS */}
@@ -1171,9 +1597,11 @@ function AdminQuestions() {
                   className="edit-question-btn"
                   disabled={saving}
                 >
+
                   {saving
                     ? 'Saving Changes...'
                     : 'Save Changes'}
+
                 </button>
 
               </div>
@@ -1181,7 +1609,9 @@ function AdminQuestions() {
             </form>
 
           </div>
+
         </div>
+
       )}
 
     </div>
@@ -1189,4 +1619,3 @@ function AdminQuestions() {
 }
 
 export default AdminQuestions
-
