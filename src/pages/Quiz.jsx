@@ -1,4 +1,3 @@
-
 import React, {
   useEffect,
   useMemo,
@@ -235,6 +234,213 @@ export default function Quiz() {
     showQuitModal,
     setShowQuitModal,
   ] = useState(false);
+
+  /* =========================================================
+     CALCULATOR
+     ========================================================= */
+
+  const [
+    showCalculator,
+    setShowCalculator,
+  ] = useState(false);
+
+  const [
+    calculatorDisplay,
+    setCalculatorDisplay,
+  ] = useState("0");
+
+  function calculatorInput(value) {
+    setCalculatorDisplay((previous) => {
+      if (previous === "Error") {
+        return value;
+      }
+
+      if (
+        previous === "0" &&
+        /^[0-9.]$/.test(value)
+      ) {
+        return value;
+      }
+
+      if (
+        /^[+\-*/]$/.test(value) &&
+        /[+\-*/]$/.test(previous)
+      ) {
+        return previous;
+      }
+
+      if (
+        value === "." &&
+        /(?:^|[+\-*/])[^+\-*/]*\.$/.test(
+          previous
+        )
+      ) {
+        return previous;
+      }
+
+      return previous + value;
+    });
+  }
+
+  function clearCalculator() {
+    setCalculatorDisplay("0");
+  }
+
+  function backspaceCalculator() {
+    setCalculatorDisplay((previous) => {
+      if (
+        previous === "Error" ||
+        previous.length <= 1
+      ) {
+        return "0";
+      }
+
+      return previous.slice(0, -1);
+    });
+  }
+
+  function calculateCalculator() {
+    setCalculatorDisplay((previous) => {
+      try {
+        const expression =
+          previous.replace(
+            /[^0-9+\-*/().%]/g,
+            ""
+          );
+
+        if (!expression) {
+          return "0";
+        }
+
+        const percentExpression =
+          expression.replace(
+            /(\d+(?:\.\d+)?)%/g,
+            "($1/100)"
+          );
+
+        const result = Function(
+          `"use strict"; return (${percentExpression})`
+        )();
+
+        if (
+          typeof result !== "number" ||
+          !Number.isFinite(result)
+        ) {
+          return "Error";
+        }
+
+        return String(
+          Math.round(
+            (result + Number.EPSILON) *
+              100000000
+          ) / 100000000
+        );
+      } catch {
+        return "Error";
+      }
+    });
+  }
+
+  function calculatorSquareRoot() {
+    setCalculatorDisplay((previous) => {
+      try {
+        const value =
+          Number(previous);
+
+        if (
+          !Number.isFinite(value) ||
+          value < 0
+        ) {
+          return "Error";
+        }
+
+        return String(
+          Math.sqrt(value)
+        );
+      } catch {
+        return "Error";
+      }
+    });
+  }
+
+  useEffect(() => {
+    if (!showCalculator) {
+      return undefined;
+    }
+
+    function handleCalculatorKeyboard(
+      event
+    ) {
+      if (
+        event.key >= "0" &&
+        event.key <= "9"
+      ) {
+        calculatorInput(event.key);
+      } else if (
+        ["+", "-", "*", "/"].includes(
+          event.key
+        )
+      ) {
+        calculatorInput(event.key);
+      } else if (
+        event.key === "."
+      ) {
+        calculatorInput(".");
+      } else if (
+        event.key === "%"
+      ) {
+        calculatorInput("%");
+      } else if (
+        event.key === "Enter" ||
+        event.key === "="
+      ) {
+        event.preventDefault();
+        calculateCalculator();
+      } else if (
+        event.key === "Backspace"
+      ) {
+        backspaceCalculator();
+      } else if (
+        event.key === "Escape"
+      ) {
+        setShowCalculator(false);
+      }
+    }
+
+    window.addEventListener(
+      "keydown",
+      handleCalculatorKeyboard
+    );
+
+    return () => {
+      window.removeEventListener(
+        "keydown",
+        handleCalculatorKeyboard
+      );
+    };
+  }, [showCalculator]);
+
+  useEffect(() => {
+    if (!showCalculator) {
+      return;
+    }
+
+    const previousOverflow =
+      document.body.style.overflow;
+
+    /*
+     * Keep the quiz itself from horizontally
+     * shifting while the calculator is open.
+     * The timer intentionally continues running.
+     */
+    document.body.style.overflowX =
+      "hidden";
+
+    return () => {
+      document.body.style.overflowX =
+        previousOverflow;
+    };
+  }, [showCalculator]);
 
   const currentQuestion =
     questions[currentIndex];
@@ -723,6 +929,7 @@ export default function Quiz() {
     setFinalScore(score);
     setSessionFinished(true);
     setShowFeedback(false);
+    setShowCalculator(false);
 
     if (!isExaminationMode) {
       setSaving(false);
@@ -999,6 +1206,7 @@ export default function Quiz() {
 
   function handleQuit() {
     setShowQuitModal(false);
+    setShowCalculator(false);
     navigate("/practice");
   }
 
@@ -1612,16 +1820,18 @@ export default function Quiz() {
             </div>
           </div>
 
-          <div className="quiz-mode-badge">
-            {isExaminationMode
-              ? "Examination Mode"
-              : "Practice Mode"}
+          <div className="quiz-topbar-actions">
+            <div className="quiz-mode-badge">
+              {isExaminationMode
+                ? "Examination Mode"
+                : "Practice Mode"}
+            </div>
           </div>
         </header>
 
         <section className="quiz-session-header">
           <div className="quiz-session-title">
-            <span>
+            <span className="quiz-session-eyebrow">
               {learningRoute ===
               "university"
                 ? courseCode ||
@@ -1662,7 +1872,7 @@ export default function Quiz() {
             </span>
 
             <span className="quiz-timer-label">
-              TIME
+              TIME REMAINING
             </span>
 
             <strong>
@@ -1686,7 +1896,8 @@ export default function Quiz() {
             </span>
 
             <span className="quiz-question-number">
-              {answeredCount} answered
+              {answeredCount} of{" "}
+              {questions.length} answered
             </span>
           </div>
 
@@ -2139,6 +2350,325 @@ export default function Quiz() {
           </div>
         )}
 
+        {/* =====================================================
+            FLOATING CALCULATOR
+            ===================================================== */}
+
+        <button
+          type="button"
+          className="quiz-calculator-trigger"
+          onClick={() =>
+            setShowCalculator(true)
+          }
+          aria-label="Open calculator"
+        >
+          <span className="quiz-calculator-trigger-icon">
+            ＋
+          </span>
+
+          <span className="quiz-calculator-trigger-text">
+            Calculator
+          </span>
+        </button>
+
+        {showCalculator && (
+          <div
+            className="quiz-calculator-overlay"
+            onClick={() =>
+              setShowCalculator(false)
+            }
+          >
+            <section
+              className="quiz-calculator"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Quiz calculator"
+              onClick={(event) =>
+                event.stopPropagation()
+              }
+            >
+              <div className="quiz-calculator-header">
+                <div>
+                  <span>
+                    OVERMATHS TOOL
+                  </span>
+
+                  <h2>
+                    Calculator
+                  </h2>
+                </div>
+
+                <button
+                  type="button"
+                  className="quiz-calculator-close"
+                  onClick={() =>
+                    setShowCalculator(
+                      false
+                    )
+                  }
+                  aria-label="Close calculator"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="quiz-calculator-display">
+                <span>
+                  {calculatorDisplay ===
+                  "Error"
+                    ? "Calculation error"
+                    : "CALCULATION"}
+                </span>
+
+                <strong>
+                  {calculatorDisplay}
+                </strong>
+              </div>
+
+              <div className="quiz-calculator-keypad">
+                <button
+                  type="button"
+                  className="calculator-function"
+                  onClick={
+                    clearCalculator
+                  }
+                >
+                  AC
+                </button>
+
+                <button
+                  type="button"
+                  className="calculator-function"
+                  onClick={
+                    backspaceCalculator
+                  }
+                >
+                  ⌫
+                </button>
+
+                <button
+                  type="button"
+                  className="calculator-function"
+                  onClick={() =>
+                    calculatorInput(
+                      "%"
+                    )
+                  }
+                >
+                  %
+                </button>
+
+                <button
+                  type="button"
+                  className="calculator-operator"
+                  onClick={() =>
+                    calculatorInput(
+                      "/"
+                    )
+                  }
+                >
+                  ÷
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    calculatorInput(
+                      "7"
+                    )
+                  }
+                >
+                  7
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    calculatorInput(
+                      "8"
+                    )
+                  }
+                >
+                  8
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    calculatorInput(
+                      "9"
+                    )
+                  }
+                >
+                  9
+                </button>
+
+                <button
+                  type="button"
+                  className="calculator-operator"
+                  onClick={() =>
+                    calculatorInput(
+                      "*"
+                    )
+                  }
+                >
+                  ×
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    calculatorInput(
+                      "4"
+                    )
+                  }
+                >
+                  4
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    calculatorInput(
+                      "5"
+                    )
+                  }
+                >
+                  5
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    calculatorInput(
+                      "6"
+                    )
+                  }
+                >
+                  6
+                </button>
+
+                <button
+                  type="button"
+                  className="calculator-operator"
+                  onClick={() =>
+                    calculatorInput(
+                      "-"
+                    )
+                  }
+                >
+                  −
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    calculatorInput(
+                      "1"
+                    )
+                  }
+                >
+                  1
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    calculatorInput(
+                      "2"
+                    )
+                  }
+                >
+                  2
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    calculatorInput(
+                      "3"
+                    )
+                  }
+                >
+                  3
+                </button>
+
+                <button
+                  type="button"
+                  className="calculator-operator"
+                  onClick={() =>
+                    calculatorInput(
+                      "+"
+                    )
+                  }
+                >
+                  +
+                </button>
+
+                <button
+                  type="button"
+                  className="calculator-function"
+                  onClick={
+                    calculatorSquareRoot
+                  }
+                >
+                  √
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    calculatorInput(
+                      "0"
+                    )
+                  }
+                >
+                  0
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    calculatorInput(
+                      "."
+                    )
+                  }
+                >
+                  .
+                </button>
+
+                <button
+                  type="button"
+                  className="calculator-equals"
+                  onClick={
+                    calculateCalculator
+                  }
+                >
+                  =
+                </button>
+              </div>
+
+              <div className="quiz-calculator-footer">
+                <span>
+                  Calculator does not pause
+                  your quiz timer.
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowCalculator(
+                      false
+                    )
+                  }
+                >
+                  Close Calculator
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
+
         {showQuitModal && (
           <div
             className="quiz-modal-backdrop"
@@ -2198,4 +2728,3 @@ export default function Quiz() {
     </main>
   );
 }
-
