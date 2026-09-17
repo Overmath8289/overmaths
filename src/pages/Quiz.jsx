@@ -1,3 +1,4 @@
+
 import React, {
   useEffect,
   useMemo,
@@ -204,13 +205,6 @@ export default function Quiz() {
   const skippedRef =
     useRef({});
 
-  /*
-   * Keep the authenticated user in a ref.
-   *
-   * This prevents a race where the quiz
-   * finishes before React has updated
-   * the user state.
-   */
   const userRef =
     useRef(null);
 
@@ -259,19 +253,6 @@ export default function Quiz() {
       skippedQuestions;
   }, [skippedQuestions]);
 
-  /*
-   * Load authenticated user.
-   *
-   * IMPORTANT:
-   * Use getSession() instead of getUser().
-   *
-   * getUser() makes a request to
-   * /auth/v1/user, which was returning
-   * 504 Gateway Timeout in the deployed app.
-   *
-   * getSession() uses the existing
-   * Supabase session stored by the client.
-   */
   useEffect(() => {
     let mounted = true;
 
@@ -314,9 +295,6 @@ export default function Quiz() {
     };
   }, []);
 
-  /*
-   * Load questions.
-   */
   useEffect(() => {
     let mounted = true;
 
@@ -447,10 +425,6 @@ export default function Quiz() {
     parsedQuestionCount,
   ]);
 
-  /*
-   * Reset timer whenever
-   * question changes.
-   */
   useEffect(() => {
     if (
       !currentQuestion ||
@@ -477,9 +451,6 @@ export default function Quiz() {
     sessionFinished,
   ]);
 
-  /*
-   * Timer.
-   */
   useEffect(() => {
     if (
       !currentQuestion ||
@@ -526,9 +497,6 @@ export default function Quiz() {
     parsedTimePerQuestion,
   ]);
 
-  /*
-   * Save answer.
-   */
   function saveAnswer(
     questionId,
     selectedAnswer,
@@ -558,10 +526,6 @@ export default function Quiz() {
       nextAnswerTimes
     );
 
-    /*
-     * Once answered, remove skipped
-     * status from this question.
-     */
     if (
       skippedRef.current[
         questionId
@@ -584,9 +548,6 @@ export default function Quiz() {
     }
   }
 
-  /*
-   * Mark question as skipped.
-   */
   function markSkipped(
     questionId,
     secondsUsed = 0
@@ -612,9 +573,6 @@ export default function Quiz() {
     );
   }
 
-  /*
-   * Handle answer.
-   */
   function handleAnswer(
     selectedAnswer
   ) {
@@ -625,10 +583,6 @@ export default function Quiz() {
       return;
     }
 
-    /*
-     * Practice Mode locks the answer
-     * after selection.
-     */
     if (
       !isExaminationMode &&
       answersRef.current[
@@ -668,9 +622,6 @@ export default function Quiz() {
     }
   }
 
-  /*
-   * Handle timeout.
-   */
   function handleTimeout(
     question
   ) {
@@ -721,9 +672,6 @@ export default function Quiz() {
     setShowFeedback(true);
   }
 
-  /*
-   * Calculate score.
-   */
   function calculateScore(
     answerMap
   ) {
@@ -754,14 +702,6 @@ export default function Quiz() {
     );
   }
 
-  /*
-   * Finish session.
-   *
-   * Practice sessions are NOT
-   * saved as official attempts.
-   *
-   * Only Examination Mode is saved.
-   */
   async function finishSession(
     finalAnswers =
       answersRef.current
@@ -784,25 +724,12 @@ export default function Quiz() {
     setSessionFinished(true);
     setShowFeedback(false);
 
-    /*
-     * Practice mode is deliberately
-     * not written to the official
-     * analytics tables.
-     */
     if (!isExaminationMode) {
       setSaving(false);
       return;
     }
 
     try {
-      /*
-       * Use the cached authenticated
-       * user from the Supabase session.
-       *
-       * Do NOT call supabase.auth.getUser()
-       * here because that was producing
-       * 504 Gateway Timeout.
-       */
       const currentUser =
         userRef.current || user;
 
@@ -814,15 +741,6 @@ export default function Quiz() {
         return;
       }
 
-      /*
-       * Supabase Auth user.id is a UUID.
-       *
-       * quiz_attempts.user_id expects
-       * the bigint ID from public.users.
-       *
-       * Resolve the Auth UUID to the
-       * corresponding public.users record.
-       */
       const {
         data: appUser,
         error: appUserError,
@@ -849,14 +767,6 @@ export default function Quiz() {
         );
       }
 
-      /*
-       * Save the official
-       * examination attempt.
-       *
-       * IMPORTANT:
-       * quiz_attempts does not have
-       * subject/topic columns.
-       */
       const attemptPayload = {
         user_id: appUser.id,
         score,
@@ -885,15 +795,6 @@ export default function Quiz() {
         );
       }
 
-      /*
-       * Only save individual answers
-       * if the examination attempt
-       * was created successfully.
-       *
-       * IMPORTANT:
-       * quiz_answers does not have
-       * a time_taken column.
-       */
       if (
         attempt &&
         !attemptError
@@ -956,9 +857,6 @@ export default function Quiz() {
     }
   }
 
-  /*
-   * Skip current question.
-   */
   function handleSkip() {
     if (
       !isExaminationMode ||
@@ -1007,9 +905,6 @@ export default function Quiz() {
     );
   }
 
-  /*
-   * Next question.
-   */
   function handleNext() {
     if (
       !currentQuestion ||
@@ -1023,9 +918,6 @@ export default function Quiz() {
         currentQuestion.id
       ];
 
-    /*
-     * Practice requires an answer.
-     */
     if (!isExaminationMode) {
       if (!currentAnswer) {
         return;
@@ -1047,12 +939,6 @@ export default function Quiz() {
       return;
     }
 
-    /*
-     * Examination mode:
-     * If the student presses Next
-     * without answering, treat it
-     * as skipped.
-     */
     if (!currentAnswer) {
       markSkipped(
         currentQuestion.id,
@@ -1084,9 +970,6 @@ export default function Quiz() {
     );
   }
 
-  /*
-   * Previous.
-   */
   function handlePrevious() {
     if (
       currentIndex <= 0 ||
@@ -1101,9 +984,6 @@ export default function Quiz() {
     );
   }
 
-  /*
-   * Jump to question.
-   */
   function handleQuestionJump(
     index
   ) {
@@ -1117,16 +997,8 @@ export default function Quiz() {
     setCurrentIndex(index);
   }
 
-  /*
-   * Quit without saving.
-   */
   function handleQuit() {
     setShowQuitModal(false);
-
-    /*
-     * No finishSession call.
-     * Therefore nothing is saved.
-     */
     navigate("/practice");
   }
 
@@ -1223,9 +1095,6 @@ export default function Quiz() {
         100
       : 0;
 
-  /*
-   * Loading.
-   */
   if (loading) {
     return (
       <main className="quiz-page">
@@ -1248,9 +1117,6 @@ export default function Quiz() {
     );
   }
 
-  /*
-   * Error.
-   */
   if (loadingError) {
     return (
       <main className="quiz-page">
@@ -1284,9 +1150,6 @@ export default function Quiz() {
     );
   }
 
-  /*
-   * No questions.
-   */
   if (!questions.length) {
     return (
       <main className="quiz-page">
@@ -1353,25 +1216,27 @@ export default function Quiz() {
           </header>
 
           <section className="quiz-result-hero">
-            <span className="quiz-result-eyebrow">
-              SESSION COMPLETE
-            </span>
+            <div className="quiz-result-copy">
+              <span className="quiz-result-eyebrow">
+                SESSION COMPLETE
+              </span>
 
-            <h1 className="quiz-result-title">
-              {percentage >= 80
-                ? "Excellent work."
-                : percentage >= 60
-                ? "Good progress."
-                : percentage >= 40
-                ? "Keep pushing."
-                : "Every attempt is progress."}
-            </h1>
+              <h1 className="quiz-result-title">
+                {percentage >= 80
+                  ? "Excellent work."
+                  : percentage >= 60
+                  ? "Good progress."
+                  : percentage >= 40
+                  ? "Keep pushing."
+                  : "Every attempt is progress."}
+              </h1>
 
-            <p className="quiz-result-subtitle">
-              {isExaminationMode
-                ? "Your examination has been submitted. Review your performance below."
-                : "You've completed this practice session. Use the review to learn from every question."}
-            </p>
+              <p className="quiz-result-subtitle">
+                {isExaminationMode
+                  ? "Your examination has been submitted. Review your performance below."
+                  : "You've completed this practice session. Use the review to learn from every question."}
+              </p>
+            </div>
 
             <div className="quiz-score">
               <strong className="quiz-score-number">
@@ -1430,21 +1295,19 @@ export default function Quiz() {
 
           <section className="quiz-review-section">
             <div className="quiz-section-heading">
-              <div>
-                <span>
-                  REVIEW
-                </span>
+              <span>
+                REVIEW
+              </span>
 
-                <h2>
-                  Question by question
-                </h2>
+              <h2>
+                Question by question
+              </h2>
 
-                <p>
-                  See what you selected,
-                  the correct answer and
-                  the explanation.
-                </p>
-              </div>
+              <p>
+                See what you selected,
+                the correct answer and
+                the explanation.
+              </p>
             </div>
 
             <div className="quiz-review-list">
@@ -1576,10 +1439,17 @@ export default function Quiz() {
                             timedOut
                               ? "Not answered"
                               : selected
-                              ? `${selected}. ${
-                                  selectedOption?.text ||
-                                  ""
-                                }`
+                              ? (
+                                <>
+                                  {selected}.{" "}
+                                  <MathText>
+                                    {
+                                      selectedOption?.text ||
+                                      ""
+                                    }
+                                  </MathText>
+                                </>
+                              )
                               : "Not answered"}
                           </strong>
                         </div>
@@ -1591,10 +1461,17 @@ export default function Quiz() {
 
                           <strong>
                             {correctAnswer
-                              ? `${correctAnswer}. ${
-                                  correctOption?.text ||
-                                  ""
-                                }`
+                              ? (
+                                <>
+                                  {correctAnswer}.{" "}
+                                  <MathText>
+                                    {
+                                      correctOption?.text ||
+                                      ""
+                                    }
+                                  </MathText>
+                                </>
+                              )
                               : "Unavailable"}
                           </strong>
                         </div>
@@ -1711,7 +1588,6 @@ export default function Quiz() {
   return (
     <main className="quiz-page">
       <div className="quiz-container">
-        {/* TOP BAR */}
         <header className="quiz-topbar">
           <div className="quiz-topbar-left">
             <div className="quiz-brand-mark">
@@ -1743,7 +1619,6 @@ export default function Quiz() {
           </div>
         </header>
 
-        {/* SESSION HEADER */}
         <section className="quiz-session-header">
           <div className="quiz-session-title">
             <span>
@@ -1804,7 +1679,6 @@ export default function Quiz() {
           </div>
         </section>
 
-        {/* PROGRESS */}
         <section className="quiz-progress-section">
           <div className="quiz-progress-header">
             <span className="quiz-question-label">
@@ -1826,7 +1700,6 @@ export default function Quiz() {
           </div>
         </section>
 
-        {/* QUESTION NAVIGATOR */}
         {isExaminationMode && (
           <section className="quiz-question-navigator">
             <div className="quiz-question-navigator-header">
@@ -1921,16 +1794,21 @@ export default function Quiz() {
           </section>
         )}
 
-        {/* QUESTION CARD */}
         <section className="quiz-question-card">
           <div className="quiz-question-card-top">
-            <span className="quiz-question-index">
+            <div className="quiz-question-index">
               {currentIndex + 1}
-            </span>
+            </div>
 
-            <span className="quiz-question-label">
-              QUESTION
-            </span>
+            <div>
+              <span className="quiz-question-label">
+                QUESTION
+              </span>
+
+              <span className="quiz-question-mini">
+                Choose one answer
+              </span>
+            </div>
           </div>
 
           <div className="quiz-question-text">
@@ -1962,6 +1840,16 @@ export default function Quiz() {
           )}
 
           <div className="quiz-options-section">
+            <div className="quiz-options-heading">
+              <span>ANSWER OPTIONS</span>
+
+              <small>
+                {selectedAnswer
+                  ? "Answer selected"
+                  : "Select your answer"}
+              </small>
+            </div>
+
             <div className="quiz-options">
               {buildOptions(
                 currentQuestion
@@ -2029,7 +1917,9 @@ export default function Quiz() {
                       }
                     >
                       <span className="quiz-option-letter">
-                        {option.key}
+                        {
+                          option.key
+                        }
                       </span>
 
                       <span className="quiz-option-text">
@@ -2061,7 +1951,6 @@ export default function Quiz() {
             </div>
           </div>
 
-          {/* PRACTICE FEEDBACK */}
           {!isExaminationMode &&
             showFeedback && (
               <div
@@ -2075,46 +1964,51 @@ export default function Quiz() {
                     : "timeout"
                 }`}
               >
-                <div className="quiz-feedback-heading">
-                  {feedbackType ===
-                  "correct"
-                    ? "✓ Correct!"
-                    : feedbackType ===
-                      "wrong"
-                    ? "× Not quite."
-                    : "⏱ Time's up."}
+                <div className="quiz-feedback-top">
+                  <div>
+                    <div className="quiz-feedback-heading">
+                      {feedbackType ===
+                      "correct"
+                        ? "✓ Correct!"
+                        : feedbackType ===
+                          "wrong"
+                        ? "× Not quite."
+                        : "⏱ Time's up."}
+                    </div>
+
+                    {feedbackType ===
+                      "correct" && (
+                      <p>
+                        Excellent. You
+                        selected the
+                        correct answer.
+                      </p>
+                    )}
+
+                    {feedbackType ===
+                      "wrong" && (
+                      <p>
+                        The correct answer
+                        is{" "}
+                        <strong>
+                          {normalizeAnswer(
+                            currentQuestion.correction_answer
+                          )}
+                        </strong>
+                        .
+                      </p>
+                    )}
+
+                    {feedbackType ===
+                      "timeout" && (
+                      <p>
+                        This question was
+                        not answered before
+                        the timer expired.
+                      </p>
+                    )}
+                  </div>
                 </div>
-
-                {feedbackType ===
-                  "correct" && (
-                  <p>
-                    Excellent. You
-                    selected the correct
-                    answer.
-                  </p>
-                )}
-
-                {feedbackType ===
-                  "wrong" && (
-                  <p>
-                    The correct answer is{" "}
-                    <strong>
-                      {normalizeAnswer(
-                        currentQuestion.correction_answer
-                      )}
-                    </strong>
-                    .
-                  </p>
-                )}
-
-                {feedbackType ===
-                  "timeout" && (
-                  <p>
-                    This question was not
-                    answered before the
-                    timer expired.
-                  </p>
-                )}
 
                 {currentQuestion.explanation && (
                   <div className="quiz-feedback-explanation">
@@ -2133,7 +2027,6 @@ export default function Quiz() {
             )}
         </section>
 
-        {/* NAVIGATION */}
         <footer className="quiz-navigation">
           <div className="quiz-navigation-group">
             <button
@@ -2218,7 +2111,6 @@ export default function Quiz() {
           </div>
         </footer>
 
-        {/* QUIT */}
         <div className="quiz-quit-row">
           <button
             type="button"
@@ -2247,7 +2139,6 @@ export default function Quiz() {
           </div>
         )}
 
-        {/* QUIT MODAL */}
         {showQuitModal && (
           <div
             className="quiz-modal-backdrop"
@@ -2307,3 +2198,4 @@ export default function Quiz() {
     </main>
   );
 }
+
