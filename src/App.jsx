@@ -18,6 +18,7 @@ import Dashboard from './pages/Dashboard'
 import Practice from './pages/Practice'
 import Quiz from './pages/Quiz'
 import AdminDashboard from './pages/AdminDashboard'
+import AdminQuestions from "./pages/AdminQuestions"
 
 
 function ProtectedRoute({ children, user, loading }) {
@@ -242,6 +243,12 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+
+        <Route
+  path="/admin/questions"
+  element={<AdminQuestions />}
+/>
 
 
         {/* Admin */}
