@@ -1,103 +1,139 @@
 
-import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "../supabaseClient";
-import "./AdminQuestions.css";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
+import { useNavigate } from 'react-router-dom'
+import { supabase } from '../supabaseClient'
+import './AdminQuestions.css'
 
-const API_URL = "https://overmaths.onrender.com";
+const API_URL = 'https://overmaths.onrender.com'
+
+const EMPTY_FORM = {
+  question_text: '',
+  option_a: '',
+  option_b: '',
+  option_c: '',
+  option_d: '',
+  correction_answer: 'A',
+  topic: '',
+  explanation: '',
+  image_url: '',
+  subject: '',
+  course_id: '',
+  is_active: true,
+}
 
 function AdminQuestions() {
-  const navigate = useNavigate();
+  const navigate = useNavigate()
 
-  const [questions, setQuestions] = useState([]);
-  const [courses, setCourses] = useState([]);
-  const [examTypes, setExamTypes] = useState([]);
+  const [questions, setQuestions] = useState([])
+  const [courses, setCourses] = useState([])
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
 
-  const [search, setSearch] = useState("");
-  const [subject, setSubject] = useState("");
-  const [courseId, setCourseId] = useState("");
-  const [status, setStatus] = useState("");
+  const [search, setSearch] = useState('')
+  const [subjectFilter, setSubjectFilter] = useState('')
+  const [courseFilter, setCourseFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
 
-  const [selectedQuestion, setSelectedQuestion] = useState(null);
+  const [selectedQuestion, setSelectedQuestion] =
+    useState(null)
+
+  const [editingQuestion, setEditingQuestion] =
+    useState(null)
+
+  const [editForm, setEditForm] =
+    useState(EMPTY_FORM)
+
+  const [saving, setSaving] = useState(false)
+
+  // --------------------------------------------------
+  // LOAD QUESTIONS
+  // --------------------------------------------------
 
   const loadQuestions = async () => {
     try {
-      setLoading(true);
-      setError("");
+      setLoading(true)
+      setError('')
 
       const {
-        data: { session },
-      } = await supabase.auth.getSession();
+        data: sessionData,
+        error: sessionError,
+      } = await supabase.auth.getSession()
 
-      if (!session) {
-        navigate("/login");
-        return;
+      if (sessionError) {
+        throw new Error(
+          'Your login session could not be verified.'
+        )
       }
 
-      const params = new URLSearchParams();
+      const session = sessionData?.session
 
-      if (search.trim()) {
-        params.set("search", search.trim());
-      }
-
-      if (subject) {
-        params.set("subject", subject);
-      }
-
-      if (courseId) {
-        params.set("course_id", courseId);
-      }
-
-      if (status) {
-        params.set("is_active", status);
+      if (!session?.access_token) {
+        throw new Error(
+          'Please log in again to access the admin dashboard.'
+        )
       }
 
       const response = await fetch(
-        `${API_URL}/api/admin/questions?${params.toString()}`,
+        `${API_URL}/api/admin/questions`,
         {
+          method: 'GET',
           headers: {
             Authorization: `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
           },
         }
-      );
+      )
 
-      const data = await response.json();
+      const data = await response.json()
 
       if (response.status === 401) {
-        navigate("/login");
-        return;
+        throw new Error(
+          'Your login session has expired. Please log in again.'
+        )
       }
 
       if (response.status === 403) {
-        setError("Administrator access required.");
-        return;
+        throw new Error(
+          'Administrator access is required.'
+        )
       }
 
       if (!response.ok || !data.success) {
         throw new Error(
-          data.error || "Unable to load question bank."
-        );
+          'Unable to load the question bank.'
+        )
       }
 
-      setQuestions(data.questions || []);
-      setCourses(data.courses || []);
-      setExamTypes(data.exam_types || []);
+      setQuestions(data.questions || [])
+      setCourses(data.courses || [])
     } catch (err) {
-      console.error("Question bank error:", err);
+      console.error(
+        'ADMIN QUESTIONS ERROR:',
+        err
+      )
+
       setError(
-        err.message || "Unable to load question bank."
-      );
+        err.message ||
+        'Unable to load the question bank.'
+      )
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   useEffect(() => {
-    loadQuestions();
-  }, [search, subject, courseId, status]);
+    loadQuestions()
+  }, [])
+
+  // --------------------------------------------------
+  // FILTER OPTIONS
+  // --------------------------------------------------
 
   const subjects = useMemo(() => {
     return [
@@ -106,433 +142,1051 @@ function AdminQuestions() {
           .map((question) => question.subject)
           .filter(Boolean)
       ),
-    ].sort();
-  }, [questions]);
+    ].sort()
+  }, [questions])
 
-  const getCourseName = (question) => {
-    if (!question.course) {
-      return question.subject || "O-Level";
+  const filteredQuestions = useMemo(() => {
+    const searchValue =
+      search.trim().toLowerCase()
+
+    return questions.filter((question) => {
+      const matchesSearch =
+        !searchValue ||
+        String(question.id)
+          .toLowerCase()
+          .includes(searchValue) ||
+        String(question.question_text || '')
+          .toLowerCase()
+          .includes(searchValue) ||
+        String(question.topic || '')
+          .toLowerCase()
+          .includes(searchValue)
+
+      const matchesSubject =
+        !subjectFilter ||
+        question.subject === subjectFilter
+
+      const matchesCourse =
+        !courseFilter ||
+        String(question.course_id || '') ===
+          String(courseFilter)
+
+      const matchesStatus =
+        !statusFilter ||
+        (statusFilter === 'active'
+          ? question.is_active === true
+          : question.is_active === false)
+
+      return (
+        matchesSearch &&
+        matchesSubject &&
+        matchesCourse &&
+        matchesStatus
+      )
+    })
+  }, [
+    questions,
+    search,
+    subjectFilter,
+    courseFilter,
+    statusFilter,
+  ])
+
+  // --------------------------------------------------
+  // VIEW QUESTION
+  // --------------------------------------------------
+
+  const openQuestion = (question) => {
+    setSelectedQuestion(question)
+    setSuccess('')
+  }
+
+  const closeQuestion = () => {
+    setSelectedQuestion(null)
+  }
+
+  // --------------------------------------------------
+  // EDIT QUESTION
+  // --------------------------------------------------
+
+  const openEditQuestion = (question) => {
+    setEditingQuestion(question)
+
+    setEditForm({
+      question_text:
+        question.question_text || '',
+      option_a:
+        question.option_a || '',
+      option_b:
+        question.option_b || '',
+      option_c:
+        question.option_c || '',
+      option_d:
+        question.option_d || '',
+      correction_answer:
+        question.correction_answer || 'A',
+      topic:
+        question.topic || '',
+      explanation:
+        question.explanation || '',
+      image_url:
+        question.image_url || '',
+      subject:
+        question.subject || '',
+      course_id:
+        question.course_id
+          ? String(question.course_id)
+          : '',
+      is_active:
+        question.is_active === true,
+    })
+
+    setSelectedQuestion(null)
+    setError('')
+    setSuccess('')
+  }
+
+  const closeEditQuestion = () => {
+    if (saving) return
+
+    setEditingQuestion(null)
+    setEditForm(EMPTY_FORM)
+  }
+
+  const handleEditChange = (event) => {
+    const {
+      name,
+      value,
+      type,
+      checked,
+    } = event.target
+
+    setEditForm((previous) => ({
+      ...previous,
+      [name]:
+        type === 'checkbox'
+          ? checked
+          : value,
+    }))
+  }
+
+  const saveQuestion = async (event) => {
+    event.preventDefault()
+
+    if (!editingQuestion) return
+
+    setSaving(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      const {
+        data: sessionData,
+        error: sessionError,
+      } = await supabase.auth.getSession()
+
+      if (sessionError) {
+        throw new Error(
+          'Your login session could not be verified.'
+        )
+      }
+
+      const session = sessionData?.session
+
+      if (!session?.access_token) {
+        throw new Error(
+          'Please log in again before saving changes.'
+        )
+      }
+
+      const payload = {
+        question_text:
+          editForm.question_text.trim(),
+
+        option_a:
+          editForm.option_a.trim(),
+
+        option_b:
+          editForm.option_b.trim(),
+
+        option_c:
+          editForm.option_c.trim(),
+
+        option_d:
+          editForm.option_d.trim(),
+
+        correction_answer:
+          editForm.correction_answer,
+
+        topic:
+          editForm.topic.trim(),
+
+        explanation:
+          editForm.explanation.trim() || null,
+
+        image_url:
+          editForm.image_url.trim() || null,
+
+        subject:
+          editForm.subject.trim() || null,
+
+        course_id:
+          editForm.course_id
+            ? Number(editForm.course_id)
+            : null,
+
+        is_active:
+          editForm.is_active,
+      }
+
+      if (
+        !payload.question_text ||
+        !payload.option_a ||
+        !payload.option_b ||
+        !payload.option_c ||
+        !payload.option_d ||
+        !payload.topic
+      ) {
+        throw new Error(
+          'Please complete the question, all four options and the topic.'
+        )
+      }
+
+      const response = await fetch(
+        `${API_URL}/api/admin/questions/${editingQuestion.id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        }
+      )
+
+      const data = await response.json()
+
+      if (response.status === 401) {
+        throw new Error(
+          'Your login session has expired. Please log in again.'
+        )
+      }
+
+      if (response.status === 403) {
+        throw new Error(
+          'Administrator access is required.'
+        )
+      }
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+          'Unable to save the question.'
+        )
+      }
+
+      setEditingQuestion(null)
+      setEditForm(EMPTY_FORM)
+
+      setSuccess(
+        `Question #${editingQuestion.id} was updated successfully.`
+      )
+
+      await loadQuestions()
+
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth',
+      })
+    } catch (err) {
+      console.error(
+        'UPDATE QUESTION ERROR:',
+        err
+      )
+
+      setError(
+        err.message ||
+        'Unable to save the question.'
+      )
+    } finally {
+      setSaving(false)
     }
+  }
 
-    return (
-      question.course.code ||
-      question.course.name ||
-      "University Course"
-    );
-  };
-
-  const getStatusLabel = (question) => {
-    return question.is_active ? "Active" : "Inactive";
-  };
-
-  const getAnswerLabel = (answer) => {
-    if (!answer) return "";
-
-    const normalized = String(answer)
-      .trim()
-      .toLowerCase();
-
-    if (normalized === "a") return "A";
-    if (normalized === "b") return "B";
-    if (normalized === "c") return "C";
-    if (normalized === "d") return "D";
-
-    return answer;
-  };
+  // --------------------------------------------------
+  // RENDER
+  // --------------------------------------------------
 
   return (
-    <div className="admin-questions-page">
-      <div className="admin-questions-header">
-        <div>
+    <div className="admin-page">
+
+      {/* SIDEBAR */}
+
+      <aside className="admin-sidebar">
+        <div className="admin-brand">
+          <h2>OVERMATHS</h2>
+          <span>ADMIN PANEL</span>
+        </div>
+
+        <nav className="admin-nav">
+
           <button
-            className="back-button"
-            onClick={() => navigate("/admin")}
+            className="admin-nav-item"
+            onClick={() => navigate('/admin')}
           >
-            ← Dashboard
+            <span>⌂</span>
+            Overview
           </button>
 
-          <h1>Question Bank</h1>
+          <button
+            className="admin-nav-item active"
+            onClick={() =>
+              navigate('/admin/questions')
+            }
+          >
+            <span>▣</span>
+            Questions
+          </button>
 
-          <p>
-            Manage questions, topics, answers, explanations
-            and exam assignments.
-          </p>
-        </div>
+          <button className="admin-nav-item">
+            <span>◈</span>
+            Courses
+          </button>
 
-        <div className="question-count">
-          <strong>{questions.length}</strong>
-          <span>Questions</span>
-        </div>
-      </div>
+          <button className="admin-nav-item">
+            <span>♙</span>
+            Students
+          </button>
 
-      <div className="question-filters">
-        <div className="search-box">
-          <span>⌕</span>
+          <button className="admin-nav-item">
+            <span>◷</span>
+            Quiz Attempts
+          </button>
 
-          <input
-            type="text"
-            placeholder="Search question or topic..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+          <button className="admin-nav-item">
+            <span>◇</span>
+            Subscriptions
+          </button>
 
-        <select
-          value={subject}
-          onChange={(e) => {
-            setSubject(e.target.value);
-            setCourseId("");
-          }}
-        >
-          <option value="">All Subjects</option>
+          <button className="admin-nav-item">
+            <span>₦</span>
+            Payments
+          </button>
 
-          {subjects.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
+        </nav>
+      </aside>
 
-        <select
-          value={courseId}
-          onChange={(e) => setCourseId(e.target.value)}
-        >
-          <option value="">All Courses</option>
+      {/* MAIN */}
 
-          {courses.map((course) => (
-            <option
-              key={course.id}
-              value={course.id}
+      <main className="admin-main">
+
+        <header className="admin-header">
+          <div>
+            <p className="admin-label">
+              QUESTION MANAGEMENT
+            </p>
+
+            <h1>Question Bank</h1>
+
+            <p className="admin-subtitle">
+              Search, review and manage questions in Overmaths.
+            </p>
+          </div>
+
+          <div className="admin-user">
+            <div className="admin-avatar">
+              A
+            </div>
+
+            <div>
+              <strong>Administrator</strong>
+              <span>Admin</span>
+            </div>
+          </div>
+        </header>
+
+        {/* MESSAGES */}
+
+        {error && (
+          <div className="admin-error-message">
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="admin-success-message">
+            {success}
+          </div>
+        )}
+
+        {/* QUESTION MANAGEMENT */}
+
+        <section className="admin-section">
+
+          <div className="section-heading">
+            <div>
+              <p className="admin-label">
+                DATABASE
+              </p>
+
+              <h2>
+                Manage Questions
+              </h2>
+            </div>
+
+            <div className="question-count">
+              {filteredQuestions.length} question
+              {filteredQuestions.length !== 1
+                ? 's'
+                : ''}
+            </div>
+          </div>
+
+          {/* FILTERS */}
+
+          <div className="question-filters">
+
+            <div className="question-search">
+              <input
+                type="text"
+                placeholder="Search question, topic or ID..."
+                value={search}
+                onChange={(event) =>
+                  setSearch(event.target.value)
+                }
+              />
+            </div>
+
+            <select
+              value={subjectFilter}
+              onChange={(event) =>
+                setSubjectFilter(event.target.value)
+              }
             >
-              {course.code} — {course.name}
-            </option>
-          ))}
-        </select>
+              <option value="">
+                All Subjects
+              </option>
 
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-        >
-          <option value="">All Status</option>
-          <option value="true">Active</option>
-          <option value="false">Inactive</option>
-        </select>
-      </div>
-
-      {error && (
-        <div className="admin-question-error">
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="question-loading">
-          Loading question bank...
-        </div>
-      ) : questions.length === 0 ? (
-        <div className="question-empty">
-          <div className="empty-icon">📚</div>
-
-          <h2>No questions found</h2>
-
-          <p>
-            Try changing your search or filters.
-          </p>
-        </div>
-      ) : (
-        <div className="questions-table-wrapper">
-          <table className="questions-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Question</th>
-                <th>Subject / Course</th>
-                <th>Topic</th>
-                <th>Exams</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {questions.map((question) => (
-                <tr key={question.id}>
-                  <td className="question-id">
-                    #{question.id}
-                  </td>
-
-                  <td className="question-preview">
-                    <strong>
-                      {question.question_text}
-                    </strong>
-
-                    {question.image_url && (
-                      <span className="image-badge">
-                        🖼 Image
-                      </span>
-                    )}
-                  </td>
-
-                  <td>
-                    <span className="course-badge">
-                      {getCourseName(question)}
-                    </span>
-                  </td>
-
-                  <td>
-                    {question.topic}
-                  </td>
-
-                  <td>
-                    <div className="exam-list">
-                      {question.exam_types?.length ? (
-                        question.exam_types.map(
-                          (exam) => (
-                            <span
-                              className="exam-badge"
-                              key={exam.id}
-                            >
-                              {exam.name}
-                            </span>
-                          )
-                        )
-                      ) : (
-                        <span className="muted">
-                          None
-                        </span>
-                      )}
-                    </div>
-                  </td>
-
-                  <td>
-                    <span
-                      className={
-                        question.is_active
-                          ? "status-badge active"
-                          : "status-badge inactive"
-                      }
-                    >
-                      {getStatusLabel(question)}
-                    </span>
-                  </td>
-
-                  <td>
-                    <button
-                      className="view-button"
-                      onClick={() =>
-                        setSelectedQuestion(question)
-                      }
-                    >
-                      View
-                    </button>
-                  </td>
-                </tr>
+              {subjects.map((subject) => (
+                <option
+                  key={subject}
+                  value={subject}
+                >
+                  {subject}
+                </option>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </select>
+
+            <select
+              value={courseFilter}
+              onChange={(event) =>
+                setCourseFilter(event.target.value)
+              }
+            >
+              <option value="">
+                All Courses
+              </option>
+
+              {courses.map((course) => (
+                <option
+                  key={course.id}
+                  value={course.id}
+                >
+                  {course.code
+                    ? `${course.code} — ${course.name}`
+                    : course.name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={statusFilter}
+              onChange={(event) =>
+                setStatusFilter(event.target.value)
+              }
+            >
+              <option value="">
+                All Status
+              </option>
+
+              <option value="active">
+                Active
+              </option>
+
+              <option value="inactive">
+                Inactive
+              </option>
+            </select>
+
+          </div>
+
+          {/* TABLE */}
+
+          <div className="questions-table-wrapper">
+
+            {loading ? (
+              <div className="admin-loading">
+                Loading question bank...
+              </div>
+            ) : filteredQuestions.length === 0 ? (
+              <div className="admin-empty">
+                <h3>No questions found</h3>
+
+                <p>
+                  Try changing your search or filters.
+                </p>
+              </div>
+            ) : (
+              <table className="questions-table">
+
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Question</th>
+                    <th>Subject</th>
+                    <th>Course</th>
+                    <th>Topic</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+
+                  {filteredQuestions.map(
+                    (question) => (
+                      <tr key={question.id}>
+
+                        <td>
+                          #{question.id}
+                        </td>
+
+                        <td className="question-preview">
+                          {question.question_text}
+                        </td>
+
+                        <td>
+                          {question.subject || '—'}
+                        </td>
+
+                        <td>
+                          {question.course_code ||
+                            question.course_name ||
+                            '—'}
+                        </td>
+
+                        <td>
+                          {question.topic || '—'}
+                        </td>
+
+                        <td>
+                          <span
+                            className={
+                              question.is_active
+                                ? 'status-badge active'
+                                : 'status-badge inactive'
+                            }
+                          >
+                            {question.is_active
+                              ? 'Active'
+                              : 'Inactive'}
+                          </span>
+                        </td>
+
+                        <td>
+                          <button
+                            className="view-question-btn"
+                            onClick={() =>
+                              openQuestion(question)
+                            }
+                          >
+                            View
+                          </button>
+                        </td>
+
+                      </tr>
+                    )
+                  )}
+
+                </tbody>
+
+              </table>
+            )}
+
+          </div>
+
+        </section>
+
+      </main>
+
+      {/* VIEW MODAL */}
 
       {selectedQuestion && (
         <div
-          className="question-modal-overlay"
-          onClick={() => setSelectedQuestion(null)}
+          className="admin-modal-overlay"
+          onClick={closeQuestion}
         >
           <div
-            className="question-modal"
-            onClick={(e) => e.stopPropagation()}
+            className="admin-modal"
+            onClick={(event) =>
+              event.stopPropagation()
+            }
           >
-            <div className="modal-header">
-              <div>
-                <span className="modal-question-id">
-                  Question #{selectedQuestion.id}
-                </span>
 
-                <h2>Question Details</h2>
+            <div className="admin-modal-header">
+
+              <div>
+                <p className="admin-label">
+                  QUESTION #{selectedQuestion.id}
+                </p>
+
+                <h2>
+                  Question Details
+                </h2>
               </div>
 
               <button
-                className="close-modal"
-                onClick={() =>
-                  setSelectedQuestion(null)
-                }
+                className="modal-close"
+                onClick={closeQuestion}
               >
                 ×
               </button>
+
             </div>
 
-            <div className="modal-meta">
-              <span>
-                {getCourseName(selectedQuestion)}
-              </span>
+            <div className="question-detail">
 
-              <span>
-                {selectedQuestion.topic}
-              </span>
+              <div className="detail-row">
+                <span>Question</span>
 
-              <span
-                className={
-                  selectedQuestion.is_active
-                    ? "status-badge active"
-                    : "status-badge inactive"
-                }
-              >
-                {getStatusLabel(selectedQuestion)}
-              </span>
-            </div>
-
-            <div className="modal-section">
-              <h3>Question</h3>
-
-              <p className="modal-question-text">
-                {selectedQuestion.question_text}
-              </p>
-            </div>
-
-            {selectedQuestion.image_url && (
-              <div className="modal-section">
-                <h3>Question Image</h3>
-
-                <img
-                  src={selectedQuestion.image_url}
-                  alt="Question"
-                  className="question-image"
-                />
-              </div>
-            )}
-
-            <div className="modal-section">
-              <h3>Options</h3>
-
-              <div className="options-grid">
-                <div
-                  className={
-                    getAnswerLabel(
-                      selectedQuestion.correction_answer
-                    ) === "A"
-                      ? "answer-option correct"
-                      : "answer-option"
-                  }
-                >
-                  <strong>A</strong>
-                  <span>
-                    {selectedQuestion.option_a}
-                  </span>
-                </div>
-
-                <div
-                  className={
-                    getAnswerLabel(
-                      selectedQuestion.correction_answer
-                    ) === "B"
-                      ? "answer-option correct"
-                      : "answer-option"
-                  }
-                >
-                  <strong>B</strong>
-                  <span>
-                    {selectedQuestion.option_b}
-                  </span>
-                </div>
-
-                <div
-                  className={
-                    getAnswerLabel(
-                      selectedQuestion.correction_answer
-                    ) === "C"
-                      ? "answer-option correct"
-                      : "answer-option"
-                  }
-                >
-                  <strong>C</strong>
-                  <span>
-                    {selectedQuestion.option_c}
-                  </span>
-                </div>
-
-                <div
-                  className={
-                    getAnswerLabel(
-                      selectedQuestion.correction_answer
-                    ) === "D"
-                      ? "answer-option correct"
-                      : "answer-option"
-                  }
-                >
-                  <strong>D</strong>
-                  <span>
-                    {selectedQuestion.option_d}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="modal-section">
-              <h3>Correct Answer</h3>
-
-              <div className="correct-answer">
-                {getAnswerLabel(
-                  selectedQuestion.correction_answer
-                )}
-              </div>
-            </div>
-
-            {selectedQuestion.explanation && (
-              <div className="modal-section">
-                <h3>Explanation</h3>
-
-                <p className="explanation">
-                  {selectedQuestion.explanation}
+                <p>
+                  {selectedQuestion.question_text}
                 </p>
               </div>
-            )}
 
-            <div className="modal-section">
-              <h3>Exam Types</h3>
+              {selectedQuestion.image_url && (
+                <div className="detail-row">
+                  <span>Image</span>
 
-              <div className="exam-list">
-                {selectedQuestion.exam_types?.length ? (
-                  selectedQuestion.exam_types.map(
-                    (exam) => (
-                      <span
-                        className="exam-badge"
-                        key={exam.id}
-                      >
-                        {exam.name}
-                      </span>
-                    )
-                  )
-                ) : (
-                  <span className="muted">
-                    No exam assigned
-                  </span>
-                )}
+                  <img
+                    src={selectedQuestion.image_url}
+                    alt="Question"
+                    className="question-detail-image"
+                  />
+                </div>
+              )}
+
+              <div className="detail-row">
+                <span>Options</span>
+
+                <div className="question-options">
+
+                  <div>
+                    <strong>A.</strong>
+                    {selectedQuestion.option_a}
+                  </div>
+
+                  <div>
+                    <strong>B.</strong>
+                    {selectedQuestion.option_b}
+                  </div>
+
+                  <div>
+                    <strong>C.</strong>
+                    {selectedQuestion.option_c}
+                  </div>
+
+                  <div>
+                    <strong>D.</strong>
+                    {selectedQuestion.option_d}
+                  </div>
+
+                </div>
               </div>
+
+              <div className="detail-grid">
+
+                <div className="detail-row">
+                  <span>Correct Answer</span>
+
+                  <strong className="correct-answer">
+                    {selectedQuestion.correction_answer}
+                  </strong>
+                </div>
+
+                <div className="detail-row">
+                  <span>Topic</span>
+
+                  <p>
+                    {selectedQuestion.topic || '—'}
+                  </p>
+                </div>
+
+                <div className="detail-row">
+                  <span>Subject</span>
+
+                  <p>
+                    {selectedQuestion.subject || '—'}
+                  </p>
+                </div>
+
+                <div className="detail-row">
+                  <span>Course</span>
+
+                  <p>
+                    {selectedQuestion.course_code ||
+                      selectedQuestion.course_name ||
+                      '—'}
+                  </p>
+                </div>
+
+              </div>
+
+              <div className="detail-row">
+                <span>Explanation</span>
+
+                <p>
+                  {selectedQuestion.explanation ||
+                    'No explanation provided.'}
+                </p>
+              </div>
+
+              <div className="detail-row">
+                <span>Status</span>
+
+                <span
+                  className={
+                    selectedQuestion.is_active
+                      ? 'status-badge active'
+                      : 'status-badge inactive'
+                  }
+                >
+                  {selectedQuestion.is_active
+                    ? 'Active'
+                    : 'Inactive'}
+                </span>
+              </div>
+
+              <div className="question-modal-actions">
+
+                <button
+                  className="edit-question-btn"
+                  onClick={() =>
+                    openEditQuestion(
+                      selectedQuestion
+                    )
+                  }
+                >
+                  Edit Question
+                </button>
+
+                <button
+                  className="modal-secondary-btn"
+                  onClick={closeQuestion}
+                >
+                  Close
+                </button>
+
+              </div>
+
             </div>
 
-            <div className="modal-footer">
-              <button
-                className="secondary-modal-button"
-                onClick={() =>
-                  setSelectedQuestion(null)
-                }
-              >
-                Close
-              </button>
-
-              <button
-                className="primary-modal-button"
-                disabled
-              >
-                Edit Question
-              </button>
-            </div>
           </div>
         </div>
       )}
+
+      {/* EDIT MODAL */}
+
+      {editingQuestion && (
+        <div
+          className="admin-modal-overlay"
+          onClick={closeEditQuestion}
+        >
+          <div
+            className="admin-modal edit-question-modal"
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+          >
+
+            <div className="admin-modal-header">
+
+              <div>
+                <p className="admin-label">
+                  EDIT QUESTION #{editingQuestion.id}
+                </p>
+
+                <h2>
+                  Update Question
+                </h2>
+              </div>
+
+              <button
+                className="modal-close"
+                onClick={closeEditQuestion}
+                disabled={saving}
+              >
+                ×
+              </button>
+
+            </div>
+
+            <form
+              className="question-edit-form"
+              onSubmit={saveQuestion}
+            >
+
+              {/* QUESTION */}
+
+              <div className="edit-form-group full-width">
+                <label>
+                  Question Text
+                </label>
+
+                <textarea
+                  name="question_text"
+                  value={editForm.question_text}
+                  onChange={handleEditChange}
+                  rows="5"
+                  required
+                />
+              </div>
+
+              {/* OPTIONS */}
+
+              <div className="edit-form-section">
+
+                <div className="edit-section-title">
+                  Answer Options
+                </div>
+
+                <div className="edit-options-grid">
+
+                  <div className="edit-form-group">
+                    <label>Option A</label>
+
+                    <textarea
+                      name="option_a"
+                      value={editForm.option_a}
+                      onChange={handleEditChange}
+                      rows="3"
+                      required
+                    />
+                  </div>
+
+                  <div className="edit-form-group">
+                    <label>Option B</label>
+
+                    <textarea
+                      name="option_b"
+                      value={editForm.option_b}
+                      onChange={handleEditChange}
+                      rows="3"
+                      required
+                    />
+                  </div>
+
+                  <div className="edit-form-group">
+                    <label>Option C</label>
+
+                    <textarea
+                      name="option_c"
+                      value={editForm.option_c}
+                      onChange={handleEditChange}
+                      rows="3"
+                      required
+                    />
+                  </div>
+
+                  <div className="edit-form-group">
+                    <label>Option D</label>
+
+                    <textarea
+                      name="option_d"
+                      value={editForm.option_d}
+                      onChange={handleEditChange}
+                      rows="3"
+                      required
+                    />
+                  </div>
+
+                </div>
+
+              </div>
+
+              {/* DETAILS */}
+
+              <div className="edit-form-grid">
+
+                <div className="edit-form-group">
+                  <label>
+                    Correct Answer
+                  </label>
+
+                  <select
+                    name="correction_answer"
+                    value={editForm.correction_answer}
+                    onChange={handleEditChange}
+                    required
+                  >
+                    <option value="A">
+                      A
+                    </option>
+
+                    <option value="B">
+                      B
+                    </option>
+
+                    <option value="C">
+                      C
+                    </option>
+
+                    <option value="D">
+                      D
+                    </option>
+                  </select>
+                </div>
+
+                <div className="edit-form-group">
+                  <label>
+                    Topic
+                  </label>
+
+                  <input
+                    type="text"
+                    name="topic"
+                    value={editForm.topic}
+                    onChange={handleEditChange}
+                    required
+                  />
+                </div>
+
+                <div className="edit-form-group">
+                  <label>
+                    Subject
+                  </label>
+
+                  <input
+                    type="text"
+                    name="subject"
+                    value={editForm.subject}
+                    onChange={handleEditChange}
+                    placeholder="e.g. Mathematics"
+                  />
+                </div>
+
+                <div className="edit-form-group">
+                  <label>
+                    Course
+                  </label>
+
+                  <select
+                    name="course_id"
+                    value={editForm.course_id}
+                    onChange={handleEditChange}
+                  >
+                    <option value="">
+                      No Course / O-Level
+                    </option>
+
+                    {courses.map((course) => (
+                      <option
+                        key={course.id}
+                        value={course.id}
+                      >
+                        {course.code
+                          ? `${course.code} — ${course.name}`
+                          : course.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+              </div>
+
+              {/* EXPLANATION */}
+
+              <div className="edit-form-group full-width">
+                <label>
+                  Explanation
+                </label>
+
+                <textarea
+                  name="explanation"
+                  value={editForm.explanation}
+                  onChange={handleEditChange}
+                  rows="5"
+                  placeholder="Explain the correct answer..."
+                />
+              </div>
+
+              {/* IMAGE */}
+
+              <div className="edit-form-group full-width">
+                <label>
+                  Image URL
+                </label>
+
+                <input
+                  type="text"
+                  name="image_url"
+                  value={editForm.image_url}
+                  onChange={handleEditChange}
+                  placeholder="Paste image URL if the question has an image"
+                />
+              </div>
+
+              {/* STATUS */}
+
+              <label className="active-toggle">
+
+                <input
+                  type="checkbox"
+                  name="is_active"
+                  checked={editForm.is_active}
+                  onChange={handleEditChange}
+                />
+
+                <span>
+                  Question is active
+                </span>
+
+              </label>
+
+              {/* ACTIONS */}
+
+              <div className="question-edit-actions">
+
+                <button
+                  type="button"
+                  className="modal-secondary-btn"
+                  onClick={closeEditQuestion}
+                  disabled={saving}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="edit-question-btn"
+                  disabled={saving}
+                >
+                  {saving
+                    ? 'Saving Changes...'
+                    : 'Save Changes'}
+                </button>
+
+              </div>
+
+            </form>
+
+          </div>
+        </div>
+      )}
+
     </div>
-  );
+  )
 }
 
-export default AdminQuestions;
+export default AdminQuestions
 
