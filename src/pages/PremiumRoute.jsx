@@ -1,170 +1,187 @@
 import { useEffect, useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, Outlet } from 'react-router-dom'
+import { supabase } from '../supabaseClient'
 
-const API_URL =
-  import.meta.env.VITE_API_URL ||
-  'http://localhost:5050'
-
-function PremiumRoute({
-  children,
-  user,
-  loading,
-}) {
-  const [checkingPremium, setCheckingPremium] =
-    useState(true)
-
-  const [isPremium, setIsPremium] =
-    useState(false)
-
-  const [error, setError] =
-    useState('')
+function PremiumRoute() {
+  const [checking, setChecking] = useState(true)
+  const [allowed, setAllowed] = useState(false)
 
   useEffect(() => {
+    let mounted = true
 
-    async function checkPremium() {
-
-      if (!user) {
-
-        setCheckingPremium(false)
-
-        return
-      }
-
+    async function checkPremiumAccess() {
       try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
 
-        setError('')
+        if (!session?.user) {
+          if (mounted) {
+            setAllowed(false)
+            setChecking(false)
+          }
 
-        const response = await fetch(
-          `${API_URL}/api/dashboard/access?user_id=${encodeURIComponent(user.id)}`
-        )
-
-        const data = await response.json()
-
-        if (!response.ok || !data.success) {
-
-          throw new Error(
-            data.error ||
-            'Unable to verify Premium access.'
-          )
+          return
         }
 
-        setIsPremium(
-          data.access?.is_premium === true
-        )
+        const { data: userProfile, error: userError } =
+          await supabase
+            .from('users')
+            .select('id')
+            .eq(
+              'auth_user_id',
+              session.user.id
+            )
+            .single()
 
+        if (userError || !userProfile) {
+          console.error(
+            'Premium profile error:',
+            userError
+          )
+
+          if (mounted) {
+            setAllowed(false)
+            setChecking(false)
+          }
+
+          return
+        }
+
+        const {
+          data: subscriptions,
+          error: subscriptionError,
+        } = await supabase
+          .from('subscriptions')
+          .select(
+            'id, plan, started_at, expires_at, status, created_at'
+          )
+          .eq(
+            'user_id',
+            userProfile.id
+          )
+          .order('created_at', {
+            ascending: false,
+          })
+
+        if (subscriptionError) {
+          console.error(
+            'Premium subscription error:',
+            subscriptionError
+          )
+
+          if (mounted) {
+            setAllowed(false)
+            setChecking(false)
+          }
+
+          return
+        }
+
+        const now = new Date()
+
+        const hasPremium =
+          (subscriptions || []).some((subscription) => {
+            const plan = String(
+              subscription?.plan || ''
+            )
+              .trim()
+              .toLowerCase()
+
+            const status = String(
+              subscription?.status || ''
+            )
+              .trim()
+              .toLowerCase()
+
+            const premiumPlan =
+              plan === 'premium' ||
+              plan === 'premium monthly' ||
+              plan === 'premium yearly' ||
+              plan === 'premium annual'
+
+            if (!premiumPlan) {
+              return false
+            }
+
+            if (status !== 'active') {
+              return false
+            }
+
+            if (subscription.started_at) {
+              const startedAt =
+                new Date(
+                  subscription.started_at
+                )
+
+              if (
+                !Number.isNaN(
+                  startedAt.getTime()
+                ) &&
+                startedAt > now
+              ) {
+                return false
+              }
+            }
+
+            if (subscription.expires_at) {
+              const expiresAt =
+                new Date(
+                  subscription.expires_at
+                )
+
+              if (
+                !Number.isNaN(
+                  expiresAt.getTime()
+                ) &&
+                expiresAt <= now
+              ) {
+                return false
+              }
+            }
+
+            return true
+          })
+
+        if (mounted) {
+          setAllowed(hasPremium)
+          setChecking(false)
+        }
       } catch (error) {
-
         console.error(
-          'Premium access error:',
+          'Premium route error:',
           error
         )
 
-        setError(
-          error.message ||
-          'Unable to verify Premium access.'
-        )
-
-        setIsPremium(false)
-
-      } finally {
-
-        setCheckingPremium(false)
+        if (mounted) {
+          setAllowed(false)
+          setChecking(false)
+        }
       }
     }
 
-    if (!loading) {
+    checkPremiumAccess()
 
-      checkPremium()
+    return () => {
+      mounted = false
     }
+  }, [])
 
-  }, [user, loading])
-
-
-  // ==========================================================
-  // LOADING
-  // ==========================================================
-
-  if (
-    loading ||
-    checkingPremium
-  ) {
-
+  if (checking) {
     return (
-      <div
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: '#070b14',
-          color: '#ffffff',
-          fontFamily: 'Inter, sans-serif',
-        }}
-      >
-        Checking Premium access...
-      </div>
-    )
-  }
-
-
-  // ==========================================================
-  // NOT LOGGED IN
-  // ==========================================================
-
-  if (!user) {
-
-    return (
-      <Navigate
-        to="/login"
-        replace
-      />
-    )
-  }
-
-
-  // ==========================================================
-  // ERROR
-  // ==========================================================
-
-  if (error) {
-
-    return (
-      <div
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: '#070b14',
-          color: '#ffffff',
-          textAlign: 'center',
-          padding: '30px',
-        }}
-      >
-
-        <div>
-
-          <h2>
-            Premium access unavailable
-          </h2>
+      <div className="dashboard-page dashboard-loading">
+        <div className="dashboard-loader">
+          <div className="loader-orb"></div>
 
           <p>
-            {error}
+            Verifying Premium access...
           </p>
-
         </div>
-
       </div>
     )
   }
 
-
-  // ==========================================================
-  // FREE USER
-  // ==========================================================
-
-  if (!isPremium) {
-
+  if (!allowed) {
     return (
       <Navigate
         to="/premium-upgrade"
@@ -173,12 +190,7 @@ function PremiumRoute({
     )
   }
 
-
-  // ==========================================================
-  // PREMIUM USER
-  // ==========================================================
-
-  return children
+  return <Outlet />
 }
 
 export default PremiumRoute

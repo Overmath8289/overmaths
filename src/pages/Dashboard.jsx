@@ -13,60 +13,236 @@ function Dashboard() {
   const [dashboardData, setDashboardData] = useState(null)
   const [dashboardLoading, setDashboardLoading] = useState(true)
 
-  // ---------------------------------------------------------
-  // SUBSCRIPTION STATE
-  // ---------------------------------------------------------
-
   const [subscriptionLoading, setSubscriptionLoading] = useState(true)
   const [isPremium, setIsPremium] = useState(false)
   const [subscription, setSubscription] = useState(null)
 
-  // ---------------------------------------------------------
-  // LOAD DASHBOARD
-  // ---------------------------------------------------------
+  // =========================================================
+  // CHECK SUBSCRIPTION
+  // =========================================================
 
   useEffect(() => {
     let mounted = true
 
     async function loadDashboard() {
       try {
+        // -----------------------------------------------------
+        // AUTHENTICATION
+        // -----------------------------------------------------
+
         const {
           data: { session },
           error: authError,
         } = await supabase.auth.getSession()
 
-        if (authError || !session?.user) {
-          navigate('/login')
+        if (authError) {
+          console.error('Authentication error:', authError)
+        }
+
+        if (!session?.user) {
+          navigate('/login', { replace: true })
           return
         }
 
-        const user = session.user
+        const authUserId = session.user.id
 
         // -----------------------------------------------------
         // PROFILE
         // -----------------------------------------------------
 
-        const { data, error } = await supabase
-          .from('users')
-          .select('id, full_name, learning_route, exam_type')
-          .eq('auth_user_id', user.id)
-          .single()
+        const { data: profileData, error: profileError } =
+          await supabase
+            .from('users')
+            .select(
+              'id, full_name, learning_route, exam_type'
+            )
+            .eq('auth_user_id', authUserId)
+            .single()
 
-        if (error) {
-          console.error('Profile error:', error)
+        if (profileError || !profileData) {
+          console.error(
+            'Profile error:',
+            profileError
+          )
+
           return
         }
 
         if (!mounted) return
 
-        setProfile(data)
+        setProfile(profileData)
 
-        // -----------------------------------------------------
-        // DASHBOARD STATISTICS
-        // -----------------------------------------------------
+        // =====================================================
+        // PREMIUM SUBSCRIPTION CHECK
+        // =====================================================
+
+        let premiumUser = false
+        let latestSubscription = null
 
         try {
-          const summary = await getDashboardSummary(user.id)
+          const {
+            data: subscriptions,
+            error: subscriptionError,
+          } = await supabase
+            .from('subscriptions')
+            .select(
+              `
+              id,
+              plan,
+              started_at,
+              expires_at,
+              status,
+              created_at
+              `
+            )
+            .eq('user_id', profileData.id)
+            .order('created_at', {
+              ascending: false,
+            })
+
+          if (subscriptionError) {
+            console.error(
+              'Subscription lookup error:',
+              subscriptionError
+            )
+          } else {
+            // -------------------------------------------------
+            // Find an actually active Premium subscription.
+            //
+            // Do NOT only inspect the newest subscription.
+            // A user may have an old expired subscription and
+            // a newer active Premium subscription.
+            // -------------------------------------------------
+
+            const now = new Date()
+
+            const activePremiumSubscription =
+              (subscriptions || []).find((item) => {
+                const plan = String(
+                  item?.plan || ''
+                )
+                  .trim()
+                  .toLowerCase()
+
+                const status = String(
+                  item?.status || ''
+                )
+                  .trim()
+                  .toLowerCase()
+
+                const premiumPlan =
+                  plan === 'premium' ||
+                  plan === 'premium monthly' ||
+                  plan === 'premium yearly' ||
+                  plan === 'premium annual'
+
+                if (!premiumPlan) {
+                  return false
+                }
+
+                // ---------------------------------------------
+                // Status must be active
+                // ---------------------------------------------
+
+                if (status !== 'active') {
+                  return false
+                }
+
+                // ---------------------------------------------
+                // Check start date if one exists
+                // ---------------------------------------------
+
+                if (item.started_at) {
+                  const startedAt = new Date(
+                    item.started_at
+                  )
+
+                  if (
+                    !Number.isNaN(startedAt.getTime()) &&
+                    startedAt > now
+                  ) {
+                    return false
+                  }
+                }
+
+                // ---------------------------------------------
+                // Check expiry date if one exists
+                // ---------------------------------------------
+
+                if (item.expires_at) {
+                  const expiresAt = new Date(
+                    item.expires_at
+                  )
+
+                  if (
+                    !Number.isNaN(expiresAt.getTime()) &&
+                    expiresAt <= now
+                  ) {
+                    return false
+                  }
+                }
+
+                return true
+              })
+
+            if (activePremiumSubscription) {
+              premiumUser = true
+              latestSubscription =
+                activePremiumSubscription
+            } else {
+              // Keep the newest subscription for display/debugging
+              latestSubscription =
+                subscriptions?.[0] || null
+            }
+          }
+        } catch (subscriptionError) {
+          console.error(
+            'Premium verification error:',
+            subscriptionError
+          )
+        }
+
+        if (!mounted) return
+
+        setSubscription(
+          latestSubscription
+        )
+
+        setIsPremium(premiumUser)
+        setSubscriptionLoading(false)
+
+        console.log(
+          'OVERMATHS PREMIUM ACCESS:',
+          premiumUser
+        )
+
+        console.log(
+          'OVERMATHS SUBSCRIPTION:',
+          latestSubscription
+        )
+
+        // =====================================================
+        // CRITICAL:
+        // PREMIUM USERS MUST LEAVE /dashboard
+        // =====================================================
+
+        if (premiumUser) {
+          navigate('/premium', {
+            replace: true,
+          })
+
+          return
+        }
+
+        // =====================================================
+        // FREE USER DASHBOARD STATISTICS
+        // =====================================================
+
+        try {
+          const summary =
+            await getDashboardSummary(
+              authUserId
+            )
 
           if (mounted) {
             setDashboardData(summary)
@@ -79,111 +255,6 @@ function Dashboard() {
         } finally {
           if (mounted) {
             setDashboardLoading(false)
-          }
-        }
-
-        // -----------------------------------------------------
-        // PREMIUM SUBSCRIPTION
-        // -----------------------------------------------------
-
-        try {
-          const { data: latestSubscription, error: subscriptionError } =
-            await supabase
-              .from('subscriptions')
-              .select(
-                'id, plan, started_at, expires_at, status, created_at'
-              )
-              .eq('user_id', data.id)
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle()
-
-          if (subscriptionError) {
-            console.error(
-              'Subscription lookup error:',
-              subscriptionError
-            )
-
-            if (mounted) {
-              setIsPremium(false)
-            }
-
-            return
-          }
-
-          if (!latestSubscription) {
-            if (mounted) {
-              setSubscription(null)
-              setIsPremium(false)
-            }
-
-            return
-          }
-
-          const plan = String(
-            latestSubscription.plan || ''
-          )
-            .trim()
-            .toLowerCase()
-
-          const status = String(
-            latestSubscription.status || ''
-          )
-            .trim()
-            .toLowerCase()
-
-          const now = new Date()
-
-          const startedAt = new Date(
-            latestSubscription.started_at
-          )
-
-          const expiresAt = new Date(
-            latestSubscription.expires_at
-          )
-
-          const premiumPlan =
-            plan === 'premium' ||
-            plan === 'premium monthly' ||
-            plan === 'premium yearly' ||
-            plan === 'premium annual'
-
-          const active =
-            status === 'active'
-
-          const started =
-            startedAt <= now
-
-          const notExpired =
-            expiresAt > now
-
-          const premiumAccess =
-            premiumPlan &&
-            active &&
-            started &&
-            notExpired
-
-          console.log(
-            'OVERMATHS PREMIUM:',
-            premiumAccess
-          )
-
-          if (mounted) {
-            setSubscription(latestSubscription)
-            setIsPremium(premiumAccess)
-          }
-        } catch (subscriptionError) {
-          console.error(
-            'Premium verification error:',
-            subscriptionError
-          )
-
-          if (mounted) {
-            setIsPremium(false)
-          }
-        } finally {
-          if (mounted) {
-            setSubscriptionLoading(false)
           }
         }
       } catch (error) {
@@ -205,30 +276,54 @@ function Dashboard() {
     }
   }, [navigate])
 
-  // ---------------------------------------------------------
+  // =========================================================
   // LOADING
-  // ---------------------------------------------------------
+  // =========================================================
 
-  if (loading) {
+  if (loading || subscriptionLoading) {
     return (
       <div className="dashboard-page dashboard-loading">
         <div className="dashboard-loader">
           <div className="loader-orb"></div>
-          <p>Preparing your learning space...</p>
+
+          <p>
+            Preparing your learning space...
+          </p>
         </div>
       </div>
     )
   }
 
-  // ---------------------------------------------------------
+  // =========================================================
+  // SAFETY
+  //
+  // If Premium detection somehow changes while this component
+  // is rendering, do not show the Free dashboard.
+  // =========================================================
+
+  if (isPremium) {
+    return (
+      <div className="dashboard-page dashboard-loading">
+        <div className="dashboard-loader">
+          <div className="loader-orb"></div>
+
+          <p>
+            Opening your Premium Command Center...
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // =========================================================
   // PROFILE
-  // ---------------------------------------------------------
+  // =========================================================
 
   const fullName =
     profile?.full_name || 'Student'
 
   const firstName =
-    fullName.trim().split(' ')[0]
+    fullName.trim().split(' ')[0] || 'Student'
 
   const examType =
     profile?.exam_type || 'UTME'
@@ -249,9 +344,9 @@ function Dashboard() {
       ? 'Build stronger understanding across your university courses.'
       : `Let's make today's ${examType} preparation count.`
 
-  // ---------------------------------------------------------
+  // =========================================================
   // DASHBOARD DATA
-  // ---------------------------------------------------------
+  // =========================================================
 
   const overview =
     dashboardData?.overview || {}
@@ -280,21 +375,22 @@ function Dashboard() {
   const examReadiness =
     overview.exam_readiness || 0
 
-  // ---------------------------------------------------------
+  // =========================================================
   // ACTIONS
-  // ---------------------------------------------------------
+  // =========================================================
 
   const handleStartPractice = () => {
     navigate('/practice')
   }
 
   const handlePremiumAction = () => {
-    if (isPremium) {
-      navigate('/premium')
-    } else {
-      navigate('/premium-upgrade')
-    }
+    // Free users always go to the upgrade page.
+    navigate('/premium-upgrade')
   }
+
+  // =========================================================
+  // RENDER
+  // =========================================================
 
   return (
     <div className="dashboard-page">
@@ -317,21 +413,27 @@ function Dashboard() {
           <button
             type="button"
             className="active"
-            onClick={() => navigate('/dashboard')}
+            onClick={() =>
+              navigate('/dashboard')
+            }
           >
             Dashboard
           </button>
 
           <button
             type="button"
-            onClick={() => navigate('/practice')}
+            onClick={() =>
+              navigate('/practice')
+            }
           >
             Practice
           </button>
 
           <button
             type="button"
-            onClick={() => navigate('/dashboard')}
+            onClick={() =>
+              navigate('/dashboard')
+            }
           >
             Progress
           </button>
@@ -393,9 +495,7 @@ function Dashboard() {
           <div>
 
             <p className="dashboard-eyebrow">
-              {isPremium
-                ? 'OVERMATHS PREMIUM COMMAND CENTRE'
-                : routeTitle}
+              {routeTitle}
             </p>
 
             <h1>
@@ -404,27 +504,17 @@ function Dashboard() {
             </h1>
 
             <p className="dashboard-subtitle">
-              {isPremium
-                ? 'Your Premium preparation system is ready. Let’s make your next study session count.'
-                : routeDescription}
+              {routeDescription}
             </p>
 
           </div>
 
-          <div
-            className={
-              isPremium
-                ? 'welcome-status premium-status'
-                : 'welcome-status'
-            }
-          >
+          <div className="welcome-status">
+
             <span className="status-dot"></span>
 
-            {subscriptionLoading
-              ? 'Checking account...'
-              : isPremium
-                ? 'Premium Active'
-                : 'Ready to learn'}
+            Ready to learn
+
           </div>
 
         </section>
@@ -465,233 +555,162 @@ function Dashboard() {
           )}
 
         {/* ===================================================
-            PREMIUM EXPERIENCE
+            PREMIUM ADVERTISEMENT
         =================================================== */}
 
-        {isPremium ? (
+        <section className="premium-ad-card">
 
-          <section className="premium-command-center">
+          <div className="premium-ad-glow glow-one"></div>
+          <div className="premium-ad-glow glow-two"></div>
 
-            <div className="premium-command-glow"></div>
+          <div className="premium-ad-content">
 
-            <div className="premium-command-content">
-
-              <div className="premium-command-label">
-                <span className="premium-pulse"></span>
-                OVERMATHS PREMIUM
-              </div>
-
-              <h2>
-                Your preparation,
-                <span> intelligently planned.</span>
-              </h2>
-
-              <p>
-                Your Premium tools are unlocked.
-                Plan your exam, understand your
-                performance and focus on what matters most.
-              </p>
-
-              <div className="premium-feature-strip">
-
-                <span>Exam Planner</span>
-                <span>Smart Analytics</span>
-                <span>Personal Missions</span>
-                <span>Overmaths Coach</span>
-
-              </div>
-
-              <button
-                type="button"
-                className="premium-button premium-open-button"
-                onClick={handlePremiumAction}
-              >
-                Open Premium Command Center
-
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                >
-                  <path
-                    d="M5 12h14M13 6l6 6-6 6"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-
-              </button>
-
-            </div>
-
-            <div className="premium-command-preview">
-
-              <div className="premium-preview-window">
-
-                <div className="preview-top">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </div>
-
-                <div className="preview-countdown">
-                  <small>EXAM COUNTDOWN</small>
-                  <strong>247</strong>
-                  <span>DAYS</span>
-                </div>
-
-                <div className="preview-bars">
-                  <span style={{ width: '78%' }}></span>
-                  <span style={{ width: '61%' }}></span>
-                  <span style={{ width: '86%' }}></span>
-                </div>
-
-              </div>
-
-            </div>
-
-          </section>
-
-        ) : (
-
-          /* =================================================
-             FREE USER PREMIUM ADVERTISEMENT
-          ================================================= */
-
-          <section className="premium-ad-card">
-
-            <div className="premium-ad-glow glow-one"></div>
-            <div className="premium-ad-glow glow-two"></div>
-
-            <div className="premium-ad-content">
-
-              <div className="premium-ad-badge">
-                <span className="premium-star">✦</span>
-                OVERMATHS PREMIUM
-              </div>
-
-              <div className="premium-ad-slider">
-
-                <div className="premium-ad-slide active">
-                  <small>IMAGINE THIS</small>
-
-                  <h2>
-                    Know exactly
-                    <span> what to study next.</span>
-                  </h2>
-
-                  <p>
-                    Premium turns your practice history
-                    into a personalized preparation strategy.
-                  </p>
-                </div>
-
-                <div className="premium-ad-slide">
-                  <small>SEE YOUR WEAKNESSES</small>
-
-                  <h2>
-                    Stop guessing
-                    <span> where you're losing marks.</span>
-                  </h2>
-
-                  <p>
-                    Discover the topics that deserve
-                    your attention before exam day.
-                  </p>
-                </div>
-
-                <div className="premium-ad-slide">
-                  <small>PREPARE WITH PURPOSE</small>
-
-                  <h2>
-                    Turn your exam date
-                    <span> into a strategy.</span>
-                  </h2>
-
-                  <p>
-                    Build focused preparation around
-                    the time you actually have.
-                  </p>
-                </div>
-
-              </div>
-
-              <div className="premium-ad-features">
-
-                <div>
-                  <strong>◷</strong>
-                  <span>Exam Planner</span>
-                </div>
-
-                <div>
-                  <strong>◈</strong>
-                  <span>Smart Analytics</span>
-                </div>
-
-                <div>
-                  <strong>⚡</strong>
-                  <span>Daily Missions</span>
-                </div>
-
-                <div>
-                  <strong>✦</strong>
-                  <span>AI Coaching</span>
-                </div>
-
-              </div>
-
-              <button
-                type="button"
-                className="premium-ad-button"
-                onClick={handlePremiumAction}
-              >
-                Unlock Premium
-
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                >
-                  <path
-                    d="M5 12h14M13 6l6 6-6 6"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-
-              </button>
-
-              <span className="premium-ad-note">
-                Unlock the full Overmaths preparation experience.
+            <div className="premium-ad-badge">
+              <span className="premium-star">
+                ✦
               </span>
 
+              OVERMATHS PREMIUM
             </div>
 
-            <div className="premium-ad-visual">
+            <div className="premium-ad-slider">
 
-              <div className="ad-orbit orbit-a"></div>
-              <div className="ad-orbit orbit-b"></div>
-
-              <div className="ad-core">
-
-                <span>✦</span>
-
-                <strong>
-                  PREMIUM
-                </strong>
+              <div className="premium-ad-slide active">
 
                 <small>
-                  YOUR ADVANTAGE
+                  IMAGINE THIS
                 </small>
+
+                <h2>
+                  Know exactly
+                  <span>
+                    {' '}what to study next.
+                  </span>
+                </h2>
+
+                <p>
+                  Premium turns your practice history
+                  into a personalized preparation strategy.
+                </p>
+
+              </div>
+
+              <div className="premium-ad-slide">
+
+                <small>
+                  SEE YOUR WEAKNESSES
+                </small>
+
+                <h2>
+                  Stop guessing
+                  <span>
+                    {' '}where you're losing marks.
+                  </span>
+                </h2>
+
+                <p>
+                  Discover the topics that deserve
+                  your attention before exam day.
+                </p>
+
+              </div>
+
+              <div className="premium-ad-slide">
+
+                <small>
+                  PREPARE WITH PURPOSE
+                </small>
+
+                <h2>
+                  Turn your exam date
+                  <span>
+                    {' '}into a strategy.
+                  </span>
+                </h2>
+
+                <p>
+                  Build focused preparation around
+                  the time you actually have.
+                </p>
 
               </div>
 
             </div>
 
-          </section>
-        )}
+            <div className="premium-ad-features">
+
+              <div>
+                <strong>◷</strong>
+                <span>Exam Planner</span>
+              </div>
+
+              <div>
+                <strong>◈</strong>
+                <span>Smart Analytics</span>
+              </div>
+
+              <div>
+                <strong>⚡</strong>
+                <span>Daily Missions</span>
+              </div>
+
+              <div>
+                <strong>✦</strong>
+                <span>AI Coaching</span>
+              </div>
+
+            </div>
+
+            <button
+              type="button"
+              className="premium-ad-button"
+              onClick={handlePremiumAction}
+            >
+              Unlock Premium
+
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <path
+                  d="M5 12h14M13 6l6 6-6 6"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+
+            </button>
+
+            <span className="premium-ad-note">
+              Unlock the full Overmaths preparation experience.
+            </span>
+
+          </div>
+
+          <div className="premium-ad-visual">
+
+            <div className="ad-orbit orbit-a"></div>
+            <div className="ad-orbit orbit-b"></div>
+
+            <div className="ad-core">
+
+              <span>✦</span>
+
+              <strong>
+                PREMIUM
+              </strong>
+
+              <small>
+                YOUR ADVANTAGE
+              </small>
+
+            </div>
+
+          </div>
+
+        </section>
 
         {/* ===================================================
             TODAY'S MISSION
@@ -1055,10 +1074,9 @@ function Dashboard() {
                       marginTop: '12px',
                     }}
                   >
-
                     {weaknesses.map((item) => (
                       <div
-                        key={item.topic}
+                        key={`${item.subject}-${item.topic}`}
                         style={{
                           display: 'flex',
                           justifyContent: 'space-between',
@@ -1068,7 +1086,6 @@ function Dashboard() {
                             '1px solid rgba(255,255,255,0.08)',
                         }}
                       >
-
                         <span>
                           {item.topic}
                         </span>
@@ -1076,10 +1093,8 @@ function Dashboard() {
                         <strong>
                           {item.accuracy}%
                         </strong>
-
                       </div>
                     ))}
-
                   </div>
                 </>
               )}
@@ -1119,7 +1134,7 @@ function Dashboard() {
                 {strengths.map((item) => (
                   <div
                     className="mission-card"
-                    key={item.topic}
+                    key={`${item.subject}-${item.topic}`}
                   >
 
                     <div className="mission-icon english-icon">
@@ -1152,70 +1167,68 @@ function Dashboard() {
           )}
 
         {/* ===================================================
-            PREMIUM BENEFITS FOR FREE USERS
+            PREMIUM BENEFITS
         =================================================== */}
 
-        {!isPremium && (
-          <section className="premium-benefit-section">
+        <section className="premium-benefit-section">
 
-            <div className="section-heading">
+          <div className="section-heading">
 
-              <div>
+            <div>
 
-                <p className="section-kicker">
-                  GO BEYOND PRACTICE
-                </p>
+              <p className="section-kicker">
+                GO BEYOND PRACTICE
+              </p>
 
-                <h2>
-                  What Premium unlocks
-                </h2>
-
-              </div>
+              <h2>
+                What Premium unlocks
+              </h2>
 
             </div>
 
-            <div className="premium-benefit-grid">
+          </div>
 
-              <div className="premium-benefit-card">
-                <span>◷</span>
-                <strong>Exam Planner</strong>
-                <p>
-                  Build preparation around your
-                  actual exam date.
-                </p>
-              </div>
+          <div className="premium-benefit-grid">
 
-              <div className="premium-benefit-card">
-                <span>◈</span>
-                <strong>Smart Analytics</strong>
-                <p>
-                  Understand your performance
-                  beyond a simple score.
-                </p>
-              </div>
-
-              <div className="premium-benefit-card">
-                <span>⚡</span>
-                <strong>Personal Missions</strong>
-                <p>
-                  Know what deserves your attention
-                  each day.
-                </p>
-              </div>
-
-              <div className="premium-benefit-card">
-                <span>✦</span>
-                <strong>Overmaths Coach</strong>
-                <p>
-                  Get intelligent guidance based
-                  on your preparation.
-                </p>
-              </div>
-
+            <div className="premium-benefit-card">
+              <span>◷</span>
+              <strong>Exam Planner</strong>
+              <p>
+                Build preparation around your
+                actual exam date.
+              </p>
             </div>
 
-          </section>
-        )}
+            <div className="premium-benefit-card">
+              <span>◈</span>
+              <strong>Smart Analytics</strong>
+              <p>
+                Understand your performance
+                beyond a simple score.
+              </p>
+            </div>
+
+            <div className="premium-benefit-card">
+              <span>⚡</span>
+              <strong>Personal Missions</strong>
+              <p>
+                Know what deserves your attention
+                each day.
+              </p>
+            </div>
+
+            <div className="premium-benefit-card">
+              <span>✦</span>
+              <strong>Overmaths Coach</strong>
+              <p>
+                Get intelligent guidance based
+                on your preparation.
+              </p>
+            </div>
+
+          </div>
+
+        </section>
 
         {/* ===================================================
             NEXT MOVE

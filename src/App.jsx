@@ -1,11 +1,22 @@
 import { useEffect, useState } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+} from 'react-router-dom'
+
 import { supabase } from './supabaseClient'
+
 import {
   getCurrentUser,
   startInactivityTimer,
   stopInactivityTimer,
 } from './authManager'
+
+// ============================================================
+// PUBLIC / STUDENT PAGES
+// ============================================================
 
 import LandingPage from './pages/LandingPage'
 import Register from './Register'
@@ -13,22 +24,41 @@ import Login from './Login'
 import VerifyEmail from './VerifyEmail'
 import ForgotPassword from './ForgotPassword'
 import ResetPassword from './ResetPassword'
+
 import StudentProfile from './pages/StudentProfile'
 import Dashboard from './pages/Dashboard'
 import Practice from './pages/Practice'
 import Quiz from './pages/Quiz'
-import AdminDashboard from './pages/AdminDashboard'
-import AdminQuestions from "./pages/AdminQuestions"
- 
+
+// ============================================================
+// PREMIUM
+// ============================================================
+
 import PremiumDashboard from './pages/PremiumDashboard'
 import PremiumUpgrade from './pages/PremiumUpgrade'
 import PremiumRoute from './pages/PremiumRoute'
 
+// ============================================================
+// ADMIN
+// ============================================================
+
+import AdminDashboard from './pages/AdminDashboard'
+import AdminQuestions from './pages/AdminQuestions'
 
 
+// ============================================================
+// PROTECTED ROUTE
+// ============================================================
 
+function ProtectedRoute({
+  children,
+  user,
+  loading,
+}) {
+  // ----------------------------------------------------------
+  // AUTH LOADING
+  // ----------------------------------------------------------
 
-function ProtectedRoute({ children, user, loading }) {
   if (loading) {
     return (
       <div
@@ -47,45 +77,111 @@ function ProtectedRoute({ children, user, loading }) {
     )
   }
 
+  // ----------------------------------------------------------
+  // NOT LOGGED IN
+  // ----------------------------------------------------------
+
   if (!user) {
-    return <Navigate to="/login" replace />
+    return (
+      <Navigate
+        to="/login"
+        replace
+      />
+    )
   }
 
   return children
 }
 
 
-function AdminRoute({ children, user, loading }) {
-  const [checkingAdmin, setCheckingAdmin] = useState(true)
-  const [isAdmin, setIsAdmin] = useState(false)
+// ============================================================
+// ADMIN ROUTE
+// ============================================================
+
+function AdminRoute({
+  children,
+  user,
+  loading,
+}) {
+  const [checkingAdmin, setCheckingAdmin] =
+    useState(true)
+
+  const [isAdmin, setIsAdmin] =
+    useState(false)
 
   useEffect(() => {
+    let mounted = true
+
     async function checkAdmin() {
+      // ------------------------------------------------------
+      // NO USER
+      // ------------------------------------------------------
+
       if (!user) {
-        setCheckingAdmin(false)
+        if (mounted) {
+          setIsAdmin(false)
+          setCheckingAdmin(false)
+        }
+
         return
       }
 
-      const { data, error } = await supabase
-        .from('users')
-        .select('role')
-        .eq('auth_user_id', user.id)
-        .single()
+      // ------------------------------------------------------
+      // CHECK DATABASE ROLE
+      // ------------------------------------------------------
 
-      if (error) {
-        console.error('Admin check error:', error)
-        setIsAdmin(false)
-      } else {
-        setIsAdmin(data?.role === 'admin')
+      try {
+        const {
+          data,
+          error,
+        } = await supabase
+          .from('users')
+          .select('role')
+          .eq('auth_user_id', user.id)
+          .maybeSingle()
+
+        if (!mounted) return
+
+        if (error) {
+          console.error(
+            'Admin check error:',
+            error
+          )
+
+          setIsAdmin(false)
+        } else {
+          setIsAdmin(
+            data?.role === 'admin'
+          )
+        }
+      } catch (error) {
+        console.error(
+          'Admin verification error:',
+          error
+        )
+
+        if (mounted) {
+          setIsAdmin(false)
+        }
+      } finally {
+        if (mounted) {
+          setCheckingAdmin(false)
+        }
       }
-
-      setCheckingAdmin(false)
     }
 
     if (!loading) {
       checkAdmin()
     }
+
+    return () => {
+      mounted = false
+    }
   }, [user, loading])
+
+  // ----------------------------------------------------------
+  // LOADING
+  // ----------------------------------------------------------
 
   if (loading || checkingAdmin) {
     return (
@@ -105,34 +201,69 @@ function AdminRoute({ children, user, loading }) {
     )
   }
 
+  // ----------------------------------------------------------
+  // NOT LOGGED IN
+  // ----------------------------------------------------------
+
   if (!user) {
-    return <Navigate to="/login" replace />
+    return (
+      <Navigate
+        to="/login"
+        replace
+      />
+    )
   }
 
+  // ----------------------------------------------------------
+  // NOT ADMIN
+  // ----------------------------------------------------------
+
   if (!isAdmin) {
-    return <Navigate to="/dashboard" replace />
+    return (
+      <Navigate
+        to="/dashboard"
+        replace
+      />
+    )
   }
 
   return children
 }
 
 
+// ============================================================
+// APP
+// ============================================================
+
 function App() {
   const [user, setUser] = useState(null)
-  const [authLoading, setAuthLoading] = useState(true)
+  const [authLoading, setAuthLoading] =
+    useState(true)
+
+  // ==========================================================
+  // LOAD AUTH SESSION
+  // ==========================================================
 
   useEffect(() => {
     let mounted = true
 
     async function loadSession() {
       try {
-        const currentUser = await getCurrentUser()
+        const currentUser =
+          await getCurrentUser()
 
         if (!mounted) return
 
         setUser(currentUser)
       } catch (error) {
-        console.error('Session loading error:', error)
+        console.error(
+          'Session loading error:',
+          error
+        )
+
+        if (mounted) {
+          setUser(null)
+        }
       } finally {
         if (mounted) {
           setAuthLoading(false)
@@ -142,6 +273,10 @@ function App() {
 
     loadSession()
 
+    // --------------------------------------------------------
+    // SUPABASE AUTH LISTENER
+    // --------------------------------------------------------
+
     if (!supabase) {
       return () => {
         mounted = false
@@ -149,20 +284,34 @@ function App() {
     }
 
     const {
-      data: { subscription },
+      data: {
+        subscription,
+      },
     } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         if (!mounted) return
 
-        setUser(session?.user || null)
+        setUser(
+          session?.user || null
+        )
       }
     )
 
+    // --------------------------------------------------------
+    // CLEANUP
+    // --------------------------------------------------------
+
     return () => {
       mounted = false
-      subscription.unsubscribe()
+
+      subscription?.unsubscribe()
     }
   }, [])
+
+
+  // ==========================================================
+  // INACTIVITY TIMER
+  // ==========================================================
 
   useEffect(() => {
     if (user) {
@@ -176,19 +325,39 @@ function App() {
     }
   }, [user])
 
+
+  // ==========================================================
+  // ROUTES
+  // ==========================================================
+
   return (
     <BrowserRouter>
+
       <Routes>
 
-        {/* Public pages */}
+        {/* ==================================================
+            PUBLIC
+        ================================================== */}
 
-        <Route path="/" element={<LandingPage />} />
+        <Route
+          path="/"
+          element={<LandingPage />}
+        />
 
-        <Route path="/register" element={<Register />} />
+        <Route
+          path="/register"
+          element={<Register />}
+        />
 
-        <Route path="/login" element={<Login />} />
+        <Route
+          path="/login"
+          element={<Login />}
+        />
 
-        <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route
+          path="/verify-email"
+          element={<VerifyEmail />}
+        />
 
         <Route
           path="/forgot-password"
@@ -201,7 +370,9 @@ function App() {
         />
 
 
-        {/* Student pages */}
+        {/* ==================================================
+            STUDENT
+        ================================================== */}
 
         <Route
           path="/student-profile"
@@ -215,6 +386,11 @@ function App() {
           }
         />
 
+
+        {/* ==================================================
+            NORMAL DASHBOARD
+        ================================================== */}
+
         <Route
           path="/dashboard"
           element={
@@ -227,6 +403,11 @@ function App() {
           }
         />
 
+
+        {/* ==================================================
+            PRACTICE
+        ================================================== */}
+
         <Route
           path="/practice"
           element={
@@ -238,6 +419,11 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+
+        {/* ==================================================
+            QUIZ
+        ================================================== */}
 
         <Route
           path="/quiz"
@@ -252,46 +438,84 @@ function App() {
         />
 
 
-
-
-        <Route
-  path="/premium"
-  element={
-    <PremiumRoute
-      user={user}
-      loading={authLoading}
-    >
-      <PremiumDashboard />
-    </PremiumRoute>
-  }
-/>
-
-<Route
-  path="/premium-upgrade"
-  element={
-    <ProtectedRoute
-      user={user}
-      loading={authLoading}
-    >
-      <PremiumUpgrade />
-    </ProtectedRoute>
-  }
-/>
-
-
-
-
-
-
-
+        {/* ==================================================
+            PREMIUM UPGRADE
+           
+            Any logged-in user can see the upgrade page.
+           
+            Free user:
+              Dashboard
+                  ↓
+              Unlock Premium
+                  ↓
+              /premium-upgrade
+           
+        ================================================== */}
 
         <Route
-  path="/admin/questions"
-  element={<AdminQuestions />}
-/>
+          path="/premium-upgrade"
+          element={
+            <ProtectedRoute
+              user={user}
+              loading={authLoading}
+            >
+              <PremiumUpgrade />
+            </ProtectedRoute>
+          }
+        />
 
 
-        {/* Admin */}
+        {/* ==================================================
+            PREMIUM DASHBOARD
+           
+            IMPORTANT:
+            PremiumRoute must verify the subscription.
+           
+            Active Premium:
+                /premium
+                    ↓
+                PremiumDashboard
+           
+            Not Premium:
+                /premium
+                    ↓
+                /premium-upgrade
+           
+        ================================================== */}
+
+        <Route
+          path="/premium"
+          element={
+            <PremiumRoute
+              user={user}
+              loading={authLoading}
+            >
+              <PremiumDashboard />
+            </PremiumRoute>
+          }
+        />
+
+
+        {/* ==================================================
+            ADMIN QUESTIONS
+        ================================================== */}
+
+        <Route
+          path="/admin/questions"
+          element={
+            <AdminRoute
+              user={user}
+              loading={authLoading}
+            >
+              <AdminQuestions />
+            </AdminRoute>
+          }
+        />
+
+
+        {/* ==================================================
+            ADMIN DASHBOARD
+        ================================================== */}
 
         <Route
           path="/admin"
@@ -305,7 +529,23 @@ function App() {
           }
         />
 
+
+        {/* ==================================================
+            FALLBACK
+        ================================================== */}
+
+        <Route
+          path="*"
+          element={
+            <Navigate
+              to="/dashboard"
+              replace
+            />
+          }
+        />
+
       </Routes>
+
     </BrowserRouter>
   )
 }
