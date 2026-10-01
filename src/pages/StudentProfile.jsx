@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import logo from '../assets/overmaths-logo.png'
-import "./StudentProfile.css";
+import './StudentProfile.css'
 
 function StudentProfile() {
   const navigate = useNavigate()
@@ -18,11 +18,9 @@ function StudentProfile() {
   const [nickname, setNickname] = useState('')
   const [learningRoute, setLearningRoute] = useState('')
   const [examType, setExamType] = useState('')
-  const [subject, setSubject] = useState('')
-  const [course, setCourse] = useState('')
 
   // ============================================================
-  // LOAD CURRENT USER + PROFILE
+  // LOAD AUTH USER + STUDENT PROFILE
   // ============================================================
 
   useEffect(() => {
@@ -37,30 +35,34 @@ function StudentProfile() {
         return
       }
 
+      // Get current authenticated user
       const {
         data: { user: currentUser },
-        error: userError,
+        error: authError,
       } = await supabase.auth.getUser()
 
-      if (userError || !currentUser) {
+      if (authError || !currentUser) {
+        console.error('AUTH ERROR:', authError)
         navigate('/login', { replace: true })
         return
       }
 
       setUser(currentUser)
 
-      // --------------------------------------------------------
-      // Get existing nickname from Supabase Auth metadata
-      // --------------------------------------------------------
-
+      // Auth metadata
       setNickname(
         currentUser.user_metadata?.nickname || ''
       )
 
-      // --------------------------------------------------------
-      // Get student profile
-      // IMPORTANT: use auth_user_id
-      // --------------------------------------------------------
+      setFullName(
+        currentUser.user_metadata?.full_name || ''
+      )
+
+      // ========================================================
+      // LOAD USERS TABLE
+      // IMPORTANT:
+      // Only request columns that actually exist.
+      // ========================================================
 
       const {
         data: profile,
@@ -73,9 +75,7 @@ function StudentProfile() {
           email,
           full_name,
           learning_route,
-          exam_type,
-          subject,
-          course
+          exam_type
         `)
         .eq('auth_user_id', currentUser.id)
         .maybeSingle()
@@ -94,13 +94,19 @@ function StudentProfile() {
       }
 
       if (profile) {
-        setFullName(profile.full_name || '')
+        setFullName(
+          profile.full_name ||
+          currentUser.user_metadata?.full_name ||
+          ''
+        )
+
         setLearningRoute(
           profile.learning_route || ''
         )
-        setExamType(profile.exam_type || '')
-        setSubject(profile.subject || '')
-        setCourse(profile.course || '')
+
+        setExamType(
+          profile.exam_type || ''
+        )
       }
 
     } catch (error) {
@@ -110,6 +116,7 @@ function StudentProfile() {
       )
 
       setMessage(
+        error?.message ||
         'Unable to load your profile.'
       )
     } finally {
@@ -124,6 +131,7 @@ function StudentProfile() {
   const nextStep = () => {
     setMessage('')
 
+    // STEP 1
     if (step === 1) {
       if (!fullName.trim()) {
         setMessage(
@@ -140,6 +148,7 @@ function StudentProfile() {
       }
     }
 
+    // STEP 2
     if (step === 2) {
       if (!learningRoute) {
         setMessage(
@@ -149,46 +158,26 @@ function StudentProfile() {
       }
     }
 
+    // STEP 3
     if (step === 3) {
-
       if (learningRoute === 'olevel') {
-
         if (!examType) {
           setMessage(
             'Please select your examination.'
           )
           return
         }
-
-        if (!subject.trim()) {
-          setMessage(
-            'Please enter your subject.'
-          )
-          return
-        }
       }
 
       if (learningRoute === 'university') {
-
-        if (!course.trim()) {
-          setMessage(
-            'Please enter your university course.'
-          )
-          return
-        }
-
-        if (!subject.trim()) {
-          setMessage(
-            'Please enter your subject or area.'
-          )
-          return
-        }
+        // University currently does not have
+        // a separate course/subject column in users.
+        // learning_route is enough for this profile.
       }
     }
 
     setStep(
-      (current) =>
-        Math.min(current + 1, 4)
+      current => Math.min(current + 1, 4)
     )
   }
 
@@ -200,8 +189,7 @@ function StudentProfile() {
     setMessage('')
 
     setStep(
-      (current) =>
-        Math.max(current - 1, 1)
+      current => Math.max(current - 1, 1)
     )
   }
 
@@ -223,9 +211,9 @@ function StudentProfile() {
 
     try {
 
-      // --------------------------------------------------------
-      // 1. UPDATE AUTH USER METADATA
-      // --------------------------------------------------------
+      // ========================================================
+      // 1. SAVE AUTH METADATA
+      // ========================================================
 
       const {
         error: authError,
@@ -240,17 +228,39 @@ function StudentProfile() {
         throw authError
       }
 
-      // --------------------------------------------------------
-      // 2. SAVE STUDENT PROFILE
-      // --------------------------------------------------------
+      // ========================================================
+      // 2. SAVE USERS PROFILE
+      //
+      // IMPORTANT:
+      // We DO NOT use:
+      // subject
+      // course
+      // path
+      //
+      // because they do not exist in your users table.
+      // ========================================================
 
       const {
-        error: profileError,
+        data: existingProfile,
+        error: existingError,
       } = await supabase
         .from('users')
-        .upsert(
-          {
-            auth_user_id: user.id,
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .maybeSingle()
+
+      if (existingError) {
+        throw existingError
+      }
+
+      let profileError = null
+
+      if (existingProfile) {
+
+        // Existing user → UPDATE
+        const { error } = await supabase
+          .from('users')
+          .update({
             email: user.email,
             full_name: fullName.trim(),
             learning_route: learningRoute,
@@ -258,29 +268,41 @@ function StudentProfile() {
               learningRoute === 'olevel'
                 ? examType
                 : null,
-            subject:
-              subject.trim() || null,
-            course:
-              learningRoute === 'university'
-                ? course.trim()
+          })
+          .eq('auth_user_id', user.id)
+
+        profileError = error
+
+      } else {
+
+        // New profile → INSERT
+        const { error } = await supabase
+          .from('users')
+          .insert({
+            email: user.email,
+            full_name: fullName.trim(),
+            auth_user_id: user.id,
+            learning_route: learningRoute,
+            exam_type:
+              learningRoute === 'olevel'
+                ? examType
                 : null,
-          },
-          {
-            onConflict: 'auth_user_id',
-          }
-        )
+          })
+
+        profileError = error
+      }
 
       if (profileError) {
         throw profileError
       }
 
+      // ========================================================
+      // SUCCESS
+      // ========================================================
+
       setMessage(
         'Profile saved successfully!'
       )
-
-      // --------------------------------------------------------
-      // 3. SEND STUDENT TO DASHBOARD
-      // --------------------------------------------------------
 
       setTimeout(() => {
         navigate('/dashboard', {
@@ -297,7 +319,7 @@ function StudentProfile() {
 
       setMessage(
         error?.message ||
-          'Unable to save your profile. Please try again.'
+        'Unable to save your profile. Please try again.'
       )
 
     } finally {
@@ -312,11 +334,13 @@ function StudentProfile() {
   if (loading) {
     return (
       <div className="profile-loading">
+
         <div className="profile-spinner"></div>
 
         <p>
           Loading your profile...
         </p>
+
       </div>
     )
   }
@@ -332,10 +356,12 @@ function StudentProfile() {
       <div className="profile-orb profile-orb-two"></div>
 
       <header className="profile-header">
+
         <img
           src={logo}
           alt="Overmaths"
         />
+
       </header>
 
       <main className="profile-main">
@@ -359,8 +385,7 @@ function StudentProfile() {
           <p>
             Tell us a little about yourself so
             Overmaths can give you the right
-            questions, subjects and practice
-            experience.
+            questions and practice experience.
           </p>
 
         </section>
@@ -446,10 +471,9 @@ function StudentProfile() {
                   placeholder="Enter your full name"
                   value={fullName}
                   onChange={(e) =>
-                    setFullName(
-                      e.target.value
-                    )
+                    setFullName(e.target.value)
                   }
+                  disabled={saving}
                 />
 
               </div>
@@ -465,10 +489,9 @@ function StudentProfile() {
                   placeholder="What should we call you?"
                   value={nickname}
                   onChange={(e) =>
-                    setNickname(
-                      e.target.value
-                    )
+                    setNickname(e.target.value)
                   }
+                  disabled={saving}
                 />
 
                 <small>
@@ -487,8 +510,10 @@ function StudentProfile() {
               <div className="profile-actions">
 
                 <button
+                  type="button"
                   className="profile-primary-button"
                   onClick={nextStep}
+                  disabled={saving}
                 >
                   Continue
                   <span>→</span>
@@ -543,9 +568,7 @@ function StudentProfile() {
                         : ''
                     }`}
                     onClick={() =>
-                      setLearningRoute(
-                        'olevel'
-                      )
+                      setLearningRoute('olevel')
                     }
                   >
 
@@ -554,6 +577,7 @@ function StudentProfile() {
                     </div>
 
                     <div>
+
                       <strong>
                         O-Level / Entrance
                       </strong>
@@ -561,10 +585,10 @@ function StudentProfile() {
                       <span>
                         JAMB, WAEC, NECO & NABTEB
                       </span>
+
                     </div>
 
-                    {learningRoute ===
-                      'olevel' && (
+                    {learningRoute === 'olevel' && (
                       <div className="goal-check">
                         ✓
                       </div>
@@ -575,15 +599,12 @@ function StudentProfile() {
                   <button
                     type="button"
                     className={`goal-card ${
-                      learningRoute ===
-                      'university'
+                      learningRoute === 'university'
                         ? 'selected'
                         : ''
                     }`}
                     onClick={() =>
-                      setLearningRoute(
-                        'university'
-                      )
+                      setLearningRoute('university')
                     }
                   >
 
@@ -592,17 +613,18 @@ function StudentProfile() {
                     </div>
 
                     <div>
+
                       <strong>
                         University
                       </strong>
 
                       <span>
-                        Courses & university subjects
+                        University learning
                       </span>
+
                     </div>
 
-                    {learningRoute ===
-                      'university' && (
+                    {learningRoute === 'university' && (
                       <div className="goal-check">
                         ✓
                       </div>
@@ -623,6 +645,7 @@ function StudentProfile() {
               <div className="profile-actions">
 
                 <button
+                  type="button"
                   className="profile-back-button"
                   onClick={previousStep}
                 >
@@ -630,6 +653,7 @@ function StudentProfile() {
                 </button>
 
                 <button
+                  type="button"
                   className="profile-primary-button"
                   onClick={nextStep}
                 >
@@ -662,126 +686,73 @@ function StudentProfile() {
                   </h2>
 
                   <p>
-                    We'll use this to personalize
-                    your practice questions.
+                    Select the information that
+                    applies to your learning path.
                   </p>
 
                 </div>
 
               </div>
 
-              {/* O LEVEL */}
+              {learningRoute === 'olevel' && (
+                <div className="profile-field">
 
-              {learningRoute ===
-                'olevel' && (
-                <>
+                  <label>
+                    EXAM TYPE
+                  </label>
 
-                  <div className="profile-field">
+                  <select
+                    value={examType}
+                    onChange={(e) =>
+                      setExamType(e.target.value)
+                    }
+                    disabled={saving}
+                  >
 
-                    <label>
-                      EXAM TYPE
-                    </label>
+                    <option value="">
+                      Select examination
+                    </option>
 
-                    <select
-                      value={examType}
-                      onChange={(e) =>
-                        setExamType(
-                          e.target.value
-                        )
-                      }
-                    >
+                    <option value="JAMB / UTME">
+                      JAMB / UTME
+                    </option>
 
-                      <option value="">
-                        Select examination
-                      </option>
+                    <option value="WAEC / SSCE">
+                      WAEC / SSCE
+                    </option>
 
-                      <option value="JAMB / UTME">
-                        JAMB / UTME
-                      </option>
+                    <option value="NECO">
+                      NECO
+                    </option>
 
-                      <option value="WAEC / SSCE">
-                        WAEC / SSCE
-                      </option>
+                    <option value="NABTEB">
+                      NABTEB
+                    </option>
 
-                      <option value="NECO">
-                        NECO
-                      </option>
+                  </select>
 
-                      <option value="NABTEB">
-                        NABTEB
-                      </option>
-
-                    </select>
-
-                  </div>
-
-                  <div className="profile-field">
-
-                    <label>
-                      SUBJECT
-                    </label>
-
-                    <input
-                      type="text"
-                      placeholder="e.g. Mathematics"
-                      value={subject}
-                      onChange={(e) =>
-                        setSubject(
-                          e.target.value
-                        )
-                      }
-                    />
-
-                  </div>
-
-                </>
+                </div>
               )}
 
-              {/* UNIVERSITY */}
+              {learningRoute === 'university' && (
+                <div className="profile-university-info">
 
-              {learningRoute ===
-                'university' && (
-                <>
-
-                  <div className="profile-field">
-
-                    <label>
-                      UNIVERSITY COURSE
-                    </label>
-
-                    <input
-                      type="text"
-                      placeholder="e.g. Physics Electronics"
-                      value={course}
-                      onChange={(e) =>
-                        setCourse(
-                          e.target.value
-                        )
-                      }
-                    />
-
+                  <div className="university-info-icon">
+                    U
                   </div>
 
-                  <div className="profile-field">
+                  <h3>
+                    University pathway selected
+                  </h3>
 
-                    <label>
-                      SUBJECT / AREA
-                    </label>
+                  <p>
+                    Your university course and
+                    subjects can be configured
+                    later from your Overmaths
+                    learning profile.
+                  </p>
 
-                    <input
-                      type="text"
-                      placeholder="e.g. Physics"
-                      value={subject}
-                      onChange={(e) =>
-                        setSubject(
-                          e.target.value
-                        )
-                      }
-                    />
-
-                  </div>
-
-                </>
+                </div>
               )}
 
               {message && (
@@ -793,6 +764,7 @@ function StudentProfile() {
               <div className="profile-actions">
 
                 <button
+                  type="button"
                   className="profile-back-button"
                   onClick={previousStep}
                 >
@@ -800,6 +772,7 @@ function StudentProfile() {
                 </button>
 
                 <button
+                  type="button"
                   className="profile-primary-button"
                   onClick={nextStep}
                 >
@@ -843,57 +816,54 @@ function StudentProfile() {
               <div className="profile-summary">
 
                 <div className="summary-row">
-                  <span>Name</span>
+
+                  <span>
+                    Name
+                  </span>
+
                   <strong>
                     {fullName}
                   </strong>
+
                 </div>
 
                 <div className="summary-row">
-                  <span>Nickname</span>
+
+                  <span>
+                    Nickname
+                  </span>
+
                   <strong>
                     {nickname}
                   </strong>
+
                 </div>
 
                 <div className="summary-row">
-                  <span>Learning path</span>
+
+                  <span>
+                    Learning path
+                  </span>
 
                   <strong>
-                    {learningRoute ===
-                    'olevel'
+                    {learningRoute === 'olevel'
                       ? 'O-Level / Entrance'
                       : 'University'}
                   </strong>
+
                 </div>
 
                 {examType && (
                   <div className="summary-row">
-                    <span>Exam</span>
+
+                    <span>
+                      Exam
+                    </span>
 
                     <strong>
                       {examType}
                     </strong>
-                  </div>
-                )}
 
-                {subject && (
-                  <div className="summary-row">
-                    <span>Subject</span>
-
-                    <strong>
-                      {subject}
-                    </strong>
-                  </div>
-                )}
-
-                {course && (
-                  <div className="summary-row">
-                    <span>Course</span>
-
-                    <strong>
-                      {course}
-                    </strong>
                   </div>
                 )}
 
@@ -908,6 +878,7 @@ function StudentProfile() {
               <div className="profile-actions">
 
                 <button
+                  type="button"
                   className="profile-back-button"
                   onClick={previousStep}
                   disabled={saving}
@@ -916,6 +887,7 @@ function StudentProfile() {
                 </button>
 
                 <button
+                  type="button"
                   className="profile-primary-button"
                   onClick={saveProfile}
                   disabled={saving}
