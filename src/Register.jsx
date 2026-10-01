@@ -25,10 +25,12 @@ function Register() {
     special: /[^A-Za-z0-9]/.test(password),
   }
 
-  const strongPassword = Object.values(passwordRules).every(Boolean)
+  const strongPassword =
+    Object.values(passwordRules).every(Boolean)
 
   const passwordsMatch =
-    password.length > 0 && password === confirmPassword
+    password.length > 0 &&
+    password === confirmPassword
 
   const handleRegister = async (e) => {
     e.preventDefault()
@@ -55,10 +57,6 @@ function Register() {
       return
     }
 
-    /*
-      Local development is intentionally kept separate
-      from Supabase authentication.
-    */
     if (!supabase) {
       setMessage(
         'Account registration is available on the live Overmaths website. Local testing is currently running without Supabase.'
@@ -73,22 +71,19 @@ function Register() {
         email: email.trim(),
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/verify-email`,
+          emailRedirectTo:
+            `${window.location.origin}/verify-email`,
 
           data: {
             full_name: fullName.trim(),
-
-            // Prepared for the future referral system.
-            // The actual referral tracking and commission
-            // system will be connected later.
-            referral_code: referralCode.trim() || null,
+            referral_code:
+              referralCode.trim() || null,
           },
         },
       })
 
       if (error) {
         setMessage(error.message)
-        setLoading(false)
         return
       }
 
@@ -103,6 +98,7 @@ function Register() {
       setPassword('')
       setConfirmPassword('')
       setReferralCode('')
+
     } catch (error) {
       setMessage(
         error?.message ||
@@ -115,202 +111,412 @@ function Register() {
 
   return (
     <div className="register-page">
-      <div className="register-card">
 
-        <h1>Create Your Account</h1>
+      {/* Background decoration */}
+      <div className="register-glow register-glow-one" />
+      <div className="register-glow register-glow-two" />
 
-        <p>
-          Join Overmaths — Smart Exam Practice.
-        </p>
+      <main className="register-container">
 
-        {!registered ? (
-          <form onSubmit={handleRegister}>
+        {/* Brand */}
+        <div className="register-brand">
+          <img
+            src="/src/assets/overmaths-logo.png"
+            alt="Overmaths"
+          />
 
-            {/* Full Name */}
-            <input
-              type="text"
-              placeholder="Full Name"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              required
-              disabled={loading}
-              autoComplete="name"
-            />
+          <span>
+            Smart Exam Practice
+          </span>
+        </div>
 
-            {/* Email */}
-            <input
-              type="email"
-              placeholder="Email Address"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              disabled={loading}
-              autoComplete="email"
-            />
+        <section className="register-panel">
 
-            {/* Password */}
-            <div className="password-input-wrapper">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                placeholder="Create a strong password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                disabled={loading}
-                autoComplete="new-password"
-              />
+          {!registered ? (
 
-              <button
-                type="button"
-                className="password-toggle"
-                onClick={() => setShowPassword(!showPassword)}
-                disabled={loading}
+            <>
+              <div className="register-heading">
+
+                <div className="register-icon">
+                  +
+                </div>
+
+                <div>
+                  <div className="register-eyebrow">
+                    JOIN OVERMATHS
+                  </div>
+
+                  <h1>
+                    Create your account
+                  </h1>
+                </div>
+
+              </div>
+
+              <p className="register-intro">
+                Start practising smarter and build the confidence
+                you need for your exams.
+              </p>
+
+              <form onSubmit={handleRegister}>
+
+                {/* Full name */}
+                <div className="register-field">
+
+                  <label>
+                    Full Name
+                  </label>
+
+                  <div className="input-shell">
+                    <span className="input-icon">
+                      ◯
+                    </span>
+
+                    <input
+                      type="text"
+                      placeholder="Enter your full name"
+                      value={fullName}
+                      onChange={(e) =>
+                        setFullName(e.target.value)
+                      }
+                      required
+                      disabled={loading}
+                      autoComplete="name"
+                    />
+                  </div>
+
+                </div>
+
+                {/* Email */}
+                <div className="register-field">
+
+                  <label>
+                    Email Address
+                  </label>
+
+                  <div className="input-shell">
+                    <span className="input-icon">
+                      @
+                    </span>
+
+                    <input
+                      type="email"
+                      placeholder="Enter your email"
+                      value={email}
+                      onChange={(e) =>
+                        setEmail(e.target.value)
+                      }
+                      required
+                      disabled={loading}
+                      autoComplete="email"
+                    />
+                  </div>
+
+                </div>
+
+                {/* Password */}
+                <div className="register-field">
+
+                  <label>
+                    Password
+                  </label>
+
+                  <div className="input-shell">
+
+                    <span className="input-icon">
+                      •••
+                    </span>
+
+                    <input
+                      type={
+                        showPassword
+                          ? 'text'
+                          : 'password'
+                      }
+                      placeholder="Create a strong password"
+                      value={password}
+                      onChange={(e) =>
+                        setPassword(e.target.value)
+                      }
+                      required
+                      disabled={loading}
+                      autoComplete="new-password"
+                    />
+
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() =>
+                        setShowPassword(!showPassword)
+                      }
+                      disabled={loading}
+                      aria-label={
+                        showPassword
+                          ? 'Hide password'
+                          : 'Show password'
+                      }
+                    >
+                      {showPassword ? 'Hide' : 'Show'}
+                    </button>
+
+                  </div>
+
+                </div>
+
+                {/* Password strength */}
+                <div className="password-rules">
+
+                  <div className="password-rules-title">
+                    Password requirements
+                  </div>
+
+                  <div className="password-rule-grid">
+
+                    <span className={
+                      passwordRules.length
+                        ? 'rule-valid'
+                        : ''
+                    }>
+                      {passwordRules.length ? '✓' : '○'}
+                      &nbsp; 8+ characters
+                    </span>
+
+                    <span className={
+                      passwordRules.uppercase
+                        ? 'rule-valid'
+                        : ''
+                    }>
+                      {passwordRules.uppercase ? '✓' : '○'}
+                      &nbsp; Uppercase
+                    </span>
+
+                    <span className={
+                      passwordRules.lowercase
+                        ? 'rule-valid'
+                        : ''
+                    }>
+                      {passwordRules.lowercase ? '✓' : '○'}
+                      &nbsp; Lowercase
+                    </span>
+
+                    <span className={
+                      passwordRules.number
+                        ? 'rule-valid'
+                        : ''
+                    }>
+                      {passwordRules.number ? '✓' : '○'}
+                      &nbsp; Number
+                    </span>
+
+                    <span className={
+                      passwordRules.special
+                        ? 'rule-valid'
+                        : ''
+                    }>
+                      {passwordRules.special ? '✓' : '○'}
+                      &nbsp; Special character
+                    </span>
+
+                  </div>
+
+                </div>
+
+                {/* Confirm password */}
+                <div className="register-field">
+
+                  <label>
+                    Confirm Password
+                  </label>
+
+                  <div className="input-shell">
+
+                    <span className="input-icon">
+                      •••
+                    </span>
+
+                    <input
+                      type={
+                        showConfirmPassword
+                          ? 'text'
+                          : 'password'
+                      }
+                      placeholder="Confirm your password"
+                      value={confirmPassword}
+                      onChange={(e) =>
+                        setConfirmPassword(e.target.value)
+                      }
+                      required
+                      disabled={loading}
+                      autoComplete="new-password"
+                    />
+
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() =>
+                        setShowConfirmPassword(
+                          !showConfirmPassword
+                        )
+                      }
+                      disabled={loading}
+                    >
+                      {showConfirmPassword
+                        ? 'Hide'
+                        : 'Show'}
+                    </button>
+
+                  </div>
+
+                  {confirmPassword.length > 0 && (
+                    <div
+                      className={
+                        passwordsMatch
+                          ? 'password-match valid-match'
+                          : 'password-match invalid-match'
+                      }
+                    >
+                      {passwordsMatch
+                        ? '✓ Passwords match'
+                        : '× Passwords do not match'}
+                    </div>
+                  )}
+
+                </div>
+
+                {/* Referral */}
+                <div className="register-field">
+
+                  <label>
+                    Referral Code
+                    <span>Optional</span>
+                  </label>
+
+                  <div className="input-shell">
+
+                    <span className="input-icon">
+                      #
+                    </span>
+
+                    <input
+                      type="text"
+                      placeholder="Enter referral code"
+                      value={referralCode}
+                      onChange={(e) =>
+                        setReferralCode(
+                          e.target.value.toUpperCase()
+                        )
+                      }
+                      disabled={loading}
+                    />
+
+                  </div>
+
+                  <small className="field-hint">
+                    Have a referral code? Enter it here.
+                  </small>
+
+                </div>
+
+                {/* Message */}
+                {message && (
+                  <div className="register-message">
+                    {message}
+                  </div>
+                )}
+
+                {/* Submit */}
+                <button
+                  type="submit"
+                  className="register-submit"
+                  disabled={
+                    loading ||
+                    !strongPassword ||
+                    !passwordsMatch ||
+                    !fullName.trim() ||
+                    !email.trim()
+                  }
+                >
+                  {loading
+                    ? 'Creating Account...'
+                    : 'Create My Account'}
+
+                  {!loading && (
+                    <span>→</span>
+                  )}
+                </button>
+
+              </form>
+
+              {/* Login */}
+              <div className="register-login">
+
+                <span>
+                  Already have an account?
+                </span>
+
+                <Link to="/login">
+                  Sign In
+                </Link>
+
+              </div>
+
+            </>
+
+          ) : (
+
+            <div className="registration-success">
+
+              <div className="success-icon">
+                ✓
+              </div>
+
+              <div className="register-eyebrow">
+                ACCOUNT CREATED
+              </div>
+
+              <h1>
+                You're almost there!
+              </h1>
+
+              <p>
+                We've sent a verification link to your
+                email address.
+              </p>
+
+              <p className="success-secondary">
+                Verify your email before signing in to
+                your Overmaths account.
+              </p>
+
+              <Link
+                to="/verify-email"
+                className="success-primary-btn"
               >
-                {showPassword ? 'Hide' : 'Show'}
-              </button>
-            </div>
+                Continue to Verification
+                <span>→</span>
+              </Link>
 
-            {/* Password Rules */}
-            <div className="password-rules">
-
-              <p className={passwordRules.length ? 'valid' : 'invalid'}>
-                {passwordRules.length ? '✓' : '✗'} At least 8 characters
-              </p>
-
-              <p className={passwordRules.uppercase ? 'valid' : 'invalid'}>
-                {passwordRules.uppercase ? '✓' : '✗'} One uppercase letter
-              </p>
-
-              <p className={passwordRules.lowercase ? 'valid' : 'invalid'}>
-                {passwordRules.lowercase ? '✓' : '✗'} One lowercase letter
-              </p>
-
-              <p className={passwordRules.number ? 'valid' : 'invalid'}>
-                {passwordRules.number ? '✓' : '✗'} One number
-              </p>
-
-              <p className={passwordRules.special ? 'valid' : 'invalid'}>
-                {passwordRules.special ? '✓' : '✗'} One special character
-              </p>
-
-            </div>
-
-            {/* Confirm Password */}
-            <div className="password-input-wrapper">
-              <input
-                type={showConfirmPassword ? 'text' : 'password'}
-                placeholder="Confirm Password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                disabled={loading}
-                autoComplete="new-password"
-              />
-
-              <button
-                type="button"
-                className="password-toggle"
-                onClick={() =>
-                  setShowConfirmPassword(!showConfirmPassword)
-                }
-                disabled={loading}
+              <Link
+                to="/login"
+                className="success-login-link"
               >
-                {showConfirmPassword ? 'Hide' : 'Show'}
-              </button>
+                Go to Sign In
+              </Link>
+
             </div>
 
-            {/* Password Match */}
-            {confirmPassword.length > 0 && (
-              <p className={passwordsMatch ? 'valid' : 'invalid'}>
-                {passwordsMatch
-                  ? '✓ Passwords match'
-                  : '✗ Passwords do not match'}
-              </p>
-            )}
+          )}
 
-            {/* Referral Code */}
-            <div className="referral-field">
-              <input
-                type="text"
-                placeholder="Referral Code (Optional)"
-                value={referralCode}
-                onChange={(e) =>
-                  setReferralCode(e.target.value.toUpperCase())
-                }
-                disabled={loading}
-              />
+        </section>
 
-              <small>
-                Have a referral code? Enter it here.
-              </small>
-            </div>
+        <footer className="register-footer">
+          © {new Date().getFullYear()} Overmaths
+          <span>•</span>
+          Smart Exam Practice
+        </footer>
 
-            {/* Create Account */}
-            <button
-              type="submit"
-              disabled={
-                loading ||
-                !strongPassword ||
-                !passwordsMatch ||
-                !fullName.trim() ||
-                !email.trim()
-              }
-            >
-              {loading
-                ? 'Creating Account...'
-                : 'Create Account'}
-            </button>
+      </main>
 
-          </form>
-        ) : (
-          <div className="registration-success">
-
-            <div className="success-icon">
-              ✓
-            </div>
-
-            <h2>Account Created!</h2>
-
-            <p>
-              We've sent a verification link to your email address.
-            </p>
-
-            <p>
-              Please verify your email before signing in.
-            </p>
-
-            <Link
-              to="/login"
-              className="signin-btn"
-            >
-              Sign In
-            </Link>
-
-          </div>
-        )}
-
-        {message && !registered && (
-          <p className="register-message">
-            {message}
-          </p>
-        )}
-
-        {!registered && (
-          <div className="signin-section">
-
-            <p>Already have an account?</p>
-
-            <Link
-              to="/login"
-              className="signin-btn"
-            >
-              Sign In
-            </Link>
-
-          </div>
-        )}
-
-      </div>
     </div>
   )
 }

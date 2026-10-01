@@ -1,157 +1,415 @@
 import '../App.css'
 import logo from '../assets/overmaths-logo.png'
+import { useNavigate } from 'react-router-dom'
+
+function Icon({ name, size = 22 }) {
+  const icons = {
+    home: (
+      <>
+        <path d="M3 10.5 12 3l9 7.5" />
+        <path d="M5.5 9.5V21h13V9.5" />
+        <path d="M9.5 21v-6h5v6" />
+      </>
+    ),
+
+    book: (
+      <>
+        <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5z" />
+        <path d="M4 4.5v17" />
+        <path d="M8 6h8" />
+        <path d="M8 10h8" />
+      </>
+    ),
+
+    chart: (
+      <>
+        <path d="M4 19V9" />
+        <path d="M10 19V5" />
+        <path d="M16 19v-8" />
+        <path d="M22 19V3" />
+      </>
+    ),
+
+    crown: (
+      <>
+        <path d="m3 7 4 4 5-7 5 7 4-4-2 12H5z" />
+        <path d="M5 22h14" />
+      </>
+    ),
+
+    user: (
+      <>
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 21a8 8 0 0 1 16 0" />
+      </>
+    ),
+
+    arrow: (
+      <>
+        <path d="M5 12h14" />
+        <path d="m13 6 6 6-6 6" />
+      </>
+    ),
+
+    check: (
+      <>
+        <path d="m5 12 4 4L19 6" />
+      </>
+    ),
+
+    play: (
+      <>
+        <path d="m8 5 11 7-11 7z" />
+      </>
+    ),
+
+    target: (
+      <>
+        <circle cx="12" cy="12" r="8" />
+        <circle cx="12" cy="12" r="3" />
+        <path d="M12 2v2M12 20v2M2 12h2M20 12h2" />
+      </>
+    ),
+
+    lightning: (
+      <>
+        <path d="m13 2-9 12h7l-1 8 9-12h-7z" />
+      </>
+    ),
+
+    lock: (
+      <>
+        <rect x="4" y="10" width="16" height="11" rx="2" />
+        <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+      </>
+    ),
+
+    users: (
+      <>
+        <circle cx="9" cy="8" r="3" />
+        <circle cx="17" cy="9" r="2.5" />
+        <path d="M3 20a6 6 0 0 1 12 0" />
+        <path d="M15 15a5 5 0 0 1 6 5" />
+      </>
+    ),
+
+    menu: (
+      <>
+        <path d="M4 7h16M4 12h16M4 17h16" />
+      </>
+    ),
+
+    close: (
+      <>
+        <path d="m6 6 12 12M18 6 6 18" />
+      </>
+    ),
+
+    chevron: (
+      <>
+        <path d="m6 9 6 6 6-6" />
+      </>
+    ),
+  }
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {icons[name]}
+    </svg>
+  )
+}
 
 function LandingPage() {
-  const goToRegister = () => {
-    window.location.href = '/register'
-  }
+  const navigate = useNavigate()
 
-  const goToLogin = () => {
-    window.location.href = '/login'
-  }
+  const goToRegister = () => navigate('/register')
+  const goToLogin = () => navigate('/login')
 
-  const exploreCourses = () => {
-    document.getElementById('courses')?.scrollIntoView({
+  const scrollTo = (id) => {
+    document.getElementById(id)?.scrollIntoView({
       behavior: 'smooth',
     })
   }
 
   return (
-    <div className="app">
+    <div className="overmaths-site">
 
-      {/* =========================
-          NAVBAR
-      ========================= */}
-      <header className="navbar">
+      {/* =====================================================
+          NAVIGATION
+      ===================================================== */}
 
-        <div className="logo">
-          <img src={logo} alt="Overmaths Logo" />
-        </div>
+      <header className="site-header">
 
-        <nav className="nav-links">
-          <a href="#home">Home</a>
-          <a href="#courses">Courses</a>
-          <a href="#pricing">Pricing</a>
-          <a href="#about">About</a>
-          <a href="#referrals">Referrals</a>
-        </nav>
-
-        <div className="nav-buttons">
+        <div className="site-nav">
 
           <button
-            className="login-btn"
-            onClick={goToLogin}
+            className="brand"
+            onClick={() => scrollTo('home')}
+            aria-label="Overmaths Home"
           >
-            Login
+            <img src={logo} alt="Overmaths" />
           </button>
 
-          <button
-            className="signup-btn"
-            onClick={goToRegister}
-          >
-            Get Started
-          </button>
+          <nav className="desktop-nav">
+
+            <button onClick={() => scrollTo('home')}>
+              <Icon name="home" size={17} />
+              <span>Home</span>
+            </button>
+
+            <button onClick={() => scrollTo('courses')}>
+              <Icon name="book" size={17} />
+              <span>Courses</span>
+            </button>
+
+            <button onClick={() => scrollTo('how-it-works')}>
+              <Icon name="target" size={17} />
+              <span>How It Works</span>
+            </button>
+
+            <button onClick={() => scrollTo('pricing')}>
+              <Icon name="crown" size={17} />
+              <span>Premium</span>
+            </button>
+
+            <button onClick={() => scrollTo('about')}>
+              <Icon name="users" size={17} />
+              <span>About</span>
+            </button>
+
+          </nav>
+
+          <div className="nav-actions">
+
+            <button
+              className="nav-login"
+              onClick={goToLogin}
+            >
+              Sign In
+            </button>
+
+            <button
+              className="nav-register"
+              onClick={goToRegister}
+            >
+              Get Started
+              <Icon name="arrow" size={16} />
+            </button>
+
+          </div>
 
         </div>
 
       </header>
 
 
+      {/* =====================================================
+          HERO
+      ===================================================== */}
+
       <main>
 
-        {/* =========================
-            HERO
-        ========================= */}
-        <section className="hero-section" id="home">
+        <section
+          className="hero"
+          id="home"
+        >
 
-          <div className="hero-content">
+          <div className="hero-glow hero-glow-one" />
+          <div className="hero-glow hero-glow-two" />
 
-            <p className="hero-tag">
-              MATHEMATICS • PHYSICS • CHEMISTRY
-            </p>
+          <div className="hero-inner">
 
-            <h1>
-              Practice smarter.
-              <br />
-              <span>Master your exams.</span>
-            </h1>
+            <div className="hero-copy">
 
-            <p className="hero-description">
-              Prepare for your O-Level and 100-level science courses
-              with carefully structured MCQ tests, instant results and
-              detailed performance tracking.
-            </p>
+              <div className="hero-eyebrow">
+                <span className="eyebrow-dot" />
+                SMART EXAM PRACTICE
+              </div>
 
-            <div className="hero-buttons">
+              <h1>
+                Practice smarter.
+                <br />
+                <span>Master your exams.</span>
+              </h1>
 
-              <button
-                className="primary-btn"
-                onClick={goToRegister}
-              >
-                Start Practicing
-              </button>
+              <p className="hero-text">
+                Prepare for JAMB, WAEC, NECO and university
+                science courses with structured questions,
+                instant results and intelligent performance
+                tracking.
+              </p>
 
-              <button
-                className="secondary-btn"
-                onClick={exploreCourses}
-              >
-                Explore Courses
-              </button>
+              <div className="hero-actions">
+
+                <button
+                  className="hero-primary"
+                  onClick={goToRegister}
+                >
+                  Start Practicing
+                  <Icon name="arrow" size={18} />
+                </button>
+
+                <button
+                  className="hero-secondary"
+                  onClick={() => scrollTo('courses')}
+                >
+                  <span className="play-icon">
+                    <Icon name="play" size={15} />
+                  </span>
+                  Explore Courses
+                </button>
+
+              </div>
+
+              <div className="hero-trust">
+
+                <div className="trust-item">
+                  <span className="trust-icon">
+                    <Icon name="check" size={16} />
+                  </span>
+                  <span>Instant Results</span>
+                </div>
+
+                <div className="trust-item">
+                  <span className="trust-icon">
+                    <Icon name="check" size={16} />
+                  </span>
+                  <span>Timed Tests</span>
+                </div>
+
+                <div className="trust-item">
+                  <span className="trust-icon">
+                    <Icon name="check" size={16} />
+                  </span>
+                  <span>Performance Tracking</span>
+                </div>
+
+              </div>
 
             </div>
 
-            <div className="hero-features">
 
-              <div>
-                <strong>✓</strong>
-                <span>Timed Tests</span>
+            {/* HERO PRODUCT PREVIEW */}
+
+            <div className="hero-visual">
+
+              <div className="visual-glow" />
+
+              <div className="floating-stat stat-one">
+                <div className="stat-icon purple">
+                  <Icon name="chart" size={18} />
+                </div>
+
+                <div>
+                  <strong>+24%</strong>
+                  <span>Performance</span>
+                </div>
               </div>
 
-              <div>
-                <strong>✓</strong>
-                <span>Instant Results</span>
+
+              <div className="floating-stat stat-two">
+                <div className="stat-icon orange">
+                  <Icon name="check" size={18} />
+                </div>
+
+                <div>
+                  <strong>86%</strong>
+                  <span>Accuracy</span>
+                </div>
               </div>
 
-              <div>
-                <strong>✓</strong>
-                <span>Performance Tracking</span>
-              </div>
 
-            </div>
+              <div className="exam-window">
 
-          </div>
+                <div className="window-top">
+
+                  <div className="window-brand">
+                    <div className="mini-logo">
+                      O
+                    </div>
+                    <span>Overmaths Practice</span>
+                  </div>
+
+                  <div className="window-timer">
+                    <span className="timer-dot" />
+                    01:42
+                  </div>
+
+                </div>
 
 
-          <div className="hero-card">
+                <div className="exam-content">
 
-            <div className="question-card">
+                  <div className="exam-meta">
+                    <span>PHYSICS 101</span>
+                    <span>QUESTION 12 / 50</span>
+                  </div>
 
-              <div className="question-top">
-                <span>Physics 101</span>
-                <span>01:42</span>
-              </div>
+                  <div className="exam-progress">
+                    <div />
+                  </div>
 
-              <h3>
-                A body moves with a velocity of 20 m/s. If it
-                accelerates uniformly at 5 m/s², what will its
-                velocity be after 4 seconds?
-              </h3>
+                  <h3>
+                    A body moves with an initial velocity
+                    of 20 m/s and accelerates uniformly at
+                    5 m/s². What will its velocity be after
+                    4 seconds?
+                  </h3>
 
-              <div className="options">
 
-                <button>A. 25 m/s</button>
-                <button>B. 30 m/s</button>
-                <button>C. 35 m/s</button>
-                <button>D. 40 m/s</button>
+                  <div className="answer-list">
 
-              </div>
+                    <div className="answer">
+                      <span>A</span>
+                      25 m/s
+                    </div>
 
-              <div className="question-progress">
+                    <div className="answer selected">
+                      <span>B</span>
+                      40 m/s
 
-                <span>Question 1 of 50</span>
+                      <div className="answer-check">
+                        <Icon name="check" size={13} />
+                      </div>
+                    </div>
 
-                <div className="progress-bar">
-                  <div></div>
+                    <div className="answer">
+                      <span>C</span>
+                      45 m/s
+                    </div>
+
+                    <div className="answer">
+                      <span>D</span>
+                      50 m/s
+                    </div>
+
+                  </div>
+
+
+                  <div className="exam-bottom">
+
+                    <span>
+                      <Icon name="lightning" size={14} />
+                      Timed Practice
+                    </span>
+
+                    <button>
+                      Next
+                      <Icon name="arrow" size={14} />
+                    </button>
+
+                  </div>
+
                 </div>
 
               </div>
@@ -163,88 +421,260 @@ function LandingPage() {
         </section>
 
 
-        {/* =========================
+        {/* =====================================================
+            STATS STRIP
+        ===================================================== */}
+
+        <section className="stats-strip">
+
+          <div className="stats-inner">
+
+            <div className="stat-block">
+              <strong>MCQ</strong>
+              <span>Exam-focused practice</span>
+            </div>
+
+            <div className="stat-divider" />
+
+            <div className="stat-block">
+              <strong>JAMB</strong>
+              <span>UTME preparation</span>
+            </div>
+
+            <div className="stat-divider" />
+
+            <div className="stat-block">
+              <strong>WAEC</strong>
+              <span>O-Level preparation</span>
+            </div>
+
+            <div className="stat-divider" />
+
+            <div className="stat-block">
+              <strong>100L+</strong>
+              <span>University courses</span>
+            </div>
+
+          </div>
+
+        </section>
+
+
+        {/* =====================================================
             COURSES
-        ========================= */}
-        <section className="courses-section" id="courses">
+        ===================================================== */}
 
-          <p className="section-label">
-            OUR COURSES
-          </p>
+        <section
+          className="section courses"
+          id="courses"
+        >
 
-          <h2>
-            Build confidence through practice
-          </h2>
+          <div className="section-heading">
 
-          <p className="section-description">
-            Focus on the subjects that matter most and test yourself
-            with realistic multiple-choice questions.
-          </p>
+            <div className="section-eyebrow">
+              <span />
+              OUR SUBJECTS
+            </div>
 
-          <div className="course-grid">
+            <h2>
+              Everything you need to
+              <span> practice with confidence.</span>
+            </h2>
 
-            <div className="course-card mathematics">
+            <p>
+              Focus on the subjects that matter most and
+              build your confidence through realistic,
+              examination-style questions.
+            </p>
 
-              <div className="course-icon">
+          </div>
+
+
+          <div className="subject-grid">
+
+            <button
+              className="subject-item math"
+              onClick={goToRegister}
+            >
+
+              <div className="subject-icon">
                 ∑
               </div>
 
-              <h3>
-                Mathematics
-              </h3>
+              <div className="subject-info">
+                <small>SUBJECT</small>
+                <h3>Mathematics</h3>
+                <p>
+                  Calculations, algebra, geometry and
+                  examination practice.
+                </p>
+              </div>
 
-              <p>
-                Strengthen your understanding through structured
-                mathematical practice.
-              </p>
+              <span className="subject-arrow">
+                <Icon name="arrow" size={18} />
+              </span>
 
-              <button onClick={goToRegister}>
-                Explore Mathematics →
-              </button>
-
-            </div>
+            </button>
 
 
-            <div className="course-card physics">
+            <button
+              className="subject-item physics"
+              onClick={goToRegister}
+            >
 
-              <div className="course-icon">
+              <div className="subject-icon">
                 ⚛
               </div>
 
-              <h3>
-                Physics
-              </h3>
+              <div className="subject-info">
+                <small>SUBJECT</small>
+                <h3>Physics</h3>
+                <p>
+                  Concepts, calculations, formulas and
+                  realistic MCQs.
+                </p>
+              </div>
 
-              <p>
-                Practice calculations, concepts, formulas and
-                examination-style questions.
-              </p>
+              <span className="subject-arrow">
+                <Icon name="arrow" size={18} />
+              </span>
 
-              <button onClick={goToRegister}>
-                Explore Physics →
-              </button>
-
-            </div>
+            </button>
 
 
-            <div className="course-card chemistry">
+            <button
+              className="subject-item chemistry"
+              onClick={goToRegister}
+            >
 
-              <div className="course-icon">
+              <div className="subject-icon">
                 ⚗
               </div>
 
-              <h3>
-                Chemistry
-              </h3>
+              <div className="subject-info">
+                <small>SUBJECT</small>
+                <h3>Chemistry</h3>
+                <p>
+                  Reactions, concepts and structured
+                  examination questions.
+                </p>
+              </div>
+
+              <span className="subject-arrow">
+                <Icon name="arrow" size={18} />
+              </span>
+
+            </button>
+
+          </div>
+
+        </section>
+
+
+        {/* =====================================================
+            HOW IT WORKS
+        ===================================================== */}
+
+        <section
+          className="section how-section"
+          id="how-it-works"
+        >
+
+          <div className="how-layout">
+
+            <div className="how-copy">
+
+              <div className="section-eyebrow">
+                <span />
+                HOW OVERMATHS WORKS
+              </div>
+
+              <h2>
+                Your preparation,
+                <span> made simpler.</span>
+              </h2>
 
               <p>
-                Test your knowledge of chemistry concepts with
-                carefully selected MCQs.
+                Stop guessing what to study. Choose your
+                examination path, practice relevant questions,
+                review your results and identify where you
+                need to improve.
               </p>
 
-              <button onClick={goToRegister}>
-                Explore Chemistry →
+              <button
+                className="text-action"
+                onClick={goToRegister}
+              >
+                Create your free account
+                <Icon name="arrow" size={17} />
               </button>
+
+            </div>
+
+
+            <div className="steps">
+
+              <div className="step">
+
+                <div className="step-number">
+                  01
+                </div>
+
+                <div className="step-icon">
+                  <Icon name="user" size={22} />
+                </div>
+
+                <div>
+                  <h3>Create your account</h3>
+                  <p>
+                    Sign up and tell Overmaths what
+                    examination or course you are preparing for.
+                  </p>
+                </div>
+
+              </div>
+
+
+              <div className="step">
+
+                <div className="step-number">
+                  02
+                </div>
+
+                <div className="step-icon">
+                  <Icon name="book" size={22} />
+                </div>
+
+                <div>
+                  <h3>Choose what to practice</h3>
+                  <p>
+                    Select your subject, topic or university
+                    course and start answering questions.
+                  </p>
+                </div>
+
+              </div>
+
+
+              <div className="step">
+
+                <div className="step-number">
+                  03
+                </div>
+
+                <div className="step-icon">
+                  <Icon name="chart" size={22} />
+                </div>
+
+                <div>
+                  <h3>Track your improvement</h3>
+                  <p>
+                    Review your results and use your
+                    performance to guide your next practice.
+                  </p>
+                </div>
+
+              </div>
 
             </div>
 
@@ -253,125 +683,89 @@ function LandingPage() {
         </section>
 
 
-        {/* =========================
-            PRICING
-        ========================= */}
-        <section className="pricing-section" id="pricing">
+        {/* =====================================================
+            PREMIUM
+        ===================================================== */}
 
-          <p className="section-label">
-            PRICING
-          </p>
+        <section
+          className="premium-section"
+          id="pricing"
+        >
 
-          <h2>
-            Simple plans. Serious preparation.
-          </h2>
+          <div className="premium-glow" />
 
-          <p className="section-description">
-            Start preparing with Overmaths and choose the plan
-            that fits your learning needs.
-          </p>
+          <div className="premium-inner">
 
-          <div className="pricing-grid">
+            <div className="premium-copy">
 
-            <div className="pricing-card">
-
-              <p className="pricing-name">
-                FREE
-              </p>
-
-              <h3>
-                ₦0
-              </h3>
-
-              <p className="pricing-period">
-                Get started
-              </p>
-
-              <div className="pricing-features">
-
-                <p>✓ Access to selected practice questions</p>
-                <p>✓ Basic exam practice</p>
-                <p>✓ Instant results</p>
-                <p>✓ Create your Overmaths account</p>
-
+              <div className="premium-badge">
+                <Icon name="crown" size={15} />
+                OVERMATHS PREMIUM
               </div>
 
+              <h2>
+                Take your preparation
+                <span> further.</span>
+              </h2>
+
+              <p>
+                Unlock a deeper practice experience designed
+                for students who want more questions, more
+                practice and more insight into their progress.
+              </p>
+
               <button
-                className="pricing-btn"
+                className="premium-action"
                 onClick={goToRegister}
               >
-                Get Started
+                Explore Premium
+                <Icon name="arrow" size={17} />
               </button>
 
             </div>
 
 
-            <div className="pricing-card featured">
+            <div className="premium-features">
 
-              <div className="popular-badge">
-                MOST POPULAR
+              <div className="premium-feature">
+                <span>
+                  <Icon name="book" size={19} />
+                </span>
+                <div>
+                  <strong>Expanded Question Library</strong>
+                  <small>Practice more questions.</small>
+                </div>
               </div>
 
-              <p className="pricing-name">
-                PREMIUM
-              </p>
-
-              <h3>
-                Coming Soon
-              </h3>
-
-              <p className="pricing-period">
-                Premium learning experience
-              </p>
-
-              <div className="pricing-features">
-
-                <p>✓ Expanded question library</p>
-                <p>✓ More practice tests</p>
-                <p>✓ Detailed performance tracking</p>
-                <p>✓ Advanced learning features</p>
-
+              <div className="premium-feature">
+                <span>
+                  <Icon name="chart" size={19} />
+                </span>
+                <div>
+                  <strong>Detailed Performance</strong>
+                  <small>Understand your progress.</small>
+                </div>
               </div>
 
-              <button
-                className="pricing-btn"
-                onClick={goToRegister}
-              >
-                Join Overmaths
-              </button>
-
-            </div>
-
-
-            <div className="pricing-card">
-
-              <p className="pricing-name">
-                FUTURE
-              </p>
-
-              <h3>
-                More Coming
-              </h3>
-
-              <p className="pricing-period">
-                We're building more for you
-              </p>
-
-              <div className="pricing-features">
-
-                <p>✓ More subjects</p>
-                <p>✓ More examination levels</p>
-                <p>✓ More learning tools</p>
-                <p>✓ Continuous improvements</p>
-
+              <div className="premium-feature">
+                <span>
+                  <Icon name="lightning" size={19} />
+                </span>
+                <div>
+                  <strong>Advanced Practice</strong>
+                  <small>Challenge yourself further.</small>
+                </div>
               </div>
 
-              <button
-                className="pricing-btn"
-                onClick={goToRegister}
-              >
-                Start Learning
-              </button>
+              <div className="premium-feature">
+                <span>
+                  <Icon name="target" size={19} />
+                </span>
+                <div>
+                  <strong>Focused Preparation</strong>
+                  <small>Practice with purpose.</small>
+                </div>
+              </div>
 
             </div>
 
@@ -380,69 +774,81 @@ function LandingPage() {
         </section>
 
 
-        {/* =========================
+        {/* =====================================================
             ABOUT
-        ========================= */}
-        <section className="about-section" id="about">
+        ===================================================== */}
 
-          <div className="about-content">
+        <section
+          className="section about"
+          id="about"
+        >
 
-            <p className="section-label">
-              ABOUT OVERMATHS
-            </p>
+          <div className="about-visual">
 
-            <h2>
-              A smarter way to prepare for exams.
-            </h2>
+            <div className="about-orbit orbit-one" />
+            <div className="about-orbit orbit-two" />
 
-            <p>
-              Overmaths is an educational platform designed to help
-              students improve their understanding and confidence
-              through structured examination practice.
-            </p>
+            <div className="about-center">
+              <img
+                src={logo}
+                alt="Overmaths"
+              />
+              <span>Smart Exam Practice</span>
+            </div>
 
-            <p>
-              Our focus is simple: give students quality questions,
-              useful feedback and a better way to understand their
-              academic progress.
-            </p>
+            <div className="about-floating floating-top">
+              <Icon name="target" size={18} />
+              <span>Practice</span>
+            </div>
 
-            <button
-              className="primary-btn"
-              onClick={goToRegister}
-            >
-              Start Practicing
-            </button>
+            <div className="about-floating floating-bottom">
+              <Icon name="chart" size={18} />
+              <span>Improve</span>
+            </div>
 
           </div>
 
 
-          <div className="about-highlights">
+          <div className="about-copy">
 
-            <div className="about-box">
-              <strong>01</strong>
-              <h3>Practice</h3>
-              <p>
-                Test yourself with structured examination-style
-                questions.
-              </p>
+            <div className="section-eyebrow">
+              <span />
+              ABOUT OVERMATHS
             </div>
 
-            <div className="about-box">
-              <strong>02</strong>
-              <h3>Learn</h3>
-              <p>
-                Identify areas where you need more understanding
-                and practice.
-              </p>
-            </div>
+            <h2>
+              Built around the way
+              <span> students prepare.</span>
+            </h2>
 
-            <div className="about-box">
-              <strong>03</strong>
-              <h3>Improve</h3>
-              <p>
-                Track your progress and build confidence over time.
-              </p>
+            <p>
+              Overmaths is an educational platform focused
+              on structured examination practice.
+            </p>
+
+            <p>
+              Our goal is simple: give students quality
+              questions, useful feedback and a clearer way
+              to understand their academic progress.
+            </p>
+
+            <div className="about-points">
+
+              <div>
+                <Icon name="check" size={17} />
+                <span>Structured examination practice</span>
+              </div>
+
+              <div>
+                <Icon name="check" size={17} />
+                <span>Instant feedback</span>
+              </div>
+
+              <div>
+                <Icon name="check" size={17} />
+                <span>Progress-focused learning</span>
+              </div>
+
             </div>
 
           </div>
@@ -450,38 +856,50 @@ function LandingPage() {
         </section>
 
 
-        {/* =========================
-            REFERRAL
-        ========================= */}
-        <section className="referral-section" id="referrals">
+        {/* =====================================================
+            FINAL CTA
+        ===================================================== */}
 
-          <div className="referral-content">
+        <section className="final-cta">
 
-            <p className="section-label">
-              OVERMATHS REFERRALS
-            </p>
+          <div className="cta-glow" />
+
+          <div className="cta-content">
+
+            <div className="section-eyebrow">
+              <span />
+              START TODAY
+            </div>
 
             <h2>
-              Share Overmaths. Grow with us.
+              Your next practice session
+              <span> starts here.</span>
             </h2>
 
             <p>
-              Invite friends, classmates and other students to join
-              Overmaths. Our referral programme is being prepared to
-              reward successful referrals as the platform grows.
+              Create your free Overmaths account and start
+              preparing with focused examination practice.
             </p>
 
-            <button
-              className="referral-btn"
-              onClick={goToRegister}
-            >
-              Generate Referral Code
-            </button>
+            <div className="cta-actions">
 
-            <small>
-              Referral rewards and commission tracking will become
-              available when the referral programme launches.
-            </small>
+              <button
+                className="hero-primary"
+                onClick={goToRegister}
+              >
+                Create Free Account
+                <Icon name="arrow" size={18} />
+              </button>
+
+              <button
+                className="cta-login"
+                onClick={goToLogin}
+              >
+                Already have an account?
+                <strong>Sign In</strong>
+              </button>
+
+            </div>
 
           </div>
 
@@ -490,60 +908,106 @@ function LandingPage() {
       </main>
 
 
-      {/* =========================
+      {/* =====================================================
           FOOTER
-      ========================= */}
-      <footer className="footer">
+      ===================================================== */}
 
-        <div className="footer-main">
+      <footer className="site-footer">
+
+        <div className="footer-top">
 
           <div className="footer-brand">
 
             <img
               src={logo}
-              alt="Overmaths Logo"
+              alt="Overmaths"
             />
 
             <p>
-              Smart Exam Practice
+              Smart exam practice for students
+              preparing for their next academic goal.
             </p>
 
-            <span>
-              Practice smarter. Master your exams.
-            </span>
+            <div className="footer-social">
+
+              <button aria-label="Facebook">
+                f
+              </button>
+
+              <button aria-label="Instagram">
+                ◎
+              </button>
+
+              <button aria-label="TikTok">
+                ♪
+              </button>
+
+            </div>
 
           </div>
 
 
-          <div className="footer-links">
+          <div className="footer-column">
 
-            <div>
-              <h4>Platform</h4>
+            <h4>Platform</h4>
 
-              <a href="#home">Home</a>
-              <a href="#courses">Courses</a>
-              <a href="#pricing">Pricing</a>
-              <a href="#about">About</a>
+            <button onClick={() => scrollTo('home')}>
+              Home
+            </button>
 
-            </div>
+            <button onClick={() => scrollTo('courses')}>
+              Courses
+            </button>
+
+            <button onClick={() => scrollTo('pricing')}>
+              Premium
+            </button>
+
+            <button onClick={() => scrollTo('how-it-works')}>
+              How It Works
+            </button>
+
+          </div>
 
 
-            <div>
-              <h4>Account</h4>
+          <div className="footer-column">
 
-              <button onClick={goToLogin}>
-                Login
-              </button>
+            <h4>Account</h4>
 
-              <button onClick={goToRegister}>
-                Create Account
-              </button>
+            <button onClick={goToLogin}>
+              Sign In
+            </button>
 
-              <a href="#referrals">
-                Referrals
-              </a>
+            <button onClick={goToRegister}>
+              Create Account
+            </button>
 
-            </div>
+            <button onClick={goToRegister}>
+              Get Started
+            </button>
+
+          </div>
+
+
+          <div className="footer-column">
+
+            <h4>Learning</h4>
+
+            <button onClick={goToRegister}>
+              Mathematics
+            </button>
+
+            <button onClick={goToRegister}>
+              Physics
+            </button>
+
+            <button onClick={goToRegister}>
+              Chemistry
+            </button>
+
+            <button onClick={goToRegister}>
+              Exam Practice
+            </button>
 
           </div>
 
@@ -552,13 +1016,14 @@ function LandingPage() {
 
         <div className="footer-bottom">
 
-          <p>
-            © {new Date().getFullYear()} Overmaths. All rights reserved.
-          </p>
+          <span>
+            © {new Date().getFullYear()} Overmaths.
+            All rights reserved.
+          </span>
 
-          <p>
-            Smart Exam Practice
-          </p>
+          <span>
+            Practice smarter. Master your exams.
+          </span>
 
         </div>
 

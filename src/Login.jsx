@@ -1,4 +1,3 @@
-
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
@@ -28,13 +27,9 @@ function Login() {
       return
     }
 
-    /*
-      Local development is intentionally kept separate
-      from Supabase authentication.
-    */
     if (!supabase) {
       setMessage(
-        'Login is available on the live Overmaths website. Local testing is currently running without Supabase.'
+        'Login is available on the live Overmaths website.'
       )
       return
     }
@@ -42,7 +37,9 @@ function Login() {
     setLoading(true)
 
     try {
-      // 1. Sign in with Supabase Authentication
+      /*
+       * 1. AUTHENTICATE USER
+       */
       const { data, error } =
         await supabase.auth.signInWithPassword({
           email: email.trim(),
@@ -64,36 +61,29 @@ function Login() {
       }
 
       /*
-        Supabase normally prevents unverified users from
-        signing in when email confirmation is required.
-
-        This additional check gives us a safe layer for
-        future authentication rules.
-      */
+       * 2. CHECK EMAIL VERIFICATION
+       */
       if (!authUser.email_confirmed_at) {
         await supabase.auth.signOut()
 
         setMessage(
-          'Please verify your email address before signing in. Check your inbox for the verification email.'
+          'Please verify your email address before signing in.'
         )
 
         return
       }
 
       /*
-        2. Find the user's record in the public.users table.
-
-        auth_user_id in public.users must match
-        the authenticated Supabase user's ID.
-      */
+       * 3. GET USER PROFILE
+       */
       const { data: profile, error: profileError } =
         await supabase
           .from('users')
-          .select('role')
+          .select('id, role')
           .eq('auth_user_id', authUser.id)
           .single()
 
-      if (profileError) {
+      if (profileError || !profile) {
         console.error(
           'Profile lookup error:',
           profileError
@@ -109,24 +99,78 @@ function Login() {
       }
 
       /*
-        3. Route according to the role stored in
-        public.users.
-      */
-
+       * 4. ADMIN
+       */
       if (profile.role === 'admin') {
         navigate('/admin')
         return
       }
 
+      /*
+       * 5. STUDENT
+       *
+       * IMPORTANT:
+       * We now check the subscriptions table.
+       *
+       * This means the login page itself decides whether
+       * the student belongs in the normal or premium area.
+       */
+
       if (profile.role === 'student') {
+        const now = new Date().toISOString()
+
+        const { data: subscriptions, error: subscriptionError } =
+          await supabase
+            .from('subscriptions')
+            .select(
+              'id, plan, status, started_at, expires_at'
+            )
+            .eq('user_id', profile.id)
+            .eq('plan', 'premium')
+            .eq('status', 'active')
+            .gt('expires_at', now)
+            .order('expires_at', {
+              ascending: false,
+            })
+            .limit(1)
+
+        if (subscriptionError) {
+          console.error(
+            'Subscription lookup error:',
+            subscriptionError
+          )
+
+          await supabase.auth.signOut()
+
+          setMessage(
+            'We could not verify your subscription. Please try again.'
+          )
+
+          return
+        }
+
+        const activePremium =
+          subscriptions &&
+          subscriptions.length > 0
+
+        /*
+         * PREMIUM STUDENT
+         */
+        if (activePremium) {
+          navigate('/premium-dashboard')
+          return
+        }
+
+        /*
+         * NORMAL STUDENT
+         */
         navigate('/student-profile')
         return
       }
 
       /*
-        If a role exists but is not one of the roles
-        supported by the application.
-      */
+       * 6. UNKNOWN ROLE
+       */
       await supabase.auth.signOut()
 
       setMessage(
@@ -137,7 +181,7 @@ function Login() {
 
       setMessage(
         error?.message ||
-          'Something went wrong while signing in. Please try again.'
+          'Something went wrong while signing in.'
       )
     } finally {
       setLoading(false)
@@ -146,91 +190,246 @@ function Login() {
 
   return (
     <div className="login-page">
-      <div className="login-card">
 
-        <div className="login-logo">
+      {/* LEFT BRAND AREA */}
+      <section className="login-brand">
+
+        <div className="brand-overlay"></div>
+
+        <div className="brand-content">
+
           <img
             src="/src/assets/overmaths-logo.png"
-            alt="Overmaths Logo"
+            alt="Overmaths"
+            className="login-brand-logo"
           />
+
+          <div className="brand-line"></div>
+
+          <p className="brand-kicker">
+            SMART EXAM PRACTICE
+          </p>
+
+          <h2>
+            Practice smarter.
+            <br />
+            <span>Master your exams.</span>
+          </h2>
+
+          <p className="brand-description">
+            Structured practice, instant feedback and
+            meaningful progress for serious students.
+          </p>
+
+          <div className="brand-features">
+
+            <div className="brand-feature">
+              <span className="brand-feature-icon">✓</span>
+              <span>Exam-focused practice</span>
+            </div>
+
+            <div className="brand-feature">
+              <span className="brand-feature-icon">◈</span>
+              <span>Track your progress</span>
+            </div>
+
+            <div className="brand-feature">
+              <span className="brand-feature-icon">★</span>
+              <span>Premium learning tools</span>
+            </div>
+
+          </div>
+
         </div>
 
-        <h1>Welcome Back</h1>
+      </section>
 
-        <p>
-          Sign in to continue practicing with Overmaths.
-        </p>
 
-        <form onSubmit={handleLogin}>
+      {/* RIGHT LOGIN AREA */}
+      <section className="login-panel">
 
-          {/* Email */}
-          <input
-            type="email"
-            placeholder="Email Address"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            disabled={loading}
-            autoComplete="email"
-          />
+        <div className="login-container">
 
-          {/* Password */}
-          <div className="password-input-wrapper">
-            <input
-              type={showPassword ? 'text' : 'password'}
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              disabled={loading}
-              autoComplete="current-password"
+          <div className="mobile-logo">
+            <img
+              src="/src/assets/overmaths-logo.png"
+              alt="Overmaths"
             />
+          </div>
 
+          <div className="login-heading">
+
+            <span className="login-eyebrow">
+              STUDENT PORTAL
+            </span>
+
+            <h1>
+              Welcome back
+            </h1>
+
+            <p>
+              Sign in to continue your learning journey.
+            </p>
+
+          </div>
+
+
+          <form
+            className="login-form"
+            onSubmit={handleLogin}
+          >
+
+            {/* EMAIL */}
+            <div className="input-group">
+
+              <label htmlFor="email">
+                Email address
+              </label>
+
+              <div className="input-shell">
+
+                <span className="input-icon">
+                  @
+                </span>
+
+                <input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) =>
+                    setEmail(e.target.value)
+                  }
+                  disabled={loading}
+                  autoComplete="email"
+                />
+
+              </div>
+
+            </div>
+
+
+            {/* PASSWORD */}
+            <div className="input-group">
+
+              <div className="label-row">
+
+                <label htmlFor="password">
+                  Password
+                </label>
+
+                <Link to="/forgot-password">
+                  Forgot password?
+                </Link>
+
+              </div>
+
+              <div className="input-shell">
+
+                <span className="input-icon">
+                  •••
+                </span>
+
+                <input
+                  id="password"
+                  type={
+                    showPassword
+                      ? 'text'
+                      : 'password'
+                  }
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) =>
+                    setPassword(e.target.value)
+                  }
+                  disabled={loading}
+                  autoComplete="current-password"
+                />
+
+                <button
+                  type="button"
+                  className="password-eye"
+                  onClick={() =>
+                    setShowPassword(!showPassword)
+                  }
+                  disabled={loading}
+                  aria-label={
+                    showPassword
+                      ? 'Hide password'
+                      : 'Show password'
+                  }
+                >
+                  {showPassword ? '◉' : '◌'}
+                </button>
+
+              </div>
+
+            </div>
+
+
+            {/* MESSAGE */}
+            {message && (
+              <div className="login-message">
+                {message}
+              </div>
+            )}
+
+
+            {/* SUBMIT */}
             <button
-              type="button"
-              className="password-toggle"
-              onClick={() => setShowPassword(!showPassword)}
+              type="submit"
+              className="login-submit"
               disabled={loading}
             >
-              {showPassword ? 'Hide' : 'Show'}
+              <span>
+                {loading
+                  ? 'Signing in...'
+                  : 'Sign in'}
+              </span>
+
+              {!loading && (
+                <span className="submit-arrow">
+                  →
+                </span>
+              )}
+
             </button>
-          </div>
 
-          {/* Forgot Password */}
-          <div className="forgot-password">
-            <Link to="/forgot-password">
-              Forgot Password?
+          </form>
+
+
+          {/* REGISTER */}
+          <div className="login-register">
+
+            <span>
+              Don't have an account?
+            </span>
+
+            <Link to="/register">
+              Create an account
             </Link>
+
           </div>
 
-          {/* Sign In */}
-          <button
-            type="submit"
-            disabled={loading}
-          >
-            {loading ? 'Signing In...' : 'Sign In'}
-          </button>
 
-        </form>
+          <div className="login-footer">
+            <span>
+              Overmaths
+            </span>
 
-        {message && (
-          <p className="login-message">
-            {message}
-          </p>
-        )}
+            <span>•</span>
 
-        <div className="register-link">
-          <p>Don't have an account?</p>
+            <span>
+              Smart Exam Practice
+            </span>
+          </div>
 
-          <Link to="/register">
-            Create an Account
-          </Link>
         </div>
 
-      </div>
+      </section>
+
     </div>
   )
 }
 
 export default Login
-
