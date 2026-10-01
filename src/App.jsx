@@ -19,6 +19,9 @@ import Practice from './pages/Practice'
 import Quiz from './pages/Quiz'
 import AdminDashboard from './pages/AdminDashboard'
 import AdminQuestions from "./pages/AdminQuestions"
+ 
+import PremiumDashboard from './pages/PremiumDashboard'
+
 
 
 function ProtectedRoute({ children, user, loading }) {
@@ -243,6 +246,27 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+
+
+
+        <Route
+  path="/premium"
+  element={
+    <ProtectedRoute
+      user={user}
+      loading={authLoading}
+    >
+      <PremiumDashboard />
+    </ProtectedRoute>
+  }
+/>
+
+
+
+
+
+
 
 
         <Route
