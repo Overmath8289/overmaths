@@ -186,3 +186,6 @@ const handleLogin = async (e) => {
     setLoading(false)
   }
 }
+
+
+export default Login

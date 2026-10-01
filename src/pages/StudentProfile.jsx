@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import logo from '../assets/overmaths-logo.png'
-import '../Profile.css'
+import "./StudentProfile.css";
 
 function StudentProfile() {
   const navigate = useNavigate()
