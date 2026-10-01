@@ -8,16 +8,34 @@ function PremiumRoute({ children, user, loading }) {
   const [error, setError] = useState('')
 
   useEffect(() => {
+    let mounted = true
+
     async function checkPremiumAccess() {
+      if (loading) {
+        return
+      }
+
+      // No authenticated user
       if (!user) {
-        setCheckingPremium(false)
+        if (mounted) {
+          setIsPremium(false)
+          setCheckingPremium(false)
+        }
+        return
+      }
+
+      if (!supabase) {
+        if (mounted) {
+          setError('Supabase is not configured.')
+          setCheckingPremium(false)
+        }
         return
       }
 
       try {
         setError('')
 
-        // 1. Find the Overmaths user record
+        // Get the Overmaths user record
         const {
           data: profile,
           error: profileError,
@@ -27,7 +45,7 @@ function PremiumRoute({ children, user, loading }) {
           .eq('auth_user_id', user.id)
           .single()
 
-        if (profileError || !profile) {
+        if (profileError) {
           console.error(
             'User profile lookup error:',
             profileError
@@ -38,14 +56,20 @@ function PremiumRoute({ children, user, loading }) {
           )
         }
 
-        // 2. Find the user's subscription
+        if (!profile) {
+          throw new Error(
+            'Your Overmaths profile could not be found.'
+          )
+        }
+
+        // Get latest subscription
         const {
           data: subscription,
           error: subscriptionError,
         } = await supabase
           .from('subscriptions')
           .select(
-            'id, plan, started_at, expires_at, status'
+            'id, plan, started_at, expires_at, status, created_at'
           )
           .eq('user_id', profile.id)
           .order('created_at', {
@@ -65,33 +89,34 @@ function PremiumRoute({ children, user, loading }) {
           )
         }
 
-        // No subscription
+        // User has no subscription
         if (!subscription) {
-          setIsPremium(false)
+          if (mounted) {
+            setIsPremium(false)
+          }
           return
         }
 
-        const plan =
-          subscription.plan
-            ?.toString()
-            .trim()
-            .toLowerCase()
+        const plan = subscription.plan
+          ?.toString()
+          .trim()
+          .toLowerCase()
 
-        const status =
-          subscription.status
-            ?.toString()
-            .trim()
-            .toLowerCase()
+        const status = subscription.status
+          ?.toString()
+          .trim()
+          .toLowerCase()
 
         const now = new Date()
 
-        const startedAt =
-          new Date(subscription.started_at)
+        const startedAt = new Date(
+          subscription.started_at
+        )
 
-        const expiresAt =
-          new Date(subscription.expires_at)
+        const expiresAt = new Date(
+          subscription.expires_at
+        )
 
-        // 3. Check subscription conditions
         const premiumPlan =
           plan === 'premium' ||
           plan === 'premium monthly' ||
@@ -113,7 +138,14 @@ function PremiumRoute({ children, user, loading }) {
           started &&
           notExpired
 
-        setIsPremium(hasPremiumAccess)
+        console.log(
+          'Premium access:',
+          hasPremiumAccess
+        )
+
+        if (mounted) {
+          setIsPremium(hasPremiumAccess)
+        }
 
       } catch (err) {
         console.error(
@@ -121,25 +153,32 @@ function PremiumRoute({ children, user, loading }) {
           err
         )
 
-        setError(
-          err.message ||
-          'Unable to verify Premium access.'
-        )
+        if (mounted) {
+          setError(
+            err.message ||
+            'Unable to verify Premium access.'
+          )
 
-        setIsPremium(false)
+          setIsPremium(false)
+        }
 
       } finally {
-        setCheckingPremium(false)
+        if (mounted) {
+          setCheckingPremium(false)
+        }
       }
     }
 
-    if (!loading) {
-      checkPremiumAccess()
+    checkPremiumAccess()
+
+    return () => {
+      mounted = false
     }
 
   }, [user, loading])
 
-  // Checking
+
+  // Loading
   if (loading || checkingPremium) {
     return (
       <div
@@ -158,7 +197,8 @@ function PremiumRoute({ children, user, loading }) {
     )
   }
 
-  // Not logged in
+
+  // Not authenticated
   if (!user) {
     return (
       <Navigate
@@ -168,7 +208,8 @@ function PremiumRoute({ children, user, loading }) {
     )
   }
 
-  // Database error
+
+  // Database/configuration error
   if (error) {
     return (
       <div
@@ -192,10 +233,24 @@ function PremiumRoute({ children, user, loading }) {
           <p>
             {error}
           </p>
+
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              marginTop: '20px',
+              padding: '12px 20px',
+              border: 'none',
+              borderRadius: '10px',
+              cursor: 'pointer',
+            }}
+          >
+            Try Again
+          </button>
         </div>
       </div>
     )
   }
+
 
   // Free student
   if (!isPremium) {
@@ -206,6 +261,7 @@ function PremiumRoute({ children, user, loading }) {
       />
     )
   }
+
 
   // Premium student
   return children

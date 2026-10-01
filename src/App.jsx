@@ -22,7 +22,7 @@ import AdminQuestions from "./pages/AdminQuestions"
  
 import PremiumDashboard from './pages/PremiumDashboard'
 import PremiumUpgrade from './pages/PremiumUpgrade'
-import PremiumRoute from './components/PremiumRoute'
+import PremiumRoute from './pages/PremiumRoute'
 
 
 
