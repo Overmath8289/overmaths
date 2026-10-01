@@ -1,155 +1,148 @@
-
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../supabaseClient'
-import './StudentProfile.css'
+import { supabase } from './supabaseClient'
+import logo from './assets/overmaths-logo.png'
+import './Profile.css'
 
-function StudentProfile() {
+function Profile() {
   const navigate = useNavigate()
 
-  const [step, setStep] = useState(1)
-  const [nickname, setNickname] = useState('')
-  const [learningRoute, setLearningRoute] = useState('')
-  const [examType, setExamType] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
 
+  const [step, setStep] = useState(1)
+
+  const [fullName, setFullName] = useState('')
+  const [path, setPath] = useState('')
+  const [examType, setExamType] = useState('')
+  const [subject, setSubject] = useState('')
+  const [course, setCourse] = useState('')
+
   useEffect(() => {
-    const loadProfile = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (!user) return
-
-      const savedNickname = user.user_metadata?.nickname
-
-      if (savedNickname) {
-        setNickname(savedNickname)
-      }
-    }
-
     loadProfile()
   }, [])
 
-  const handleNext = () => {
-    setMessage('')
-
-    if (!nickname.trim()) {
-      setMessage('Please tell us what you would like us to call you.')
-      return
-    }
-
-    setStep(2)
-  }
-
-  const selectSecondaryExam = (exam) => {
-    setLearningRoute('secondary')
-    setExamType(exam)
-  }
-
-  const selectUniversity = () => {
-    setLearningRoute('university')
-    setExamType('University')
-  }
-
-  const handleSubmit = async () => {
-    setMessage('')
-
-    if (!learningRoute || !examType) {
-      setMessage('Please select your examination route.')
-      return
-    }
-
-    setLoading(true)
-
+  const loadProfile = async () => {
     try {
+      if (!supabase) {
+        setLoading(false)
+        return
+      }
+
       const {
         data: { user },
-        error: userError,
       } = await supabase.auth.getUser()
 
-      if (userError || !user) {
-        setMessage('Your session has expired. Please log in again.')
-        setLoading(false)
+      if (!user) {
+        navigate('/login')
         return
       }
 
-      /*
-       * First save the nickname in Supabase Auth metadata.
-       * This does not require a new database column.
-       */
-      const { error: nicknameError } = await supabase.auth.updateUser({
-        data: {
-          nickname: nickname.trim(),
-        },
-      })
+      setUser(user)
 
-      if (nicknameError) {
-        console.error(nicknameError)
-        setMessage(nicknameError.message)
-        setLoading(false)
-        return
-      }
-
-      /*
-       * Preserve the existing full_name in public.users.
-       * We do not replace it with the nickname.
-       */
-      const { data: existingUser, error: existingUserError } =
-        await supabase
-          .from('users')
-          .select('full_name')
-          .eq('email', user.email)
-          .maybeSingle()
-
-      if (existingUserError) {
-        console.error(existingUserError)
-        setMessage(existingUserError.message)
-        setLoading(false)
-        return
-      }
-
-      const existingFullName =
-        existingUser?.full_name ||
-        user.user_metadata?.full_name ||
-        user.user_metadata?.name ||
-        'Student'
-
-      /*
-       * Keep the existing users table structure.
-       * full_name remains in the database.
-       * nickname stays in Auth metadata.
-       */
-      const { error } = await supabase
+      const { data } = await supabase
         .from('users')
-        .upsert(
-          {
-            auth_user_id: user.id,
-            email: user.email,
-            full_name: existingFullName,
-            learning_route: learningRoute,
-            exam_type: examType,
-          },
-          {
-            onConflict: 'email',
-          }
-        )
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle()
 
-      if (error) {
-        console.error(error)
-        setMessage(error.message)
-        setLoading(false)
-        return
+      if (data) {
+        setFullName(data.full_name || '')
+        setPath(data.path || '')
+        setExamType(data.exam_type || '')
+        setSubject(data.subject || '')
+        setCourse(data.course || '')
       }
-
-      navigate('/dashboard')
     } catch (error) {
       console.error(error)
-      setMessage('Something went wrong. Please try again.')
+      setMessage('Unable to load your profile.')
     } finally {
       setLoading(false)
     }
+  }
+
+  const nextStep = () => {
+    setMessage('')
+
+    if (step === 1 && !fullName.trim()) {
+      setMessage('Please enter your full name.')
+      return
+    }
+
+    if (step === 2 && !path) {
+      setMessage('Please select your learning path.')
+      return
+    }
+
+    if (step === 3) {
+      if (path === 'olevel' && !subject) {
+        setMessage('Please select your subject.')
+        return
+      }
+
+      if (path === 'university' && !course) {
+        setMessage('Please enter your course.')
+        return
+      }
+    }
+
+    setStep((current) => Math.min(current + 1, 4))
+  }
+
+  const previousStep = () => {
+    setMessage('')
+    setStep((current) => Math.max(current - 1, 1))
+  }
+
+  const saveProfile = async () => {
+    setMessage('')
+
+    if (!supabase || !user) {
+      setMessage('Supabase is not connected.')
+      return
+    }
+
+    setSaving(true)
+
+    try {
+      const { error } = await supabase
+        .from('users')
+        .upsert({
+          id: user.id,
+          full_name: fullName.trim(),
+          path,
+          exam_type: examType || null,
+          subject: subject || null,
+          course: course || null,
+        })
+
+      if (error) throw error
+
+      setMessage('Profile saved successfully.')
+
+      setTimeout(() => {
+        navigate('/')
+      }, 700)
+    } catch (error) {
+      console.error(error)
+      setMessage(
+        error?.message ||
+          'Unable to save your profile. Please try again.'
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="profile-loading">
+        <div className="profile-spinner"></div>
+        <p>Loading your profile...</p>
+      </div>
+    )
   }
 
   return (
@@ -159,146 +152,120 @@ function StudentProfile() {
       <div className="profile-orb profile-orb-two"></div>
 
       <header className="profile-header">
-        <img
-          src="/src/assets/overmaths-logo.png"
-          alt="Overmaths"
-        />
+        <img src={logo} alt="Overmaths" />
       </header>
 
       <main className="profile-main">
 
-        <div className="profile-intro">
+        <section className="profile-intro">
+
           <p className="profile-eyebrow">
-            SETUP 0{step} / 02
+            YOUR OVERMATHS PROFILE
           </p>
 
           <h1>
             Let's personalize
-            <span> your learning.</span>
+            <br />
+            your <span>learning.</span>
           </h1>
 
           <p>
-            Overmaths uses your learning route to create
-            the right preparation experience for you.
+            Tell us a little about yourself so Overmaths can
+            give you the right questions, subjects and practice
+            experience.
           </p>
-        </div>
+
+        </section>
 
         <div className="profile-progress">
           <div className={step >= 1 ? 'progress-active' : ''}></div>
           <div className={step >= 2 ? 'progress-active' : ''}></div>
+          <div className={step >= 3 ? 'progress-active' : ''}></div>
+          <div className={step >= 4 ? 'progress-active' : ''}></div>
         </div>
 
-        <div className="profile-card">
+        <section className="profile-card">
+
+          {/* STEP 1 */}
 
           {step === 1 && (
             <div className="profile-step">
 
               <div className="step-heading">
-                <span className="step-number">01</span>
+
+                <div className="step-number">
+                  01
+                </div>
 
                 <div>
-                  <h2>
-                    What should we call you around here?
-
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      aria-hidden="true"
-                      style={{
-                        marginLeft: '8px',
-                        verticalAlign: 'middle',
-                      }}
-                    >
-                      <path
-                        d="M12 2.8l1.45 4.42a2 2 0 0 0 1.33 1.33L19.2 10l-4.42 1.45a2 2 0 0 0-1.33 1.33L12 17.2l-1.45-4.42a2 2 0 0 0-1.33-1.33L4.8 10l4.42-1.45a2 2 0 0 0 1.33-1.33L12 2.8Z"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-
-                      <path
-                        d="M19 16.5l.55 1.68a1 1 0 0 0 .67.67L21.9 19.4l-1.68.55a1 1 0 0 0-.67.67L19 22.3l-.55-1.68a1 1 0 0 0-.67-.67l-1.68-.55 1.68-.55a1 1 0 0 0 .67-.67L19 16.5Z"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </h2>
+                  <h2>What should we call you?</h2>
 
                   <p>
-                    Pick a name you like. This is how Overmaths
-                    will address you throughout your learning journey.
+                    Your name will be used to personalize
+                    your Overmaths experience.
                   </p>
                 </div>
+
               </div>
 
               <div className="profile-field">
-                <label>NICKNAME</label>
+
+                <label>
+                  FULL NAME
+                </label>
 
                 <input
                   type="text"
-                  placeholder="e.g. Mathlord, Ace, Scholar..."
-                  value={nickname}
-                  onChange={(e) => setNickname(e.target.value)}
-                  maxLength={30}
+                  placeholder="Enter your full name"
+                  value={fullName}
+                  onChange={(e) =>
+                    setFullName(e.target.value)
+                  }
                 />
+
               </div>
 
-              {message && (
-                <p className="profile-message">
-                  {message}
-                </p>
-              )}
-
               <div className="profile-actions">
+
                 <button
                   className="profile-primary-button"
-                  onClick={handleNext}
+                  onClick={nextStep}
                 >
                   Continue
-
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                  >
-                    <path
-                      d="M5 12h14M13 6l6 6-6 6"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
+                  <span>→</span>
                 </button>
+
               </div>
 
             </div>
           )}
 
+          {/* STEP 2 */}
+
           {step === 2 && (
             <div className="profile-step">
 
               <div className="step-heading">
-                <span className="step-number">02</span>
+
+                <div className="step-number">
+                  02
+                </div>
 
                 <div>
-                  <h2>Choose your learning route</h2>
+                  <h2>Choose your learning path</h2>
 
                   <p>
-                    Your choice determines how Overmaths
-                    organizes your subjects, courses and practice.
+                    This helps us show you the questions
+                    that match your academic level.
                   </p>
                 </div>
+
               </div>
 
               <div className="route-section">
 
                 <p className="route-label">
-                  SECONDARY / O-LEVEL
+                  SELECT PATH
                 </p>
 
                 <div className="goal-grid">
@@ -306,105 +273,64 @@ function StudentProfile() {
                   <button
                     type="button"
                     className={`goal-card ${
-                      examType === 'UTME' ? 'selected' : ''
+                      path === 'olevel'
+                        ? 'selected'
+                        : ''
                     }`}
-                    onClick={() => selectSecondaryExam('UTME')}
+                    onClick={() => setPath('olevel')}
                   >
-                    <div className="goal-icon">U</div>
 
-                    <div>
-                      <strong>UTME</strong>
-                      <span>JAMB examination</span>
+                    <div className="goal-icon">
+                      O
                     </div>
 
-                    {examType === 'UTME' && (
-                      <div className="goal-check">✓</div>
+                    <div>
+                      <strong>O-Level / Entrance</strong>
+                      <span>
+                        JAMB, WAEC, NECO & NABTEB
+                      </span>
+                    </div>
+
+                    {path === 'olevel' && (
+                      <div className="goal-check">
+                        ✓
+                      </div>
                     )}
+
                   </button>
 
                   <button
                     type="button"
                     className={`goal-card ${
-                      examType === 'WAEC' ? 'selected' : ''
+                      path === 'university'
+                        ? 'selected'
+                        : ''
                     }`}
-                    onClick={() => selectSecondaryExam('WAEC')}
+                    onClick={() =>
+                      setPath('university')
+                    }
                   >
-                    <div className="goal-icon">W</div>
 
-                    <div>
-                      <strong>WAEC</strong>
-                      <span>West African examination</span>
+                    <div className="goal-icon">
+                      U
                     </div>
 
-                    {examType === 'WAEC' && (
-                      <div className="goal-check">✓</div>
-                    )}
-                  </button>
-
-                  <button
-                    type="button"
-                    className={`goal-card ${
-                      examType === 'NECO' ? 'selected' : ''
-                    }`}
-                    onClick={() => selectSecondaryExam('NECO')}
-                  >
-                    <div className="goal-icon">N</div>
-
                     <div>
-                      <strong>NECO</strong>
-                      <span>National examination</span>
+                      <strong>University</strong>
+                      <span>
+                        Courses & university subjects
+                      </span>
                     </div>
 
-                    {examType === 'NECO' && (
-                      <div className="goal-check">✓</div>
+                    {path === 'university' && (
+                      <div className="goal-check">
+                        ✓
+                      </div>
                     )}
-                  </button>
 
-                  <button
-                    type="button"
-                    className={`goal-card ${
-                      examType === 'NABTEB' ? 'selected' : ''
-                    }`}
-                    onClick={() => selectSecondaryExam('NABTEB')}
-                  >
-                    <div className="goal-icon">N</div>
-
-                    <div>
-                      <strong>NABTEB</strong>
-                      <span>Technical examination</span>
-                    </div>
-
-                    {examType === 'NABTEB' && (
-                      <div className="goal-check">✓</div>
-                    )}
                   </button>
 
                 </div>
-
-                <p className="route-label university-label">
-                  UNIVERSITY
-                </p>
-
-                <button
-                  type="button"
-                  className={`goal-card university-card ${
-                    examType === 'University' ? 'selected' : ''
-                  }`}
-                  onClick={selectUniversity}
-                >
-                  <div className="goal-icon">U</div>
-
-                  <div>
-                    <strong>University Courses</strong>
-                    <span>
-                      Learn by course and course code
-                    </span>
-                  </div>
-
-                  {examType === 'University' && (
-                    <div className="goal-check">✓</div>
-                  )}
-                </button>
 
               </div>
 
@@ -418,36 +344,17 @@ function StudentProfile() {
 
                 <button
                   className="profile-back-button"
-                  onClick={() => {
-                    setMessage('')
-                    setStep(1)
-                  }}
-                  disabled={loading}
+                  onClick={previousStep}
                 >
                   Back
                 </button>
 
                 <button
                   className="profile-primary-button"
-                  onClick={handleSubmit}
-                  disabled={loading}
+                  onClick={nextStep}
                 >
-                  {loading ? 'Saving...' : 'Enter Overmaths'}
-
-                  {!loading && (
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                    >
-                      <path
-                        d="M5 12h14M13 6l6 6-6 6"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  )}
+                  Continue
+                  <span>→</span>
                 </button>
 
               </div>
@@ -455,18 +362,259 @@ function StudentProfile() {
             </div>
           )}
 
-        </div>
+          {/* STEP 3 */}
+
+          {step === 3 && (
+            <div className="profile-step">
+
+              <div className="step-heading">
+
+                <div className="step-number">
+                  03
+                </div>
+
+                <div>
+                  <h2>Tell us what you're studying</h2>
+
+                  <p>
+                    We'll use this to personalize your
+                    practice questions.
+                  </p>
+                </div>
+
+              </div>
+
+              {path === 'olevel' && (
+                <>
+
+                  <div className="profile-field">
+
+                    <label>
+                      EXAM TYPE
+                    </label>
+
+                    <select
+                      value={examType}
+                      onChange={(e) =>
+                        setExamType(e.target.value)
+                      }
+                    >
+                      <option value="">
+                        Select examination
+                      </option>
+
+                      <option value="JAMB / UTME">
+                        JAMB / UTME
+                      </option>
+
+                      <option value="WAEC / SSCE">
+                        WAEC / SSCE
+                      </option>
+
+                      <option value="NECO">
+                        NECO
+                      </option>
+
+                      <option value="NABTEB">
+                        NABTEB
+                      </option>
+                    </select>
+
+                  </div>
+
+                  <div className="profile-field">
+
+                    <label>
+                      SUBJECT
+                    </label>
+
+                    <input
+                      type="text"
+                      placeholder="e.g. Mathematics"
+                      value={subject}
+                      onChange={(e) =>
+                        setSubject(e.target.value)
+                      }
+                    />
+
+                  </div>
+
+                </>
+              )}
+
+              {path === 'university' && (
+                <>
+
+                  <div className="profile-field">
+
+                    <label>
+                      UNIVERSITY COURSE
+                    </label>
+
+                    <input
+                      type="text"
+                      placeholder="e.g. Physics Electronics"
+                      value={course}
+                      onChange={(e) =>
+                        setCourse(e.target.value)
+                      }
+                    />
+
+                  </div>
+
+                  <div className="profile-field">
+
+                    <label>
+                      SUBJECT / AREA
+                    </label>
+
+                    <input
+                      type="text"
+                      placeholder="e.g. Physics"
+                      value={subject}
+                      onChange={(e) =>
+                        setSubject(e.target.value)
+                      }
+                    />
+
+                  </div>
+
+                </>
+              )}
+
+              {message && (
+                <p className="profile-message">
+                  {message}
+                </p>
+              )}
+
+              <div className="profile-actions">
+
+                <button
+                  className="profile-back-button"
+                  onClick={previousStep}
+                >
+                  Back
+                </button>
+
+                <button
+                  className="profile-primary-button"
+                  onClick={nextStep}
+                >
+                  Review Profile
+                  <span>→</span>
+                </button>
+
+              </div>
+
+            </div>
+          )}
+
+          {/* STEP 4 */}
+
+          {step === 4 && (
+            <div className="profile-step">
+
+              <div className="step-heading">
+
+                <div className="step-number">
+                  04
+                </div>
+
+                <div>
+                  <h2>Your profile is ready</h2>
+
+                  <p>
+                    Check your information before entering
+                    your Overmaths dashboard.
+                  </p>
+                </div>
+
+              </div>
+
+              <div className="profile-summary">
+
+                <div className="summary-row">
+                  <span>Name</span>
+                  <strong>{fullName}</strong>
+                </div>
+
+                <div className="summary-row">
+                  <span>Learning path</span>
+                  <strong>
+                    {path === 'olevel'
+                      ? 'O-Level / Entrance'
+                      : 'University'}
+                  </strong>
+                </div>
+
+                {examType && (
+                  <div className="summary-row">
+                    <span>Exam</span>
+                    <strong>{examType}</strong>
+                  </div>
+                )}
+
+                {subject && (
+                  <div className="summary-row">
+                    <span>Subject</span>
+                    <strong>{subject}</strong>
+                  </div>
+                )}
+
+                {course && (
+                  <div className="summary-row">
+                    <span>Course</span>
+                    <strong>{course}</strong>
+                  </div>
+                )}
+
+              </div>
+
+              {message && (
+                <p className="profile-success">
+                  {message}
+                </p>
+              )}
+
+              <div className="profile-actions">
+
+                <button
+                  className="profile-back-button"
+                  onClick={previousStep}
+                  disabled={saving}
+                >
+                  Back
+                </button>
+
+                <button
+                  className="profile-primary-button"
+                  onClick={saveProfile}
+                  disabled={saving}
+                >
+                  {saving
+                    ? 'Saving...'
+                    : 'Enter Overmaths'}
+
+                  {!saving && <span>→</span>}
+                </button>
+
+              </div>
+
+            </div>
+          )}
+
+        </section>
 
       </main>
 
       <footer className="profile-footer">
-        <span>© 2026 Overmaths</span>
-        <span>Learn smarter. Prepare better.</span>
+        <span>Overmaths</span>
+        <span>Smart Exam Practice</span>
       </footer>
 
     </div>
   )
 }
 
-export default StudentProfile
-
+export default Profile

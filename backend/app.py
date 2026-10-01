@@ -46,7 +46,335 @@ SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 print("SUPABASE URL:", SUPABASE_URL)
 print("SERVICE KEY LOADED:", bool(SUPABASE_SERVICE_KEY))
 
+# ============================================================
+# AUTHENTICATION / USER ACCESS
+# ============================================================
 
+def get_authenticated_user(access_token):
+    """
+    Verify a Supabase access token and return the authenticated user.
+
+    The user's access token comes from the React/Supabase frontend.
+    The Supabase service key remains safely on the Python server.
+    """
+
+    if not access_token:
+        return None, {
+            "error": "Authentication token is required"
+        }, 401
+
+    if not SUPABASE_URL:
+        return None, {
+            "error": "Supabase server is not configured"
+        }, 500
+
+    try:
+
+        response = requests.get(
+            f"{SUPABASE_URL.rstrip('/')}/auth/v1/user",
+            headers={
+                "apikey": SUPABASE_SERVICE_KEY,
+                "Authorization": f"Bearer {access_token}",
+            },
+            timeout=15
+        )
+
+    except requests.RequestException as error:
+
+        print("AUTH CONNECTION ERROR:", error)
+
+        return None, {
+            "error": "Unable to verify authentication."
+        }, 503
+
+    if response.status_code != 200:
+
+        print(
+            "AUTH ERROR:",
+            response.status_code,
+            response.text
+        )
+
+        return None, {
+            "error": "Your session is invalid or has expired."
+        }, 401
+
+    try:
+
+        return response.json(), None, 200
+
+    except ValueError:
+
+        return None, {
+            "error": "Invalid authentication response."
+        }, 502
+
+
+def get_user_profile(email):
+    """
+    Retrieve the user's profile from public.users.
+    """
+
+    rows, error, status = supabase_get(
+        "users",
+        {
+            "select": (
+                "id,"
+                "auth_user_id,"
+                "email,"
+                "full_name,"
+                "learning_route,"
+                "exam_type"
+            ),
+            "email": f"eq.{email}",
+            "limit": 1,
+        }
+    )
+
+    if error:
+        return None, error, status
+
+    if not rows:
+        return None, None, 200
+
+    return rows[0], None, 200
+
+
+def get_user_subscription(user_id):
+    """
+    Retrieve the user's subscription.
+
+    The subscription table currently uses the user's ID and plan.
+    """
+
+    rows, error, status = supabase_get(
+        "subscriptions",
+        {
+            "select": "*",
+            "user_id": f"eq.{user_id}",
+            "limit": 1,
+        }
+    )
+
+    if error:
+        return None, error, status
+
+    if not rows:
+        return None, None, 200
+
+    return rows[0], None, 200
+
+
+def determine_user_access(user, profile, subscription):
+    """
+    Determine which part of Overmaths the authenticated
+    user should enter.
+
+    Profile must be completed before dashboard access.
+    """
+
+    metadata = user.get("user_metadata") or {}
+
+    nickname = (
+        metadata.get("nickname")
+        or ""
+    ).strip()
+
+    learning_route = (
+        profile.get("learning_route")
+        if profile
+        else None
+    )
+
+    exam_type = (
+        profile.get("exam_type")
+        if profile
+        else None
+    )
+
+    profile_complete = bool(
+        nickname
+        and learning_route
+        and exam_type
+    )
+
+    # --------------------------------------------------------
+    # DEFAULT ACCESS
+    # --------------------------------------------------------
+
+    access_level = "normal"
+
+    # --------------------------------------------------------
+    # PREMIUM CHECK
+    # --------------------------------------------------------
+
+    if subscription:
+
+        plan = str(
+            subscription.get("plan") or ""
+        ).strip().lower()
+
+        if plan in (
+            "premium",
+            "pro",
+            "paid"
+        ):
+            access_level = "premium"
+
+    # --------------------------------------------------------
+    # ROUTE
+    # --------------------------------------------------------
+
+    if not profile_complete:
+
+        next_route = "/student-profile"
+
+    elif access_level == "premium":
+
+        next_route = "/premium-dashboard"
+
+    else:
+
+        next_route = "/dashboard"
+
+    return {
+        "profile_complete": profile_complete,
+        "access_level": access_level,
+        "next_route": next_route,
+        "nickname": nickname,
+        "learning_route": learning_route,
+        "exam_type": exam_type,
+    }
+
+
+# ============================================================
+# AUTH — CURRENT USER
+# ============================================================
+
+@app.route("/api/auth/me", methods=["GET"])
+def auth_me():
+
+    # --------------------------------------------------------
+    # READ ACCESS TOKEN
+    # --------------------------------------------------------
+
+    authorization = request.headers.get(
+        "Authorization",
+        ""
+    )
+
+    if not authorization.startswith("Bearer "):
+
+        return jsonify({
+            "authenticated": False,
+            "error": "Authentication required"
+        }), 401
+
+    access_token = authorization.replace(
+        "Bearer ",
+        "",
+        1
+    ).strip()
+
+    # --------------------------------------------------------
+    # VERIFY SUPABASE SESSION
+    # --------------------------------------------------------
+
+    user, error, status = get_authenticated_user(
+        access_token
+    )
+
+    if error:
+
+        return jsonify({
+            "authenticated": False,
+            **error
+        }), status
+
+    email = user.get("email")
+
+    # --------------------------------------------------------
+    # USER PROFILE
+    # --------------------------------------------------------
+
+    profile, profile_error, profile_status = get_user_profile(
+        email
+    )
+
+    if profile_error:
+
+        return jsonify({
+            "authenticated": True,
+            "error": profile_error
+        }), profile_status
+
+    # --------------------------------------------------------
+    # SUBSCRIPTION
+    # --------------------------------------------------------
+
+    subscription, subscription_error, subscription_status = (
+        get_user_subscription(user.get("id"))
+    )
+
+    if subscription_error:
+
+        return jsonify({
+            "authenticated": True,
+            "error": subscription_error
+        }), subscription_status
+
+    # --------------------------------------------------------
+    # DETERMINE ACCESS
+    # --------------------------------------------------------
+
+    access = determine_user_access(
+        user,
+        profile,
+        subscription
+    )
+
+    # --------------------------------------------------------
+    # RESPONSE
+    # --------------------------------------------------------
+
+    return jsonify({
+
+        "authenticated": True,
+
+        "user": {
+            "id": user.get("id"),
+            "email": user.get("email"),
+            "metadata": user.get("user_metadata") or {},
+        },
+
+        "profile": profile,
+
+        "subscription": subscription,
+
+        "profile_complete": access[
+            "profile_complete"
+        ],
+
+        "access_level": access[
+            "access_level"
+        ],
+
+        "nickname": access[
+            "nickname"
+        ],
+
+        "learning_route": access[
+            "learning_route"
+        ],
+
+        "exam_type": access[
+            "exam_type"
+        ],
+
+        "next_route": access[
+            "next_route"
+        ],
+    })
 # ============================================================
 # SUPABASE HELPERS
 # ============================================================
