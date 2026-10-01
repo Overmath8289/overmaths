@@ -18,23 +18,25 @@
   </div>
 
   <button
-    type="button"
-    onClick={() => navigate('/premium')}
+  type="button"
+  onClick={() => {
+    console.log('PREMIUM BUTTON CLICKED')
+    navigate('/premium-upgrade')
+  }}
+>
+  Explore Premium
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
   >
-    Explore Premium
-
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <path
-        d="M5 12h14M13 6l6 6-6 6"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2"
-      />
-    </svg>
-  </button>
+    <path
+      d="M5 12h14M13 6l6 6-6 6"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+    />
+  </svg>
+</button>
 
 </section>
