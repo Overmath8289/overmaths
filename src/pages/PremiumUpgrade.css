@@ -1,0 +1,247 @@
+.premium-upgrade-page {
+  min-height: 100vh;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 50px 20px;
+
+  position: relative;
+  overflow: hidden;
+
+  background:
+    radial-gradient(
+      circle at 50% 0%,
+      rgba(91, 104, 255, 0.16),
+      transparent 35%
+    ),
+    #070b14;
+
+  color: #ffffff;
+
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+
+.premium-upgrade-glow {
+  position: absolute;
+
+  width: 500px;
+  height: 500px;
+
+  border-radius: 50%;
+
+  background: rgba(92, 106, 255, 0.12);
+
+  filter: blur(120px);
+
+  pointer-events: none;
+}
+
+
+.premium-upgrade-container {
+  width: 100%;
+  max-width: 900px;
+
+  text-align: center;
+
+  position: relative;
+  z-index: 1;
+}
+
+
+.premium-upgrade-badge {
+  display: inline-block;
+
+  padding: 7px 12px;
+
+  border-radius: 999px;
+
+  background: rgba(103, 116, 255, 0.1);
+
+  border:
+    1px solid rgba(103, 116, 255, 0.2);
+
+  color: #8993ff;
+
+  font-size: 9px;
+  font-weight: 700;
+
+  letter-spacing: 0.18em;
+}
+
+
+.premium-upgrade-container h1 {
+  margin: 24px 0 15px;
+
+  font-size: clamp(38px, 6vw, 70px);
+
+  line-height: 0.98;
+
+  letter-spacing: -0.055em;
+}
+
+
+.premium-upgrade-description {
+  max-width: 590px;
+
+  margin: 0 auto;
+
+  color: #7d8799;
+
+  font-size: 14px;
+
+  line-height: 1.7;
+}
+
+
+.premium-feature-grid {
+  display: grid;
+
+  grid-template-columns: repeat(2, 1fr);
+
+  gap: 12px;
+
+  margin-top: 42px;
+
+  text-align: left;
+}
+
+
+.premium-feature-grid > div {
+  padding: 22px;
+
+  border-radius: 15px;
+
+  background:
+    rgba(255, 255, 255, 0.025);
+
+  border:
+    1px solid rgba(255, 255, 255, 0.07);
+
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease;
+}
+
+
+.premium-feature-grid > div:hover {
+  transform: translateY(-3px);
+
+  border-color:
+    rgba(103, 116, 255, 0.25);
+}
+
+
+.premium-feature-grid span {
+  display: block;
+
+  margin-bottom: 15px;
+
+  font-size: 21px;
+}
+
+
+.premium-feature-grid strong {
+  display: block;
+
+  font-size: 13px;
+}
+
+
+.premium-feature-grid p {
+  margin: 7px 0 0;
+
+  color: #697385;
+
+  font-size: 10px;
+
+  line-height: 1.6;
+}
+
+
+.premium-upgrade-button {
+  margin-top: 35px;
+
+  padding: 14px 22px;
+
+  border: 0;
+
+  border-radius: 10px;
+
+  background:
+    linear-gradient(
+      135deg,
+      #6875ff,
+      #4c58df
+    );
+
+  color: #ffffff;
+
+  font-size: 12px;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  box-shadow:
+    0 12px 35px rgba(82, 96, 230, 0.28);
+
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+
+.premium-upgrade-button span {
+  margin-left: 14px;
+}
+
+
+.premium-upgrade-button:hover {
+  transform: translateY(-2px);
+
+  box-shadow:
+    0 15px 40px rgba(82, 96, 230, 0.4);
+}
+
+
+.premium-return-button {
+  display: block;
+
+  margin: 17px auto 0;
+
+  border: 0;
+
+  background: transparent;
+
+  color: #687284;
+
+  font-size: 10px;
+
+  cursor: pointer;
+}
+
+
+.premium-return-button:hover {
+  color: #ffffff;
+}
+
+
+@media (max-width: 600px) {
+
+  .premium-feature-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .premium-upgrade-container h1 {
+    font-size: 42px;
+  }
+
+}

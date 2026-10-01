@@ -21,6 +21,10 @@ import AdminDashboard from './pages/AdminDashboard'
 import AdminQuestions from "./pages/AdminQuestions"
  
 import PremiumDashboard from './pages/PremiumDashboard'
+import PremiumUpgrade from './pages/PremiumUpgrade'
+import PremiumRoute from './components/PremiumRoute'
+
+
 
 
 
@@ -253,11 +257,23 @@ function App() {
         <Route
   path="/premium"
   element={
-    <ProtectedRoute
+    <PremiumRoute
       user={user}
       loading={authLoading}
     >
       <PremiumDashboard />
+    </PremiumRoute>
+  }
+/>
+
+<Route
+  path="/premium-upgrade"
+  element={
+    <ProtectedRoute
+      user={user}
+      loading={authLoading}
+    >
+      <PremiumUpgrade />
     </ProtectedRoute>
   }
 />
