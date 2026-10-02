@@ -1,14 +1,16 @@
-
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import os
 import requests
 import random
 import re
+from datetime import datetime, timezone
 from dotenv import load_dotenv
+
 from dashboard_api import dashboard_api
 from admin_api import admin_api
 from question_api import question_api
+
 
 # ============================================================
 # ENVIRONMENT
@@ -46,469 +48,7 @@ SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 print("SUPABASE URL:", SUPABASE_URL)
 print("SERVICE KEY LOADED:", bool(SUPABASE_SERVICE_KEY))
 
-# ============================================================
-# AUTHENTICATION / USER ACCESS
-# ============================================================
 
-def get_authenticated_user(access_token):
-    """
-    Verify a Supabase access token and return the authenticated user.
-
-    The user's access token comes from the React/Supabase frontend.
-    The Supabase service key remains safely on the Python server.
-    """
-
-    if not access_token:
-        return None, {
-            "error": "Authentication token is required"
-        }, 401
-
-    if not SUPABASE_URL:
-        return None, {
-            "error": "Supabase server is not configured"
-        }, 500
-
-    try:
-
-        response = requests.get(
-            f"{SUPABASE_URL.rstrip('/')}/auth/v1/user",
-            headers={
-                "apikey": SUPABASE_SERVICE_KEY,
-                "Authorization": f"Bearer {access_token}",
-            },
-            timeout=15
-        )
-
-    except requests.RequestException as error:
-
-        print("AUTH CONNECTION ERROR:", error)
-
-        return None, {
-            "error": "Unable to verify authentication."
-        }, 503
-
-    if response.status_code != 200:
-
-        print(
-            "AUTH ERROR:",
-            response.status_code,
-            response.text
-        )
-
-        return None, {
-            "error": "Your session is invalid or has expired."
-        }, 401
-
-    try:
-
-        return response.json(), None, 200
-
-    except ValueError:
-
-        return None, {
-            "error": "Invalid authentication response."
-        }, 502
-
-
-def get_user_profile(email):
-    """
-    Retrieve the user's profile from public.users.
-    """
-
-    rows, error, status = supabase_get(
-        "users",
-        {
-            "select": (
-                "id,"
-                "auth_user_id,"
-                "email,"
-                "full_name,"
-                "learning_route,"
-                "exam_type"
-            ),
-            "email": f"eq.{email}",
-            "limit": 1,
-        }
-    )
-
-    if error:
-        return None, error, status
-
-    if not rows:
-        return None, None, 200
-
-    return rows[0], None, 200
-
-
-def get_user_subscription(user_id):
-    """
-    Retrieve all subscriptions belonging to the public.users.id.
-
-    IMPORTANT:
-    subscriptions.user_id references public.users.id,
-    NOT auth.users.id.
-    """
-
-    if not user_id:
-        return None, {
-            "error": "User profile ID is required"
-        }, 400
-
-    rows, error, status = supabase_get(
-        "subscriptions",
-        {
-            "select": "*",
-            "user_id": f"eq.{user_id}",
-            "order": "created_at.desc",
-            "limit": 100,
-        }
-    )
-
-    if error:
-        return None, error, status
-
-    if not rows:
-        return None, None, 200
-
-    return rows, None, 200
-def determine_user_access(user, profile, subscriptions):
-    """
-    Determine whether the authenticated student is normal or premium.
-
-    IMPORTANT:
-    subscriptions are matched using public.users.id.
-    """
-
-    metadata = user.get("user_metadata") or {}
-
-    nickname = (
-        metadata.get("nickname")
-        or ""
-    ).strip()
-
-    learning_route = (
-        profile.get("learning_route")
-        if profile
-        else None
-    )
-
-    exam_type = (
-        profile.get("exam_type")
-        if profile
-        else None
-    )
-
-    # --------------------------------------------------------
-    # PROFILE COMPLETION
-    # --------------------------------------------------------
-
-    profile_complete = bool(
-        nickname
-        and learning_route
-        and exam_type
-    )
-
-    # --------------------------------------------------------
-    # DEFAULT
-    # --------------------------------------------------------
-
-    access_level = "normal"
-
-    # --------------------------------------------------------
-    # PREMIUM CHECK
-    # --------------------------------------------------------
-
-    now = __import__("datetime").datetime.now(
-        __import__("datetime").timezone.utc
-    )
-
-    for subscription in subscriptions or []:
-
-        plan = str(
-            subscription.get("plan") or ""
-        ).strip().lower()
-
-        status = str(
-            subscription.get("status") or ""
-        ).strip().lower()
-
-        # Accepted Premium plans
-        premium_plan = plan in (
-            "premium",
-            "premium monthly",
-            "premium annual",
-            "premium yearly",
-            "pro",
-            "paid",
-        )
-
-        if not premium_plan:
-            continue
-
-        # Subscription must be active
-        if status and status != "active":
-            continue
-
-        # ----------------------------------------------------
-        # START DATE
-        # ----------------------------------------------------
-
-        started_at = subscription.get("started_at")
-
-        if started_at:
-
-            try:
-
-                start = __import__("datetime").datetime.fromisoformat(
-                    str(started_at).replace("Z", "+00:00")
-                )
-
-                if start > now:
-                    continue
-
-            except ValueError:
-                pass
-
-        # ----------------------------------------------------
-        # EXPIRATION DATE
-        # ----------------------------------------------------
-
-        expires_at = subscription.get("expires_at")
-
-        if expires_at:
-
-            try:
-
-                expiry = __import__("datetime").datetime.fromisoformat(
-                    str(expires_at).replace("Z", "+00:00")
-                )
-
-                if expiry <= now:
-                    continue
-
-            except ValueError:
-                pass
-
-        # ----------------------------------------------------
-        # VALID PREMIUM SUBSCRIPTION FOUND
-        # ----------------------------------------------------
-
-        access_level = "premium"
-
-        break
-
-    # --------------------------------------------------------
-    # ROUTE
-    # --------------------------------------------------------
-
-    if not profile_complete:
-
-        next_route = "/student-profile"
-
-    elif access_level == "premium":
-
-        next_route = "/premium-dashboard"
-
-    else:
-
-        next_route = "/dashboard"
-
-    return {
-        "profile_complete": profile_complete,
-        "access_level": access_level,
-        "next_route": next_route,
-        "nickname": nickname,
-        "learning_route": learning_route,
-        "exam_type": exam_type,
-    }
-
-
-# ============================================================
-# AUTH — CURRENT USER
-# ============================================================
-
-@app.route("/api/auth/me", methods=["GET"])
-def auth_me():
-
-    # --------------------------------------------------------
-    # READ ACCESS TOKEN
-    # --------------------------------------------------------
-
-    authorization = request.headers.get(
-        "Authorization",
-        ""
-    )
-
-    if not authorization.startswith("Bearer "):
-
-        return jsonify({
-            "authenticated": False,
-            "error": "Authentication required"
-        }), 401
-
-    access_token = authorization.replace(
-        "Bearer ",
-        "",
-        1
-    ).strip()
-
-    # --------------------------------------------------------
-    # VERIFY SUPABASE AUTH USER
-    # --------------------------------------------------------
-
-    user, error, status = get_authenticated_user(
-        access_token
-    )
-
-    if error:
-
-        return jsonify({
-            "authenticated": False,
-            **error
-        }), status
-
-    email = user.get("email")
-
-    # --------------------------------------------------------
-    # GET PUBLIC USERS PROFILE
-    # --------------------------------------------------------
-
-    profile, profile_error, profile_status = get_user_profile(
-        email
-    )
-
-    if profile_error:
-
-        return jsonify({
-            "authenticated": True,
-            "error": profile_error
-        }), profile_status
-
-    if not profile:
-
-        return jsonify({
-            "authenticated": True,
-            "error": "Student profile was not found."
-        }), 404
-
-    # --------------------------------------------------------
-    # IMPORTANT
-    #
-    # subscriptions.user_id = public.users.id
-    #
-    # NOT auth.users.id
-    # --------------------------------------------------------
-
-    profile_user_id = profile.get("id")
-
-    print(
-        "AUTH USER ID:",
-        user.get("id")
-    )
-
-    print(
-        "PUBLIC USERS ID:",
-        profile_user_id
-    )
-
-    # --------------------------------------------------------
-    # GET SUBSCRIPTIONS USING PUBLIC USERS ID
-    # --------------------------------------------------------
-
-    subscriptions, subscription_error, subscription_status = (
-        get_user_subscription(profile_user_id)
-    )
-
-    if subscription_error:
-
-        return jsonify({
-            "authenticated": True,
-            "error": subscription_error
-        }), subscription_status
-
-    # --------------------------------------------------------
-    # DETERMINE ACCESS
-    # --------------------------------------------------------
-
-    access = determine_user_access(
-        user,
-        profile,
-        subscriptions
-    )
-
-    # --------------------------------------------------------
-    # DEBUG
-    # --------------------------------------------------------
-
-    print(
-        "SUBSCRIPTIONS:",
-        subscriptions
-    )
-
-    print(
-        "FINAL ACCESS LEVEL:",
-        access["access_level"]
-    )
-
-    print(
-        "NEXT ROUTE:",
-        access["next_route"]
-    )
-
-    # --------------------------------------------------------
-    # RESPONSE
-    # --------------------------------------------------------
-
-    return jsonify({
-
-        "authenticated": True,
-
-        "user": {
-            "id": user.get("id"),
-            "email": user.get("email"),
-            "metadata": user.get("user_metadata") or {},
-        },
-
-        "profile": profile,
-
-        # Return the whole subscription list
-        "subscriptions": subscriptions or [],
-
-        # Also provide latest subscription for compatibility
-        "subscription": (
-            subscriptions[0]
-            if subscriptions
-            else None
-        ),
-
-        "profile_complete": access[
-            "profile_complete"
-        ],
-
-        "access_level": access[
-            "access_level"
-        ],
-
-        "is_premium": (
-            access["access_level"] == "premium"
-        ),
-
-        "nickname": access[
-            "nickname"
-        ],
-
-        "learning_route": access[
-            "learning_route"
-        ],
-
-        "exam_type": access[
-            "exam_type"
-        ],
-
-        "next_route": access[
-            "next_route"
-        ],
-    })
 # ============================================================
 # SUPABASE HELPERS
 # ============================================================
@@ -533,11 +73,15 @@ def supabase_get(table, params):
     """
 
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+
         return None, {
             "error": "Supabase server is not configured correctly"
         }, 500
 
-    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/{table}"
+    url = (
+        f"{SUPABASE_URL.rstrip('/')}"
+        f"/rest/v1/{table}"
+    )
 
     try:
 
@@ -550,10 +94,16 @@ def supabase_get(table, params):
 
     except requests.RequestException as error:
 
-        print("SUPABASE CONNECTION ERROR:", error)
+        print(
+            "SUPABASE CONNECTION ERROR:",
+            error
+        )
 
         return None, {
-            "error": "Unable to connect to the question database."
+            "error": (
+                "Unable to connect to "
+                "the question database."
+            )
         }, 503
 
     if response.status_code != 200:
@@ -565,7 +115,10 @@ def supabase_get(table, params):
         )
 
         return None, {
-            "error": "Unable to retrieve data from Supabase",
+            "error": (
+                "Unable to retrieve data "
+                "from Supabase"
+            ),
             "details": response.text
         }, response.status_code
 
@@ -581,14 +134,732 @@ def supabase_get(table, params):
 
 
 # ============================================================
+# AUTHENTICATION
+# ============================================================
+
+def get_authenticated_user(access_token):
+    """
+    Verify a Supabase access token.
+
+    The access token comes from the React/Supabase frontend.
+    The Supabase service key remains safely on the Python server.
+    """
+
+    if not access_token:
+
+        return None, {
+            "error": "Authentication token is required"
+        }, 401
+
+    if not SUPABASE_URL:
+
+        return None, {
+            "error": "Supabase server is not configured"
+        }, 500
+
+    try:
+
+        response = requests.get(
+            f"{SUPABASE_URL.rstrip('/')}/auth/v1/user",
+            headers={
+                "apikey": SUPABASE_SERVICE_KEY,
+                "Authorization": (
+                    f"Bearer {access_token}"
+                ),
+            },
+            timeout=15
+        )
+
+    except requests.RequestException as error:
+
+        print(
+            "AUTH CONNECTION ERROR:",
+            error
+        )
+
+        return None, {
+            "error": (
+                "Unable to verify authentication."
+            )
+        }, 503
+
+    if response.status_code != 200:
+
+        print(
+            "AUTH ERROR:",
+            response.status_code,
+            response.text
+        )
+
+        return None, {
+            "error": (
+                "Your session is invalid "
+                "or has expired."
+            )
+        }, 401
+
+    try:
+
+        return response.json(), None, 200
+
+    except ValueError:
+
+        return None, {
+            "error": (
+                "Invalid authentication response."
+            )
+        }, 502
+
+
+# ============================================================
+# USER PROFILE
+# ============================================================
+
+def get_user_profile(email):
+    """
+    Retrieve the user's profile from public.users.
+    """
+
+    if not email:
+
+        return None, {
+            "error": "Authenticated user has no email."
+        }, 400
+
+    rows, error, status = supabase_get(
+        "users",
+        {
+            "select": (
+                "id,"
+                "auth_user_id,"
+                "email,"
+                "full_name,"
+                "learning_route,"
+                "exam_type"
+            ),
+            "email": f"eq.{email}",
+            "limit": 1,
+        }
+    )
+
+    if error:
+        return None, error, status
+
+    if not rows:
+
+        return None, None, 200
+
+    return rows[0], None, 200
+
+
+# ============================================================
+# USER SUBSCRIPTIONS
+# ============================================================
+
+def get_user_subscription(user_id):
+    """
+    Retrieve subscriptions belonging to public.users.id.
+
+    IMPORTANT:
+
+    subscriptions.user_id
+        ↓
+    public.users.id
+
+    It does NOT use auth.users.id.
+    """
+
+    if not user_id:
+
+        return None, {
+            "error": "User profile ID is required"
+        }, 400
+
+    print(
+        "LOOKING UP SUBSCRIPTIONS FOR "
+        "PUBLIC USERS ID:",
+        user_id
+    )
+
+    rows, error, status = supabase_get(
+        "subscriptions",
+        {
+            "select": "*",
+            "user_id": f"eq.{user_id}",
+            "order": "created_at.desc",
+            "limit": 100,
+        }
+    )
+
+    if error:
+
+        print(
+            "SUBSCRIPTION QUERY ERROR:",
+            error
+        )
+
+        return None, error, status
+
+    print(
+        "SUBSCRIPTION ROWS FOUND:",
+        len(rows or [])
+    )
+
+    print(
+        "SUBSCRIPTION DATA:",
+        rows or []
+    )
+
+    return rows or [], None, 200
+
+
+# ============================================================
+# DETERMINE USER ACCESS
+# ============================================================
+
+def determine_user_access(
+    user,
+    profile,
+    subscriptions
+):
+    """
+    Determine whether the authenticated student
+    should receive normal or premium access.
+    """
+
+    metadata = user.get(
+        "user_metadata"
+    ) or {}
+
+    nickname = (
+        metadata.get("nickname")
+        or ""
+    ).strip()
+
+    learning_route = (
+        profile.get("learning_route")
+        if profile
+        else None
+    )
+
+    exam_type = (
+        profile.get("exam_type")
+        if profile
+        else None
+    )
+
+    # ========================================================
+    # PROFILE COMPLETION
+    # ========================================================
+
+    profile_complete = bool(
+        nickname
+        and learning_route
+        and exam_type
+    )
+
+    # ========================================================
+    # DEFAULT ACCESS
+    # ========================================================
+
+    access_level = "normal"
+
+    now = datetime.now(
+        timezone.utc
+    )
+
+    # ========================================================
+    # PREMIUM SUBSCRIPTION CHECK
+    # ========================================================
+
+    for subscription in subscriptions or []:
+
+        print(
+            "CHECKING SUBSCRIPTION:",
+            subscription
+        )
+
+        # ----------------------------------------------------
+        # PLAN
+        # ----------------------------------------------------
+
+        plan = str(
+            subscription.get("plan")
+            or ""
+        ).strip().lower()
+
+        # ----------------------------------------------------
+        # STATUS
+        # ----------------------------------------------------
+
+        status = str(
+            subscription.get("status")
+            or ""
+        ).strip().lower()
+
+        print(
+            "PLAN:",
+            plan,
+            "| STATUS:",
+            status
+        )
+
+        # ----------------------------------------------------
+        # ACCEPTED PREMIUM PLANS
+        # ----------------------------------------------------
+
+        premium_plan = plan in (
+            "premium",
+            "premium monthly",
+            "premium annual",
+            "premium yearly",
+            "pro",
+            "paid",
+        )
+
+        if not premium_plan:
+
+            print(
+                "NOT A PREMIUM PLAN"
+            )
+
+            continue
+
+        # ----------------------------------------------------
+        # ACTIVE STATUS
+        # ----------------------------------------------------
+
+        if status != "active":
+
+            print(
+                "SUBSCRIPTION IS NOT ACTIVE"
+            )
+
+            continue
+
+        # ----------------------------------------------------
+        # START DATE
+        # ----------------------------------------------------
+
+        started_at = (
+            subscription.get(
+                "started_at"
+            )
+        )
+
+        if started_at:
+
+            try:
+
+                start = datetime.fromisoformat(
+                    str(started_at).replace(
+                        "Z",
+                        "+00:00"
+                    )
+                )
+
+                if start > now:
+
+                    print(
+                        "SUBSCRIPTION HAS "
+                        "NOT STARTED YET"
+                    )
+
+                    continue
+
+            except (
+                ValueError,
+                TypeError
+            ):
+
+                print(
+                    "INVALID started_at:",
+                    started_at
+                )
+
+        # ----------------------------------------------------
+        # EXPIRATION DATE
+        # ----------------------------------------------------
+
+        expires_at = (
+            subscription.get(
+                "expires_at"
+            )
+        )
+
+        if expires_at:
+
+            try:
+
+                expiry = datetime.fromisoformat(
+                    str(expires_at).replace(
+                        "Z",
+                        "+00:00"
+                    )
+                )
+
+                if expiry <= now:
+
+                    print(
+                        "SUBSCRIPTION HAS EXPIRED"
+                    )
+
+                    continue
+
+            except (
+                ValueError,
+                TypeError
+            ):
+
+                print(
+                    "INVALID expires_at:",
+                    expires_at
+                )
+
+        # ----------------------------------------------------
+        # VALID PREMIUM SUBSCRIPTION
+        # ----------------------------------------------------
+
+        print(
+            "VALID PREMIUM SUBSCRIPTION FOUND"
+        )
+
+        access_level = "premium"
+
+        break
+
+    # ========================================================
+    # ROUTE
+    # ========================================================
+
+    if not profile_complete:
+
+        next_route = "/student-profile"
+
+    elif access_level == "premium":
+
+        next_route = "/premium-dashboard"
+
+    else:
+
+        next_route = "/dashboard"
+
+    # ========================================================
+    # RESULT
+    # ========================================================
+
+    return {
+        "profile_complete": profile_complete,
+
+        "access_level": access_level,
+
+        "next_route": next_route,
+
+        "nickname": nickname,
+
+        "learning_route": learning_route,
+
+        "exam_type": exam_type,
+    }
+
+
+# ============================================================
+# AUTH — CURRENT USER
+# ============================================================
+
+@app.route(
+    "/api/auth/me",
+    methods=["GET"]
+)
+def auth_me():
+
+    # ========================================================
+    # READ ACCESS TOKEN
+    # ========================================================
+
+    authorization = request.headers.get(
+        "Authorization",
+        ""
+    )
+
+    if not authorization.startswith(
+        "Bearer "
+    ):
+
+        return jsonify({
+            "authenticated": False,
+            "error": "Authentication required"
+        }), 401
+
+    access_token = authorization.replace(
+        "Bearer ",
+        "",
+        1
+    ).strip()
+
+    # ========================================================
+    # VERIFY SUPABASE USER
+    # ========================================================
+
+    user, error, status = (
+        get_authenticated_user(
+            access_token
+        )
+    )
+
+    if error:
+
+        return jsonify({
+            "authenticated": False,
+            **error
+        }), status
+
+    # ========================================================
+    # AUTH USER INFORMATION
+    # ========================================================
+
+    auth_user_id = user.get(
+        "id"
+    )
+
+    email = user.get(
+        "email"
+    )
+
+    print(
+        "AUTH USER ID:",
+        auth_user_id
+    )
+
+    print(
+        "AUTH EMAIL:",
+        email
+    )
+
+    # ========================================================
+    # GET PUBLIC USERS PROFILE
+    # ========================================================
+
+    profile, profile_error, profile_status = (
+        get_user_profile(email)
+    )
+
+    if profile_error:
+
+        return jsonify({
+            "authenticated": True,
+            "error": profile_error
+        }), profile_status
+
+    if not profile:
+
+        print(
+            "PUBLIC USERS PROFILE NOT FOUND"
+        )
+
+        return jsonify({
+            "authenticated": True,
+            "error": (
+                "Student profile "
+                "was not found."
+            )
+        }), 404
+
+    # ========================================================
+    # IMPORTANT ID MAPPING
+    #
+    # auth.users.id
+    #       ↓
+    # public.users.auth_user_id
+    #
+    # subscriptions.user_id
+    #       ↓
+    # public.users.id
+    # ========================================================
+
+    profile_user_id = profile.get(
+        "id"
+    )
+
+    print(
+        "PUBLIC USERS ID:",
+        profile_user_id
+    )
+
+    print(
+        "SUBSCRIPTIONS USER ID WILL BE:",
+        profile_user_id
+    )
+
+    # ========================================================
+    # GET SUBSCRIPTIONS
+    # ========================================================
+
+    subscriptions, subscription_error, subscription_status = (
+        get_user_subscription(
+            profile_user_id
+        )
+    )
+
+    if subscription_error:
+
+        return jsonify({
+            "authenticated": True,
+            "error": subscription_error
+        }), subscription_status
+
+    # ========================================================
+    # DETERMINE ACCESS
+    # ========================================================
+
+    access = determine_user_access(
+        user,
+        profile,
+        subscriptions
+    )
+
+    # ========================================================
+    # DEBUG
+    # ========================================================
+
+    print(
+        "SUBSCRIPTIONS:",
+        subscriptions
+    )
+
+    print(
+        "FINAL ACCESS LEVEL:",
+        access[
+            "access_level"
+        ]
+    )
+
+    print(
+        "IS PREMIUM:",
+        access[
+            "access_level"
+        ] == "premium"
+    )
+
+    print(
+        "NEXT ROUTE:",
+        access[
+            "next_route"
+        ]
+    )
+
+    # ========================================================
+    # RESPONSE
+    # ========================================================
+
+    return jsonify({
+
+        "authenticated": True,
+
+        # ----------------------------------------------------
+        # AUTH USER
+        # ----------------------------------------------------
+
+        "user": {
+
+            "id": auth_user_id,
+
+            "email": email,
+
+            "metadata": (
+                user.get(
+                    "user_metadata"
+                ) or {}
+            ),
+        },
+
+        # ----------------------------------------------------
+        # PUBLIC USER PROFILE
+        # ----------------------------------------------------
+
+        "profile": profile,
+
+        # ----------------------------------------------------
+        # SUBSCRIPTIONS
+        # ----------------------------------------------------
+
+        "subscriptions": (
+            subscriptions or []
+        ),
+
+        # ----------------------------------------------------
+        # LATEST SUBSCRIPTION
+        # ----------------------------------------------------
+
+        "subscription": (
+            subscriptions[0]
+            if subscriptions
+            else None
+        ),
+
+        # ----------------------------------------------------
+        # ACCESS
+        # ----------------------------------------------------
+
+        "profile_complete": (
+            access[
+                "profile_complete"
+            ]
+        ),
+
+        "access_level": (
+            access[
+                "access_level"
+            ]
+        ),
+
+        "is_premium": (
+            access[
+                "access_level"
+            ] == "premium"
+        ),
+
+        # ----------------------------------------------------
+        # USER INFORMATION
+        # ----------------------------------------------------
+
+        "nickname": (
+            access[
+                "nickname"
+            ]
+        ),
+
+        "learning_route": (
+            access[
+                "learning_route"
+            ]
+        ),
+
+        "exam_type": (
+            access[
+                "exam_type"
+            ]
+        ),
+
+        # ----------------------------------------------------
+        # ROUTING
+        # ----------------------------------------------------
+
+        "next_route": (
+            access[
+                "next_route"
+            ]
+        ),
+    })
+
+
+# ============================================================
 # TEXT CLEANING
 # ============================================================
 
 def clean_basic_text(value):
     """
-    General cleanup that is safe for normal English text.
-
-    This does NOT change the meaning of the question.
+    General cleanup safe for normal English text.
     """
 
     if value is None:
@@ -597,30 +868,63 @@ def clean_basic_text(value):
     text = str(value)
 
     # --------------------------------------------------------
-    # Remove invisible / problematic characters
+    # REMOVE INVISIBLE CHARACTERS
     # --------------------------------------------------------
 
-    text = text.replace("\ufeff", "")
-    text = text.replace("\u200b", "")
-    text = text.replace("\u200c", "")
-    text = text.replace("\u200d", "")
-    text = text.replace("\u00a0", " ")
+    text = text.replace(
+        "\ufeff",
+        ""
+    )
+
+    text = text.replace(
+        "\u200b",
+        ""
+    )
+
+    text = text.replace(
+        "\u200c",
+        ""
+    )
+
+    text = text.replace(
+        "\u200d",
+        ""
+    )
+
+    text = text.replace(
+        "\u00a0",
+        " "
+    )
 
     # --------------------------------------------------------
-    # Normalize line endings
+    # NORMALIZE LINE ENDINGS
     # --------------------------------------------------------
 
-    text = text.replace("\r\n", "\n")
-    text = text.replace("\r", "\n")
+    text = text.replace(
+        "\r\n",
+        "\n"
+    )
+
+    text = text.replace(
+        "\r",
+        "\n"
+    )
 
     # --------------------------------------------------------
-    # Clean accidental repeated whitespace
+    # CLEAN WHITESPACE
     # --------------------------------------------------------
 
-    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(
+        r"[ \t]+",
+        " ",
+        text
+    )
 
-    # Too many blank lines
-    text = re.sub(r"\n{3,}", "\n\n", text)
+    text = re.sub(
+        r"\n{3,}",
+        "\n\n",
+        text
+    )
 
     return text.strip()
 
@@ -630,27 +934,6 @@ def clean_basic_text(value):
 # ============================================================
 
 def normalize_latex(text):
-    """
-    Cleans common LaTeX problems caused by Word/Tally/imports.
-
-    Examples:
-
-        \\\\frac{1}{2}
-        ->
-        \\frac{1}{2}
-
-        10^-4
-        ->
-        10^{-4}
-
-        R_1
-        ->
-        R_{1}
-
-        2 \\, \\\\Omega
-        ->
-        2\\,\\Omega
-    """
 
     if not text:
         return text
@@ -658,48 +941,76 @@ def normalize_latex(text):
     text = str(text)
 
     # --------------------------------------------------------
-    # Normalize Unicode punctuation
+    # UNICODE PUNCTUATION
     # --------------------------------------------------------
 
-    text = text.replace("−", "-")
-    text = text.replace("–", "-")
-    text = text.replace("—", "-")
-    text = text.replace("×", r"\times")
+    text = text.replace(
+        "−",
+        "-"
+    )
+
+    text = text.replace(
+        "–",
+        "-"
+    )
+
+    text = text.replace(
+        "—",
+        "-"
+    )
+
+    text = text.replace(
+        "×",
+        r"\times"
+    )
 
     # --------------------------------------------------------
-    # Fix escaped backslashes
+    # FIX ESCAPED BACKSLASHES
     # --------------------------------------------------------
 
-    text = text.replace("\\\\", "\\")
+    text = text.replace(
+        "\\\\",
+        "\\"
+    )
 
     # --------------------------------------------------------
-    # Clean common malformed spacing commands
+    # SPACING COMMANDS
     # --------------------------------------------------------
 
-    text = re.sub(r"\\+\s*,\s*", r"\,", text)
+    text = re.sub(
+        r"\\+\s*,\s*",
+        r"\,",
+        text
+    )
 
     # --------------------------------------------------------
-    # \text{ cm}, \text { cm}, etc.
+    # TEXT
     # --------------------------------------------------------
 
     text = re.sub(
         r"\\text\s*\{\s*([^{}]+?)\s*\}",
-        lambda m: r"\text{" + m.group(1).strip() + "}",
+        lambda m:
+            r"\text{" +
+            m.group(1).strip() +
+            "}",
         text
     )
 
     # --------------------------------------------------------
-    # \mathrm
+    # MATHRM
     # --------------------------------------------------------
 
     text = re.sub(
         r"\\mathrm\s*\{\s*([^{}]+?)\s*\}",
-        lambda m: r"\mathrm{" + m.group(1).strip() + "}",
+        lambda m:
+            r"\mathrm{" +
+            m.group(1).strip() +
+            "}",
         text
     )
 
     # --------------------------------------------------------
-    # Remove unnecessary spaces after LaTeX commands
+    # REMOVE SPACES AFTER COMMANDS
     # --------------------------------------------------------
 
     text = re.sub(
@@ -709,12 +1020,7 @@ def normalize_latex(text):
     )
 
     # --------------------------------------------------------
-    # Subscripts
-    #
-    # R_1 -> R_{1}
-    # P_2 -> P_{2}
-    #
-    # Leave already-braced subscripts alone.
+    # SUBSCRIPTS
     # --------------------------------------------------------
 
     text = re.sub(
@@ -724,12 +1030,7 @@ def normalize_latex(text):
     )
 
     # --------------------------------------------------------
-    # Powers
-    #
-    # 10^-4 -> 10^{-4}
-    # x^2   -> x^{2}
-    #
-    # Don't touch already-braced powers.
+    # POWERS
     # --------------------------------------------------------
 
     text = re.sub(
@@ -739,33 +1040,36 @@ def normalize_latex(text):
     )
 
     # --------------------------------------------------------
-    # Common malformed fraction spacing
+    # FRACTIONS
     # --------------------------------------------------------
 
     text = re.sub(
-        r"\\frac\s*\{\s*([^{}]+?)\s*\}\s*\{\s*([^{}]+?)\s*\}",
-        lambda m: (
-            r"\frac{"
-            + m.group(1).strip()
-            + "}{"
-            + m.group(2).strip()
-            + "}"
-        ),
+        r"\\frac\s*\{\s*([^{}]+?)\s*\}"
+        r"\s*\{\s*([^{}]+?)\s*\}",
+        lambda m:
+            r"\frac{" +
+            m.group(1).strip() +
+            "}{" +
+            m.group(2).strip() +
+            "}",
         text
     )
 
     # --------------------------------------------------------
-    # Common sqrt cleanup
+    # SQRT
     # --------------------------------------------------------
 
     text = re.sub(
         r"\\sqrt\s*\{\s*([^{}]+?)\s*\}",
-        lambda m: r"\sqrt{" + m.group(1).strip() + "}",
+        lambda m:
+            r"\sqrt{" +
+            m.group(1).strip() +
+            "}",
         text
     )
 
     # --------------------------------------------------------
-    # Remove unnecessary spaces around math commands
+    # MATH COMMAND SPACING
     # --------------------------------------------------------
 
     text = re.sub(
@@ -774,58 +1078,58 @@ def normalize_latex(text):
         text
     )
 
-    # --------------------------------------------------------
-    # Common multiplication symbol
-    # --------------------------------------------------------
-
-    # text = text.replace("*", r" \times ")
-
-    # Avoid excessive spaces created above
-    text = re.sub(r"[ \t]{2,}", " ", text)
+    text = re.sub(
+        r"[ \t]{2,}",
+        " ",
+        text
+    )
 
     return text.strip()
 
 
 # ============================================================
-# MATH DELIMITER HELPERS
+# MATH DELIMITERS
 # ============================================================
 
 def has_math_delimiters(text):
-    """
-    Checks whether a string already contains our supported
-    math delimiters.
-
-    Supported:
-
-        $...$
-        $$...$$
-        \(...\)
-        \[...\]
-    """
 
     if not text:
         return False
 
     return bool(
-        re.search(r"\$\$[\s\S]*?\$\$", text)
-        or re.search(r"\$[^$]+\$", text)
-        or re.search(r"\\\([\s\S]*?\\\)", text)
-        or re.search(r"\\\[[\s\S]*?\\\]", text)
+        re.search(
+            r"\$\$[\s\S]*?\$\$",
+            text
+        )
+        or
+        re.search(
+            r"\$[^$]+\$",
+            text
+        )
+        or
+        re.search(
+            r"\\\([\s\S]*?\\\)",
+            text
+        )
+        or
+        re.search(
+            r"\\\[[\s\S]*?\\\]",
+            text
+        )
     )
 
 
 def looks_like_math(text):
-    """
-    Detects obvious mathematical expressions without turning
-    ordinary English sentences into mathematics.
-    """
 
     if not text:
         return False
 
     value = text.strip()
 
-    # Existing LaTeX commands
+    # --------------------------------------------------------
+    # LATEX
+    # --------------------------------------------------------
+
     if re.search(
         r"\\(frac|sqrt|text|mathrm|log|ln|sin|cos|tan|cot|sec|csc|"
         r"theta|alpha|beta|gamma|delta|lambda|mu|pi|omega|Omega|"
@@ -834,28 +1138,40 @@ def looks_like_math(text):
     ):
         return True
 
-    # Equations
+    # --------------------------------------------------------
+    # EQUATIONS
+    # --------------------------------------------------------
+
     if re.search(
         r"[A-Za-z0-9)\]}]\s*=\s*[A-Za-z0-9(\[{\\]",
         value
     ):
         return True
 
-    # Powers
+    # --------------------------------------------------------
+    # POWERS
+    # --------------------------------------------------------
+
     if re.search(
         r"[A-Za-z0-9)]\s*\^\s*\{?[-+]?\d",
         value
     ):
         return True
 
-    # Subscripts
+    # --------------------------------------------------------
+    # SUBSCRIPTS
+    # --------------------------------------------------------
+
     if re.search(
         r"[A-Za-z]_?\{?\d+\}?",
         value
     ):
         return True
 
-    # Fractions written with /
+    # --------------------------------------------------------
+    # FRACTIONS
+    # --------------------------------------------------------
+
     if re.search(
         r"\d+\s*/\s*\d+",
         value
@@ -866,12 +1182,6 @@ def looks_like_math(text):
 
 
 def wrap_obvious_math(text):
-    """
-    Adds $...$ around obvious standalone mathematical fragments
-    when they are not already delimited.
-
-    We deliberately keep this conservative.
-    """
 
     if not text:
         return text
@@ -879,11 +1189,8 @@ def wrap_obvious_math(text):
     if has_math_delimiters(text):
         return text
 
-    # Entire short mathematical line
     if len(text) <= 180 and looks_like_math(text):
 
-        # Don't wrap obvious prose sentences containing an equals
-        # sign such as "Correct answer = option A."
         if re.match(
             r"^(correct answer|answer|option|therefore|hence)\b",
             text,
@@ -901,10 +1208,6 @@ def wrap_obvious_math(text):
 # ============================================================
 
 def normalize_content(value):
-    """
-    Main function used before returning question content
-    to React.
-    """
 
     text = clean_basic_text(value)
 
@@ -914,15 +1217,7 @@ def normalize_content(value):
     text = normalize_latex(text)
 
     # --------------------------------------------------------
-    # Fix common accidental concatenation from imported data.
-    #
-    # Example:
-    #
-    # 21Step 2
-    #
-    # becomes:
-    #
-    # 21 Step 2
+    # FIX CONCATENATION
     # --------------------------------------------------------
 
     text = re.sub(
@@ -933,7 +1228,7 @@ def normalize_content(value):
     )
 
     # --------------------------------------------------------
-    # Make common "N10.50" style values readable.
+    # FIX N10.50 STYLE VALUES
     # --------------------------------------------------------
 
     text = re.sub(
@@ -943,7 +1238,7 @@ def normalize_content(value):
     )
 
     # --------------------------------------------------------
-    # Normalize common answer formatting
+    # ANSWER FORMATTING
     # --------------------------------------------------------
 
     text = re.sub(
@@ -964,62 +1259,78 @@ def normalize_content(value):
 
 
 # ============================================================
-# NORMALIZE QUESTION OBJECT
+# NORMALIZE QUESTION
 # ============================================================
 
 def normalize_question(question):
-    """
-    Converts a raw Supabase question into a clean API object.
-
-    IMPORTANT:
-    This function only cleans formatting.
-    It does NOT change the actual answer/content.
-    """
 
     return {
-        "id": question.get("id"),
 
-        "subject": clean_basic_text(
-            question.get("subject")
+        "id": question.get(
+            "id"
         ),
 
-        "course_id": question.get("course_id"),
+        "subject": clean_basic_text(
+            question.get(
+                "subject"
+            )
+        ),
+
+        "course_id": question.get(
+            "course_id"
+        ),
 
         "topic": clean_basic_text(
-            question.get("topic")
+            question.get(
+                "topic"
+            )
         ),
 
         "question_text": normalize_content(
-            question.get("question_text")
+            question.get(
+                "question_text"
+            )
         ),
 
         "option_a": normalize_content(
-            question.get("option_a")
+            question.get(
+                "option_a"
+            )
         ),
 
         "option_b": normalize_content(
-            question.get("option_b")
+            question.get(
+                "option_b"
+            )
         ),
 
         "option_c": normalize_content(
-            question.get("option_c")
+            question.get(
+                "option_c"
+            )
         ),
 
         "option_d": normalize_content(
-            question.get("option_d")
+            question.get(
+                "option_d"
+            )
         ),
 
         "correction_answer": clean_basic_text(
-            question.get("correction_answer")
+            question.get(
+                "correction_answer"
+            )
         ),
 
         "explanation": normalize_content(
-            question.get("explanation")
+            question.get(
+                "explanation"
+            )
         ),
 
-        # IMPORTANT:
-        # Image URLs are passed through untouched.
-        "image_url": question.get("image_url"),
+        "image_url": question.get(
+            "image_url"
+        ),
     }
 
 
@@ -1027,14 +1338,22 @@ def normalize_question(question):
 # PRACTICE SUBJECTS
 # ============================================================
 
-@app.route("/api/practice/subjects", methods=["GET"])
+@app.route(
+    "/api/practice/subjects",
+    methods=["GET"]
+)
 def get_practice_subjects():
 
     params = {
+
         "select": "subject",
+
         "is_active": "eq.true",
+
         "course_id": "is.null",
+
         "subject": "not.is.null",
+
         "limit": 1000,
     }
 
@@ -1048,16 +1367,22 @@ def get_practice_subjects():
 
     subjects = sorted(
         {
-            clean_basic_text(row.get("subject"))
+            clean_basic_text(
+                row.get("subject")
+            )
             for row in rows
             if row.get("subject")
         },
-        key=lambda value: value.lower()
+        key=lambda value:
+            value.lower()
     )
 
     return jsonify({
+
         "subjects": subjects,
+
         "count": len(subjects)
+
     })
 
 
@@ -1065,13 +1390,26 @@ def get_practice_subjects():
 # PRACTICE COURSES
 # ============================================================
 
-@app.route("/api/practice/courses", methods=["GET"])
+@app.route(
+    "/api/practice/courses",
+    methods=["GET"]
+)
 def get_practice_courses():
 
     params = {
-        "select": "id,name,code,description,is_active",
+
+        "select": (
+            "id,"
+            "name,"
+            "code,"
+            "description,"
+            "is_active"
+        ),
+
         "is_active": "eq.true",
+
         "order": "code.asc",
+
         "limit": 500,
     }
 
@@ -1088,26 +1426,41 @@ def get_practice_courses():
     for row in rows:
 
         courses.append({
-            "id": row.get("id"),
+
+            "id": row.get(
+                "id"
+            ),
 
             "name": clean_basic_text(
-                row.get("name")
+                row.get(
+                    "name"
+                )
             ),
 
             "code": clean_basic_text(
-                row.get("code")
+                row.get(
+                    "code"
+                )
             ),
 
             "description": clean_basic_text(
-                row.get("description")
+                row.get(
+                    "description"
+                )
             ),
 
-            "is_active": row.get("is_active"),
+            "is_active": row.get(
+                "is_active"
+            ),
+
         })
 
     return jsonify({
+
         "courses": courses,
+
         "count": len(courses)
+
     })
 
 
@@ -1115,27 +1468,42 @@ def get_practice_courses():
 # PRACTICE TOPICS
 # ============================================================
 
-@app.route("/api/practice/topics", methods=["GET"])
+@app.route(
+    "/api/practice/topics",
+    methods=["GET"]
+)
 def get_practice_topics():
 
-    subject = request.args.get("subject")
-    course_id = request.args.get("course_id")
+    subject = request.args.get(
+        "subject"
+    )
+
+    course_id = request.args.get(
+        "course_id"
+    )
 
     if not subject and not course_id:
 
         return jsonify({
-            "error": "Subject or course_id is required"
+            "error": (
+                "Subject or course_id "
+                "is required"
+            )
         }), 400
 
     params = {
+
         "select": "topic",
+
         "is_active": "eq.true",
+
         "topic": "not.is.null",
+
         "limit": 1000,
     }
 
     # --------------------------------------------------------
-    # Secondary / O-Level
+    # O-LEVEL
     # --------------------------------------------------------
 
     if subject:
@@ -1143,31 +1511,48 @@ def get_practice_topics():
         if course_id:
 
             return jsonify({
-                "error": "Use either subject or course_id, not both"
+                "error": (
+                    "Use either subject "
+                    "or course_id, not both"
+                )
             }), 400
 
-        subject = clean_basic_text(subject)
+        subject = clean_basic_text(
+            subject
+        )
 
-        params["subject"] = f"eq.{subject}"
-        params["course_id"] = "is.null"
+        params["subject"] = (
+            f"eq.{subject}"
+        )
+
+        params["course_id"] = (
+            "is.null"
+        )
 
     # --------------------------------------------------------
-    # University
+    # UNIVERSITY
     # --------------------------------------------------------
 
     if course_id:
 
         try:
 
-            course_id = int(course_id)
+            course_id = int(
+                course_id
+            )
 
-        except (ValueError, TypeError):
+        except (
+            ValueError,
+            TypeError
+        ):
 
             return jsonify({
                 "error": "Invalid course_id"
             }), 400
 
-        params["course_id"] = f"eq.{course_id}"
+        params["course_id"] = (
+            f"eq.{course_id}"
+        )
 
     rows, error, status = supabase_get(
         "questions",
@@ -1179,16 +1564,22 @@ def get_practice_topics():
 
     topics = sorted(
         {
-            clean_basic_text(row.get("topic"))
+            clean_basic_text(
+                row.get("topic")
+            )
             for row in rows
             if row.get("topic")
         },
-        key=lambda value: value.lower()
+        key=lambda value:
+            value.lower()
     )
 
     return jsonify({
+
         "topics": topics,
+
         "count": len(topics)
+
     })
 
 
@@ -1196,12 +1587,23 @@ def get_practice_topics():
 # QUESTIONS
 # ============================================================
 
-@app.route("/api/questions", methods=["GET"])
+@app.route(
+    "/api/questions",
+    methods=["GET"]
+)
 def get_questions():
 
-    subject = request.args.get("subject")
-    course_id = request.args.get("course_id")
-    topic = request.args.get("topic")
+    subject = request.args.get(
+        "subject"
+    )
+
+    course_id = request.args.get(
+        "course_id"
+    )
+
+    topic = request.args.get(
+        "topic"
+    )
 
     mode = request.args.get(
         "mode",
@@ -1219,7 +1621,9 @@ def get_questions():
 
     try:
 
-        limit = int(limit)
+        limit = int(
+            limit
+        )
 
         if limit < 1:
             limit = 20
@@ -1229,7 +1633,10 @@ def get_questions():
             100
         )
 
-    except (ValueError, TypeError):
+    except (
+        ValueError,
+        TypeError
+    ):
 
         limit = 20
 
@@ -1240,14 +1647,14 @@ def get_questions():
     if not subject and not course_id:
 
         return jsonify({
-            "error": "Subject or course_id is required"
+            "error": (
+                "Subject or course_id "
+                "is required"
+            )
         }), 400
 
     # --------------------------------------------------------
-    # CLEAN REQUEST VALUES
-    #
-    # This prevents accidental leading/trailing spaces from
-    # causing a mismatch.
+    # CLEAN VALUES
     # --------------------------------------------------------
 
     clean_subject = (
@@ -1267,6 +1674,7 @@ def get_questions():
     # --------------------------------------------------------
 
     params = {
+
         "select": (
             "id,"
             "subject,"
@@ -1284,21 +1692,22 @@ def get_questions():
 
         "is_active": "eq.true",
 
-        # Fetch enough records so that topic normalization can
-        # safely happen in Python.
         "limit": 1000,
     }
 
     # --------------------------------------------------------
-    # SECONDARY / O-LEVEL
+    # O-LEVEL
     # --------------------------------------------------------
 
     if clean_subject:
 
-        params["subject"] = f"eq.{clean_subject}"
+        params["subject"] = (
+            f"eq.{clean_subject}"
+        )
 
-        # O-Level questions have no course_id
-        params["course_id"] = "is.null"
+        params["course_id"] = (
+            "is.null"
+        )
 
     # --------------------------------------------------------
     # UNIVERSITY
@@ -1308,24 +1717,25 @@ def get_questions():
 
         try:
 
-            course_id = int(course_id)
+            course_id = int(
+                course_id
+            )
 
-        except (ValueError, TypeError):
+        except (
+            ValueError,
+            TypeError
+        ):
 
             return jsonify({
                 "error": "Invalid course_id"
             }), 400
 
-        params["course_id"] = f"eq.{course_id}"
+        params["course_id"] = (
+            f"eq.{course_id}"
+        )
 
     # --------------------------------------------------------
     # GET DATA
-    #
-    # IMPORTANT:
-    # We intentionally do NOT send topic directly to Supabase.
-    #
-    # The reason is that some existing database records contain
-    # accidental leading/trailing spaces in their topic values.
     # --------------------------------------------------------
 
     rows, error, status = supabase_get(
@@ -1338,37 +1748,37 @@ def get_questions():
 
     # --------------------------------------------------------
     # TOPIC FILTER
-    #
-    # Compare cleaned topic values instead of raw database
-    # values.
-    #
-    # Example:
-    #
-    # Database:
-    # "Indices, Logarithms and Standard form "
-    #
-    # Request:
-    # "Indices, Logarithms and Standard form"
-    #
-    # Both become:
-    # "Indices, Logarithms and Standard form"
     # --------------------------------------------------------
 
-    if clean_topic and clean_topic.casefold() != "mixed":
+    if (
+        clean_topic
+        and
+        clean_topic.casefold() != "mixed"
+    ):
 
-        normalized_topic = clean_topic.casefold()
+        normalized_topic = (
+            clean_topic.casefold()
+        )
 
         filtered_rows = []
 
         for row in rows:
 
-            database_topic = clean_basic_text(
-                row.get("topic")
+            database_topic = (
+                clean_basic_text(
+                    row.get("topic")
+                )
             )
 
-            if database_topic.casefold() == normalized_topic:
+            if (
+                database_topic.casefold()
+                ==
+                normalized_topic
+            ):
 
-                filtered_rows.append(row)
+                filtered_rows.append(
+                    row
+                )
 
         rows = filtered_rows
 
@@ -1377,12 +1787,14 @@ def get_questions():
     # --------------------------------------------------------
 
     questions = [
-        normalize_question(question)
+        normalize_question(
+            question
+        )
         for question in rows
     ]
 
     # --------------------------------------------------------
-    # RANDOMIZE QUESTIONS
+    # RANDOMIZE
     # --------------------------------------------------------
 
     random.shuffle(
@@ -1390,42 +1802,74 @@ def get_questions():
     )
 
     # --------------------------------------------------------
-    # RETURN ONLY REQUESTED NUMBER
+    # LIMIT
     # --------------------------------------------------------
 
-    questions = questions[:limit]
+    questions = questions[
+        :limit
+    ]
 
     return jsonify({
+
         "questions": questions,
-        "count": len(questions),
+
+        "count": len(
+            questions
+        ),
+
         "mode": mode,
+
         "subject": clean_subject,
+
         "course_id": course_id,
-        "topic": clean_topic or "mixed"
+
+        "topic": (
+            clean_topic
+            or
+            "mixed"
+        )
+
     })
 
 
 # ============================================================
-# API HEALTH CHECK
+# HEALTH CHECK
 # ============================================================
 
 @app.route("/")
 def home():
 
     return jsonify({
-        "message": "Overmaths Python API is running",
-        "status": "ok"
+
+        "message":
+            "Overmaths Python API is running",
+
+        "status":
+            "ok"
+
     })
+
+
+# ============================================================
+# BLUEPRINTS
+# ============================================================
+
+app.register_blueprint(
+    dashboard_api
+)
+
+app.register_blueprint(
+    admin_api
+)
+
+app.register_blueprint(
+    question_api
+)
 
 
 # ============================================================
 # START SERVER
 # ============================================================
-
-app.register_blueprint(dashboard_api)
-app.register_blueprint(admin_api)
-app.register_blueprint(question_api)
-
 
 if __name__ == "__main__":
 
