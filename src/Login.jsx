@@ -33,6 +33,10 @@ function Login() {
       return
     }
 
+    // ----------------------------------------------------------
+    // SUPABASE CHECK
+    // ----------------------------------------------------------
+
     if (!supabase) {
       setMessage(
         'Login is available on the live Overmaths website. Local testing is currently running without Supabase.'
@@ -87,12 +91,10 @@ function Login() {
       // ========================================================
       // 2. GET STUDENT PROFILE
       //
-      // IMPORTANT:
-      //
       // users.auth_user_id = Supabase Auth UUID
       // users.id = database profile ID
       //
-      // subscriptions.user_id uses users.id
+      // subscriptions.user_id = users.id
       // ========================================================
 
       const {
@@ -108,7 +110,10 @@ function Login() {
           learning_route,
           exam_type
         `)
-        .eq('auth_user_id', authUser.id)
+        .eq(
+          'auth_user_id',
+          authUser.id
+        )
         .maybeSingle()
 
       if (profileError) {
@@ -148,20 +153,27 @@ function Login() {
 
       // ========================================================
       // 4. CHECK PROFILE COMPLETION
-      //
-      // Only columns confirmed to exist in users are used here.
       // ========================================================
 
       const hasFullName =
-        Boolean(profile.full_name?.trim())
+        Boolean(
+          profile.full_name?.trim()
+        )
 
       const hasLearningRoute =
-        Boolean(profile.learning_route)
+        Boolean(
+          profile.learning_route
+        )
 
+      // University does not require exam type.
+      // O-Level requires exam type.
       const hasExamType =
-        profile.learning_route === 'university'
+        profile.learning_route ===
+        'university'
           ? true
-          : Boolean(profile.exam_type)
+          : Boolean(
+              profile.exam_type
+            )
 
       const profileComplete =
         hasFullName &&
@@ -188,17 +200,17 @@ function Login() {
       // ========================================================
       // 5. CHECK PREMIUM ACCESS
       //
-      // IMPORTANT:
+      // VERY IMPORTANT:
       //
-      // subscriptions.user_id points to users.id.
+      // hasPremiumAccess(profile.id)
       //
-      // Therefore we pass:
+      // because:
       //
-      // profile.id
+      // subscriptions.user_id
+      //       ↓
+      // users.id
       //
-      // NOT:
-      //
-      // authUser.id
+      // NOT authUser.id
       // ========================================================
 
       console.log(
@@ -210,30 +222,43 @@ function Login() {
 
       try {
         const premiumResult =
-          await hasPremiumAccess(profile.id)
+          await hasPremiumAccess(
+            profile.id
+          )
 
         console.log(
           'PREMIUM CHECK RESULT:',
           premiumResult
         )
 
+        // ------------------------------------------------------
         // IMPORTANT:
-        // hasPremiumAccess() returns an object.
         //
-        // We must read:
+        // hasPremiumAccess() returns:
         //
-        // premiumResult.isPremium
+        // {
+        //   isPremium: true/false,
+        //   subscription: {...},
+        //   error: null
+        // }
         //
-        // and NOT use the entire object as a boolean.
+        // Therefore we MUST read .isPremium
+        // ------------------------------------------------------
 
         premium =
           premiumResult?.isPremium === true
+
+        // ------------------------------------------------------
+        // Subscription API error
+        // ------------------------------------------------------
 
         if (premiumResult?.error) {
           console.error(
             'PREMIUM CHECK ERROR:',
             premiumResult.error
           )
+
+          premium = false
         }
 
       } catch (subscriptionError) {
@@ -242,8 +267,6 @@ function Login() {
           subscriptionError
         )
 
-        // Do not prevent the student from logging in
-        // if the subscription check itself fails.
         premium = false
       }
 
@@ -258,7 +281,7 @@ function Login() {
 
       if (premium) {
         console.log(
-          'PREMIUM USER → /premium'
+          'PREMIUM STUDENT → /premium'
         )
 
         navigate('/premium', {
@@ -268,12 +291,12 @@ function Login() {
         return
       }
 
-      // --------------------------------------------------------
-      // NORMAL / FREE STUDENT
-      // --------------------------------------------------------
+      // ========================================================
+      // 7. NORMAL / FREE STUDENT
+      // ========================================================
 
       console.log(
-        'NORMAL USER → /dashboard'
+        'NORMAL STUDENT → /dashboard'
       )
 
       navigate('/dashboard', {
@@ -290,6 +313,7 @@ function Login() {
         error?.message ||
           'Something went wrong while signing in. Please try again.'
       )
+
     } finally {
       setLoading(false)
     }
@@ -302,7 +326,9 @@ function Login() {
   return (
     <div className="login-page">
 
-      {/* BACKGROUND */}
+      {/* ====================================================
+          BACKGROUND
+      ==================================================== */}
 
       <div className="login-background">
 
@@ -320,14 +346,17 @@ function Login() {
 
       </div>
 
-
-      {/* LOGIN CONTAINER */}
+      {/* ====================================================
+          LOGIN CONTAINER
+      ==================================================== */}
 
       <div className="login-container">
 
         <div className="login-card">
 
-          {/* LOGO */}
+          {/* ==================================================
+              LOGO
+          ================================================== */}
 
           <div className="login-logo-wrapper">
 
@@ -339,8 +368,9 @@ function Login() {
 
           </div>
 
-
-          {/* BRAND */}
+          {/* ==================================================
+              BRAND
+          ================================================== */}
 
           <div className="login-brand">
 
@@ -350,8 +380,9 @@ function Login() {
 
           </div>
 
-
-          {/* HEADING */}
+          {/* ==================================================
+              HEADING
+          ================================================== */}
 
           <h1>
             Welcome back
@@ -362,8 +393,9 @@ function Login() {
             Overmaths learning journey.
           </p>
 
-
-          {/* FORM */}
+          {/* ==================================================
+              FORM
+          ================================================== */}
 
           <form onSubmit={handleLogin}>
 
@@ -387,7 +419,9 @@ function Login() {
                   placeholder="Enter your email"
                   value={email}
                   onChange={(e) =>
-                    setEmail(e.target.value)
+                    setEmail(
+                      e.target.value
+                    )
                   }
                   autoComplete="email"
                   disabled={loading}
@@ -396,7 +430,6 @@ function Login() {
               </div>
 
             </div>
-
 
             {/* PASSWORD */}
 
@@ -412,7 +445,9 @@ function Login() {
                   type="button"
                   className="forgot-password"
                   onClick={() =>
-                    navigate('/forgot-password')
+                    navigate(
+                      '/forgot-password'
+                    )
                   }
                   disabled={loading}
                 >
@@ -420,7 +455,6 @@ function Login() {
                 </button>
 
               </div>
-
 
               <div className="login-input-wrapper">
 
@@ -438,7 +472,9 @@ function Login() {
                   placeholder="Enter your password"
                   value={password}
                   onChange={(e) =>
-                    setPassword(e.target.value)
+                    setPassword(
+                      e.target.value
+                    )
                   }
                   autoComplete="current-password"
                   disabled={loading}
@@ -449,7 +485,8 @@ function Login() {
                   className="password-toggle"
                   onClick={() =>
                     setShowPassword(
-                      (current) => !current
+                      (current) =>
+                        !current
                     )
                   }
                   disabled={loading}
@@ -463,7 +500,6 @@ function Login() {
 
             </div>
 
-
             {/* MESSAGE */}
 
             {message && (
@@ -471,7 +507,6 @@ function Login() {
                 {message}
               </div>
             )}
-
 
             {/* LOGIN BUTTON */}
 
@@ -497,8 +532,9 @@ function Login() {
 
           </form>
 
-
-          {/* DIVIDER */}
+          {/* ==================================================
+              DIVIDER
+          ================================================== */}
 
           <div className="login-divider">
 
@@ -508,8 +544,9 @@ function Login() {
 
           </div>
 
-
-          {/* REGISTER */}
+          {/* ==================================================
+              REGISTER
+          ================================================== */}
 
           <div className="register-prompt">
 
@@ -530,8 +567,9 @@ function Login() {
 
           </div>
 
-
-          {/* FOOTER */}
+          {/* ==================================================
+              FOOTER
+          ================================================== */}
 
           <div className="login-footer">
 
