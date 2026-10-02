@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
+import { hasPremiumAccess } from './services/subscriptionApi'
 import './Login.css'
 
 function Login() {
@@ -13,9 +14,17 @@ function Login() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
 
+  // ============================================================
+  // LOGIN
+  // ============================================================
+
   const handleLogin = async (e) => {
     e.preventDefault()
     setMessage('')
+
+    // ----------------------------------------------------------
+    // VALIDATION
+    // ----------------------------------------------------------
 
     if (!email.trim() || !password) {
       setMessage('Please enter your email and password.')
@@ -32,9 +41,9 @@ function Login() {
     setLoading(true)
 
     try {
-      // ======================================================
+      // ========================================================
       // 1. AUTHENTICATE
-      // ======================================================
+      // ========================================================
 
       const {
         data: authData,
@@ -45,10 +54,7 @@ function Login() {
       })
 
       if (authError) {
-        console.error(
-          'AUTHENTICATION ERROR:',
-          authError
-        )
+        console.error('AUTHENTICATION ERROR:', authError)
 
         setMessage(
           authError.message ||
@@ -64,15 +70,24 @@ function Login() {
         setMessage(
           'Login was unsuccessful. Please try again.'
         )
+
         return
       }
 
-      // ======================================================
+      console.log(
+        'AUTHENTICATED USER:',
+        authUser.id
+      )
+
+      // ========================================================
       // 2. GET STUDENT PROFILE
       //
       // IMPORTANT:
-      // The actual database column is learning_route.
-      // ======================================================
+      // users.auth_user_id = Supabase Auth UUID
+      // users.id = database profile ID
+      //
+      // subscriptions.user_id uses users.id
+      // ========================================================
 
       const {
         data: profile,
@@ -85,9 +100,7 @@ function Login() {
           email,
           full_name,
           learning_route,
-          exam_type,
-          subject,
-          course
+          exam_type
         `)
         .eq('auth_user_id', authUser.id)
         .maybeSingle()
@@ -105,11 +118,16 @@ function Login() {
         return
       }
 
-      // ======================================================
+      // ========================================================
       // 3. NO PROFILE
-      // ======================================================
+      // ========================================================
 
       if (!profile) {
+        console.log(
+          'NO PROFILE FOUND:',
+          authUser.id
+        )
+
         navigate('/student-profile', {
           replace: true,
         })
@@ -117,9 +135,17 @@ function Login() {
         return
       }
 
-      // ======================================================
+      console.log(
+        'STUDENT PROFILE:',
+        profile
+      )
+
+      // ========================================================
       // 4. CHECK PROFILE COMPLETION
-      // ======================================================
+      //
+      // We only use columns that actually exist in your users
+      // table.
+      // ========================================================
 
       const hasFullName =
         Boolean(profile.full_name?.trim())
@@ -132,22 +158,21 @@ function Login() {
           ? true
           : Boolean(profile.exam_type)
 
-      const hasSubject =
-        Boolean(profile.subject?.trim())
-
-      const hasCourse =
-        profile.learning_route === 'university'
-          ? Boolean(profile.course?.trim())
-          : true
-
       const profileComplete =
         hasFullName &&
         hasLearningRoute &&
-        hasExamType &&
-        hasSubject &&
-        hasCourse
+        hasExamType
 
       if (!profileComplete) {
+        console.log(
+          'PROFILE INCOMPLETE:',
+          {
+            hasFullName,
+            hasLearningRoute,
+            hasExamType,
+          }
+        )
+
         navigate('/student-profile', {
           replace: true,
         })
@@ -155,58 +180,60 @@ function Login() {
         return
       }
 
-      // ======================================================
-      // 5. CHECK PREMIUM SUBSCRIPTION
-      // ======================================================
+      // ========================================================
+      // 5. CHECK PREMIUM
+      //
+      // IMPORTANT:
+      // Pass profile.id because subscriptions.user_id points
+      // to users.id.
+      // ========================================================
 
-      const now = new Date().toISOString()
+      console.log(
+        'CHECKING PREMIUM ACCESS FOR USER:',
+        profile.id
+      )
 
-      const {
-        data: subscription,
-        error: subscriptionError,
-      } = await supabase
-        .from('subscriptions')
-        .select(`
-          id,
-          plan,
-          status,
-          started_at,
-          expires_at
-        `)
-        .eq('user_id', profile.id)
-        .eq('status', 'active')
-        .eq('plan', 'premium')
-        .gt('expires_at', now)
-        .order('expires_at', {
-          ascending: false,
-        })
-        .limit(1)
-        .maybeSingle()
+      let premium = false
 
-      if (subscriptionError) {
+      try {
+        premium = await hasPremiumAccess(
+          profile.id
+        )
+      } catch (subscriptionError) {
         console.error(
-          'SUBSCRIPTION ERROR:',
+          'PREMIUM CHECK ERROR:',
           subscriptionError
         )
 
-        navigate('/dashboard', {
-          replace: true,
-        })
-
-        return
+        // Do not block login because of a subscription
+        // checking problem.
+        premium = false
       }
 
-      // ======================================================
-      // 6. DESTINATION
-      // ======================================================
+      console.log(
+        'PREMIUM ACCESS:',
+        premium
+      )
 
-      if (subscription) {
+      // ========================================================
+      // 6. DESTINATION
+      // ========================================================
+
+      if (premium) {
+        console.log(
+          'PREMIUM USER → /premium'
+        )
+
         navigate('/premium', {
           replace: true,
         })
 
         return
       }
+
+      console.log(
+        'NORMAL USER → /dashboard'
+      )
 
       navigate('/dashboard', {
         replace: true,
@@ -227,12 +254,14 @@ function Login() {
     }
   }
 
+  // ============================================================
+  // PAGE
+  // ============================================================
+
   return (
     <div className="login-page">
 
-      {/* ====================================================
-          BACKGROUND
-      ==================================================== */}
+      {/* BACKGROUND */}
 
       <div className="login-background">
 
@@ -250,17 +279,13 @@ function Login() {
 
       </div>
 
-      {/* ====================================================
-          LOGIN CONTAINER
-      ==================================================== */}
+      {/* LOGIN CONTAINER */}
 
       <div className="login-container">
 
         <div className="login-card">
 
-          {/* ==================================================
-              LOGO
-          ================================================== */}
+          {/* LOGO */}
 
           <div className="login-logo-wrapper">
 
@@ -272,9 +297,7 @@ function Login() {
 
           </div>
 
-          {/* ==================================================
-              BRAND
-          ================================================== */}
+          {/* BRAND */}
 
           <div className="login-brand">
 
@@ -284,9 +307,7 @@ function Login() {
 
           </div>
 
-          {/* ==================================================
-              HEADING
-          ================================================== */}
+          {/* HEADING */}
 
           <h1>
             Welcome back
@@ -297,9 +318,7 @@ function Login() {
             Overmaths learning journey.
           </p>
 
-          {/* ==================================================
-              FORM
-          ================================================== */}
+          {/* FORM */}
 
           <form onSubmit={handleLogin}>
 
@@ -429,17 +448,13 @@ function Login() {
 
           </form>
 
-          {/* ==================================================
-              DIVIDER
-          ================================================== */}
+          {/* DIVIDER */}
 
           <div className="login-divider">
             <span>NEW TO OVERMATHS?</span>
           </div>
 
-          {/* ==================================================
-              REGISTER
-          ================================================== */}
+          {/* REGISTER */}
 
           <div className="register-prompt">
 
@@ -460,9 +475,7 @@ function Login() {
 
           </div>
 
-          {/* ==================================================
-              FOOTER
-          ================================================== */}
+          {/* FOOTER */}
 
           <div className="login-footer">
 
