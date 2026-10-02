@@ -22,9 +22,9 @@ function Login() {
     e.preventDefault()
     setMessage('')
 
-    // ----------------------------------------------------------
-    // VALIDATION
-    // ----------------------------------------------------------
+    // ============================================================
+    // 1. VALIDATION
+    // ============================================================
 
     if (!email.trim() || !password) {
       setMessage(
@@ -33,9 +33,9 @@ function Login() {
       return
     }
 
-    // ----------------------------------------------------------
-    // SUPABASE CHECK
-    // ----------------------------------------------------------
+    // ============================================================
+    // 2. SUPABASE CHECK
+    // ============================================================
 
     if (!supabase) {
       setMessage(
@@ -48,7 +48,7 @@ function Login() {
 
     try {
       // ========================================================
-      // 1. AUTHENTICATE
+      // 3. AUTHENTICATE USER
       // ========================================================
 
       const {
@@ -89,12 +89,12 @@ function Login() {
       )
 
       // ========================================================
-      // 2. GET STUDENT PROFILE
+      // 4. GET STUDENT PROFILE
       //
-      // users.auth_user_id = Supabase Auth UUID
-      // users.id = database profile ID
+      // auth_user_id = Supabase Auth UUID
+      // id           = users table ID
       //
-      // subscriptions.user_id = users.id
+      // subscriptions.user_id MUST use users.id
       // ========================================================
 
       const {
@@ -130,7 +130,7 @@ function Login() {
       }
 
       // ========================================================
-      // 3. NO PROFILE
+      // 5. NO PROFILE
       // ========================================================
 
       if (!profile) {
@@ -139,9 +139,12 @@ function Login() {
           authUser.id
         )
 
-        navigate('/student-profile', {
-          replace: true,
-        })
+        navigate(
+          '/student-profile',
+          {
+            replace: true,
+          }
+        )
 
         return
       }
@@ -152,7 +155,7 @@ function Login() {
       )
 
       // ========================================================
-      // 4. CHECK PROFILE COMPLETION
+      // 6. CHECK PROFILE COMPLETION
       // ========================================================
 
       const hasFullName =
@@ -165,8 +168,6 @@ function Login() {
           profile.learning_route
         )
 
-      // University does not require exam type.
-      // O-Level requires exam type.
       const hasExamType =
         profile.learning_route ===
         'university'
@@ -190,27 +191,26 @@ function Login() {
           }
         )
 
-        navigate('/student-profile', {
-          replace: true,
-        })
+        navigate(
+          '/student-profile',
+          {
+            replace: true,
+          }
+        )
 
         return
       }
 
       // ========================================================
-      // 5. CHECK PREMIUM ACCESS
+      // 7. CHECK PREMIUM ACCESS
       //
-      // VERY IMPORTANT:
+      // IMPORTANT:
       //
-      // hasPremiumAccess(profile.id)
+      // profile.id = users.id
       //
-      // because:
+      // subscriptions.user_id = users.id
       //
-      // subscriptions.user_id
-      //       ↓
-      // users.id
-      //
-      // NOT authUser.id
+      // DO NOT pass authUser.id here.
       // ========================================================
 
       console.log(
@@ -231,9 +231,7 @@ function Login() {
           premiumResult
         )
 
-        // ------------------------------------------------------
-        // IMPORTANT:
-        //
+        // ======================================================
         // hasPremiumAccess() returns:
         //
         // {
@@ -241,67 +239,79 @@ function Login() {
         //   subscription: {...},
         //   error: null
         // }
-        //
-        // Therefore we MUST read .isPremium
-        // ------------------------------------------------------
+        // ======================================================
 
-        premium =
-          premiumResult?.isPremium === true
-
-        // ------------------------------------------------------
-        // Subscription API error
-        // ------------------------------------------------------
-
-        if (premiumResult?.error) {
+        if (
+          premiumResult?.error
+        ) {
           console.error(
             'PREMIUM CHECK ERROR:',
             premiumResult.error
           )
 
           premium = false
+        } else {
+          premium =
+            premiumResult?.isPremium === true
         }
+
+        console.log(
+          'PREMIUM BOOLEAN:',
+          premium
+        )
+
+        console.log(
+          'PREMIUM SUBSCRIPTION:',
+          premiumResult?.subscription
+        )
 
       } catch (subscriptionError) {
         console.error(
-          'PREMIUM CHECK ERROR:',
+          'PREMIUM CHECK EXCEPTION:',
           subscriptionError
         )
 
         premium = false
       }
 
+      // ========================================================
+      // 8. FINAL DESTINATION
+      // ========================================================
+
       console.log(
         'FINAL PREMIUM ACCESS:',
         premium
       )
 
-      // ========================================================
-      // 6. DESTINATION
-      // ========================================================
-
-      if (premium) {
+      if (premium === true) {
         console.log(
           'PREMIUM STUDENT → /premium'
         )
 
-        navigate('/premium', {
-          replace: true,
-        })
+        navigate(
+          '/premium',
+          {
+            replace: true,
+          }
+        )
 
         return
       }
 
       // ========================================================
-      // 7. NORMAL / FREE STUDENT
+      // NORMAL STUDENT
       // ========================================================
 
       console.log(
         'NORMAL STUDENT → /dashboard'
       )
 
-      navigate('/dashboard', {
-        replace: true,
-      })
+      navigate(
+        '/dashboard',
+        {
+          replace: true,
+        }
+      )
 
     } catch (error) {
       console.error(
@@ -326,9 +336,7 @@ function Login() {
   return (
     <div className="login-page">
 
-      {/* ====================================================
-          BACKGROUND
-      ==================================================== */}
+      {/* BACKGROUND */}
 
       <div className="login-background">
 
@@ -346,17 +354,14 @@ function Login() {
 
       </div>
 
-      {/* ====================================================
-          LOGIN CONTAINER
-      ==================================================== */}
+
+      {/* LOGIN CONTAINER */}
 
       <div className="login-container">
 
         <div className="login-card">
 
-          {/* ==================================================
-              LOGO
-          ================================================== */}
+          {/* LOGO */}
 
           <div className="login-logo-wrapper">
 
@@ -368,9 +373,8 @@ function Login() {
 
           </div>
 
-          {/* ==================================================
-              BRAND
-          ================================================== */}
+
+          {/* BRAND */}
 
           <div className="login-brand">
 
@@ -380,9 +384,8 @@ function Login() {
 
           </div>
 
-          {/* ==================================================
-              HEADING
-          ================================================== */}
+
+          {/* HEADING */}
 
           <h1>
             Welcome back
@@ -393,11 +396,12 @@ function Login() {
             Overmaths learning journey.
           </p>
 
-          {/* ==================================================
-              FORM
-          ================================================== */}
 
-          <form onSubmit={handleLogin}>
+          {/* FORM */}
+
+          <form
+            onSubmit={handleLogin}
+          >
 
             {/* EMAIL */}
 
@@ -431,6 +435,7 @@ function Login() {
 
             </div>
 
+
             {/* PASSWORD */}
 
             <div className="login-field">
@@ -456,6 +461,7 @@ function Login() {
 
               </div>
 
+
               <div className="login-input-wrapper">
 
                 <span className="login-input-icon">
@@ -480,6 +486,7 @@ function Login() {
                   disabled={loading}
                 />
 
+
                 <button
                   type="button"
                   className="password-toggle"
@@ -500,6 +507,7 @@ function Login() {
 
             </div>
 
+
             {/* MESSAGE */}
 
             {message && (
@@ -507,6 +515,7 @@ function Login() {
                 {message}
               </div>
             )}
+
 
             {/* LOGIN BUTTON */}
 
@@ -532,9 +541,8 @@ function Login() {
 
           </form>
 
-          {/* ==================================================
-              DIVIDER
-          ================================================== */}
+
+          {/* DIVIDER */}
 
           <div className="login-divider">
 
@@ -544,9 +552,8 @@ function Login() {
 
           </div>
 
-          {/* ==================================================
-              REGISTER
-          ================================================== */}
+
+          {/* REGISTER */}
 
           <div className="register-prompt">
 
@@ -558,7 +565,9 @@ function Login() {
               type="button"
               className="register-link"
               onClick={() =>
-                navigate('/register')
+                navigate(
+                  '/register'
+                )
               }
               disabled={loading}
             >
@@ -567,9 +576,8 @@ function Login() {
 
           </div>
 
-          {/* ==================================================
-              FOOTER
-          ================================================== */}
+
+          {/* FOOTER */}
 
           <div className="login-footer">
 
