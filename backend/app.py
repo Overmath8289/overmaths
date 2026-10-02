@@ -142,17 +142,25 @@ def get_user_profile(email):
 
 def get_user_subscription(user_id):
     """
-    Retrieve the user's subscription.
+    Retrieve all subscriptions belonging to the public.users.id.
 
-    The subscription table currently uses the user's ID and plan.
+    IMPORTANT:
+    subscriptions.user_id references public.users.id,
+    NOT auth.users.id.
     """
+
+    if not user_id:
+        return None, {
+            "error": "User profile ID is required"
+        }, 400
 
     rows, error, status = supabase_get(
         "subscriptions",
         {
             "select": "*",
             "user_id": f"eq.{user_id}",
-            "limit": 1,
+            "order": "created_at.desc",
+            "limit": 100,
         }
     )
 
@@ -162,15 +170,13 @@ def get_user_subscription(user_id):
     if not rows:
         return None, None, 200
 
-    return rows[0], None, 200
-
-
-def determine_user_access(user, profile, subscription):
+    return rows, None, 200
+def determine_user_access(user, profile, subscriptions):
     """
-    Determine which part of Overmaths the authenticated
-    user should enter.
+    Determine whether the authenticated student is normal or premium.
 
-    Profile must be completed before dashboard access.
+    IMPORTANT:
+    subscriptions are matched using public.users.id.
     """
 
     metadata = user.get("user_metadata") or {}
@@ -192,6 +198,10 @@ def determine_user_access(user, profile, subscription):
         else None
     )
 
+    # --------------------------------------------------------
+    # PROFILE COMPLETION
+    # --------------------------------------------------------
+
     profile_complete = bool(
         nickname
         and learning_route
@@ -199,7 +209,7 @@ def determine_user_access(user, profile, subscription):
     )
 
     # --------------------------------------------------------
-    # DEFAULT ACCESS
+    # DEFAULT
     # --------------------------------------------------------
 
     access_level = "normal"
@@ -208,18 +218,84 @@ def determine_user_access(user, profile, subscription):
     # PREMIUM CHECK
     # --------------------------------------------------------
 
-    if subscription:
+    now = __import__("datetime").datetime.now(
+        __import__("datetime").timezone.utc
+    )
+
+    for subscription in subscriptions or []:
 
         plan = str(
             subscription.get("plan") or ""
         ).strip().lower()
 
-        if plan in (
+        status = str(
+            subscription.get("status") or ""
+        ).strip().lower()
+
+        # Accepted Premium plans
+        premium_plan = plan in (
             "premium",
+            "premium monthly",
+            "premium annual",
+            "premium yearly",
             "pro",
-            "paid"
-        ):
-            access_level = "premium"
+            "paid",
+        )
+
+        if not premium_plan:
+            continue
+
+        # Subscription must be active
+        if status and status != "active":
+            continue
+
+        # ----------------------------------------------------
+        # START DATE
+        # ----------------------------------------------------
+
+        started_at = subscription.get("started_at")
+
+        if started_at:
+
+            try:
+
+                start = __import__("datetime").datetime.fromisoformat(
+                    str(started_at).replace("Z", "+00:00")
+                )
+
+                if start > now:
+                    continue
+
+            except ValueError:
+                pass
+
+        # ----------------------------------------------------
+        # EXPIRATION DATE
+        # ----------------------------------------------------
+
+        expires_at = subscription.get("expires_at")
+
+        if expires_at:
+
+            try:
+
+                expiry = __import__("datetime").datetime.fromisoformat(
+                    str(expires_at).replace("Z", "+00:00")
+                )
+
+                if expiry <= now:
+                    continue
+
+            except ValueError:
+                pass
+
+        # ----------------------------------------------------
+        # VALID PREMIUM SUBSCRIPTION FOUND
+        # ----------------------------------------------------
+
+        access_level = "premium"
+
+        break
 
     # --------------------------------------------------------
     # ROUTE
@@ -277,7 +353,7 @@ def auth_me():
     ).strip()
 
     # --------------------------------------------------------
-    # VERIFY SUPABASE SESSION
+    # VERIFY SUPABASE AUTH USER
     # --------------------------------------------------------
 
     user, error, status = get_authenticated_user(
@@ -294,7 +370,7 @@ def auth_me():
     email = user.get("email")
 
     # --------------------------------------------------------
-    # USER PROFILE
+    # GET PUBLIC USERS PROFILE
     # --------------------------------------------------------
 
     profile, profile_error, profile_status = get_user_profile(
@@ -308,12 +384,39 @@ def auth_me():
             "error": profile_error
         }), profile_status
 
+    if not profile:
+
+        return jsonify({
+            "authenticated": True,
+            "error": "Student profile was not found."
+        }), 404
+
     # --------------------------------------------------------
-    # SUBSCRIPTION
+    # IMPORTANT
+    #
+    # subscriptions.user_id = public.users.id
+    #
+    # NOT auth.users.id
     # --------------------------------------------------------
 
-    subscription, subscription_error, subscription_status = (
-        get_user_subscription(user.get("id"))
+    profile_user_id = profile.get("id")
+
+    print(
+        "AUTH USER ID:",
+        user.get("id")
+    )
+
+    print(
+        "PUBLIC USERS ID:",
+        profile_user_id
+    )
+
+    # --------------------------------------------------------
+    # GET SUBSCRIPTIONS USING PUBLIC USERS ID
+    # --------------------------------------------------------
+
+    subscriptions, subscription_error, subscription_status = (
+        get_user_subscription(profile_user_id)
     )
 
     if subscription_error:
@@ -330,7 +433,26 @@ def auth_me():
     access = determine_user_access(
         user,
         profile,
-        subscription
+        subscriptions
+    )
+
+    # --------------------------------------------------------
+    # DEBUG
+    # --------------------------------------------------------
+
+    print(
+        "SUBSCRIPTIONS:",
+        subscriptions
+    )
+
+    print(
+        "FINAL ACCESS LEVEL:",
+        access["access_level"]
+    )
+
+    print(
+        "NEXT ROUTE:",
+        access["next_route"]
     )
 
     # --------------------------------------------------------
@@ -349,7 +471,15 @@ def auth_me():
 
         "profile": profile,
 
-        "subscription": subscription,
+        # Return the whole subscription list
+        "subscriptions": subscriptions or [],
+
+        # Also provide latest subscription for compatibility
+        "subscription": (
+            subscriptions[0]
+            if subscriptions
+            else None
+        ),
 
         "profile_complete": access[
             "profile_complete"
@@ -358,6 +488,10 @@ def auth_me():
         "access_level": access[
             "access_level"
         ],
+
+        "is_premium": (
+            access["access_level"] == "premium"
+        ),
 
         "nickname": access[
             "nickname"
