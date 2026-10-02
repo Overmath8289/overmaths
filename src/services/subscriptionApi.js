@@ -59,7 +59,7 @@ export async function getPremiumSubscription(userId) {
   }
 
   console.log(
-    'ALL SUBSCRIPTIONS RETURNED:',
+    'USER SUBSCRIPTIONS:',
     data
   )
 
@@ -92,7 +92,7 @@ export async function getPremiumSubscription(userId) {
           ? new Date(subscription.expires_at)
           : null
 
-      const premiumPlan =
+      const validPlan =
         plan === 'premium' ||
         plan === 'premium monthly' ||
         plan === 'premium annual' ||
@@ -118,9 +118,9 @@ export async function getPremiumSubscription(userId) {
           user_id: subscription?.user_id,
           plan,
           status,
-          startedAt,
-          expiresAt,
-          premiumPlan,
+          started_at: subscription?.started_at,
+          expires_at: subscription?.expires_at,
+          validPlan,
           active,
           started,
           notExpired
@@ -128,7 +128,7 @@ export async function getPremiumSubscription(userId) {
       )
 
       return (
-        premiumPlan &&
+        validPlan &&
         active &&
         started &&
         notExpired
@@ -136,12 +136,10 @@ export async function getPremiumSubscription(userId) {
 
     }) || null
 
-
   console.log(
     'PREMIUM SUBSCRIPTION FOUND:',
     premiumSubscription
   )
-
 
   return {
     subscription: premiumSubscription,
@@ -156,27 +154,19 @@ export async function getPremiumSubscription(userId) {
 
 export async function hasPremiumAccess(userId) {
 
-  console.log(
-    'HAS PREMIUM ACCESS USER ID:',
-    userId
-  )
-
   if (!userId) {
     return {
       isPremium: false,
       subscription: null,
-      error: new Error(
-        'User ID is required.'
-      )
+      error: new Error('User ID is required.')
     }
   }
 
   const {
     subscription,
     error
-  } = await getPremiumSubscription(
-    userId
-  )
+  } =
+    await getPremiumSubscription(userId)
 
   if (error) {
 
@@ -185,17 +175,15 @@ export async function hasPremiumAccess(userId) {
       subscription: null,
       error
     }
+
   }
 
   const isPremium =
     Boolean(subscription)
 
   console.log(
-    'FINAL PREMIUM RESULT:',
-    {
-      isPremium,
-      subscription
-    }
+    'HAS PREMIUM ACCESS:',
+    isPremium
   )
 
   return {
@@ -208,12 +196,19 @@ export async function hasPremiumAccess(userId) {
 
 // ============================================================
 // GET CURRENT PREMIUM STATUS
+//
+// Auth UUID
+//      ↓
+// users.auth_user_id
+//      ↓
+// users.id
+//      ↓
+// subscriptions.user_id
 // ============================================================
 
 export async function getCurrentPremiumStatus() {
 
   if (!supabase) {
-
     return {
       isPremium: false,
       subscription: null,
@@ -224,7 +219,6 @@ export async function getCurrentPremiumStatus() {
     }
   }
 
-
   // ----------------------------------------------------------
   // GET AUTH USER
   // ----------------------------------------------------------
@@ -234,7 +228,6 @@ export async function getCurrentPremiumStatus() {
     error: authError
   } =
     await supabase.auth.getUser()
-
 
   if (authError) {
 
@@ -251,10 +244,8 @@ export async function getCurrentPremiumStatus() {
     }
   }
 
-
   const authUser =
     authData?.user
-
 
   if (!authUser) {
 
@@ -268,12 +259,10 @@ export async function getCurrentPremiumStatus() {
     }
   }
 
-
   console.log(
     'CURRENT AUTH USER:',
     authUser.id
   )
-
 
   // ----------------------------------------------------------
   // GET STUDENT PROFILE
@@ -299,7 +288,6 @@ export async function getCurrentPremiumStatus() {
       )
       .maybeSingle()
 
-
   if (profileError) {
 
     console.error(
@@ -315,7 +303,6 @@ export async function getCurrentPremiumStatus() {
     }
   }
 
-
   if (!profile) {
 
     return {
@@ -328,15 +315,13 @@ export async function getCurrentPremiumStatus() {
     }
   }
 
-
   console.log(
     'CURRENT STUDENT PROFILE:',
     profile
   )
 
-
   // ----------------------------------------------------------
-  // CHECK SUBSCRIPTION
+  // CHECK SUBSCRIPTION USING users.id
   // ----------------------------------------------------------
 
   const {
@@ -346,7 +331,6 @@ export async function getCurrentPremiumStatus() {
     await getPremiumSubscription(
       profile.id
     )
-
 
   if (subscriptionError) {
 
@@ -363,16 +347,18 @@ export async function getCurrentPremiumStatus() {
     }
   }
 
-
   const isPremium =
     Boolean(subscription)
-
 
   console.log(
     'CURRENT PREMIUM STATUS:',
     isPremium
   )
 
+  console.log(
+    'CURRENT PREMIUM SUBSCRIPTION:',
+    subscription
+  )
 
   return {
     isPremium,
@@ -390,7 +376,6 @@ export async function getCurrentPremiumStatus() {
 export async function getUserSubscriptions(userId) {
 
   if (!supabase) {
-
     return {
       subscriptions: [],
       error: new Error(
@@ -399,9 +384,7 @@ export async function getUserSubscriptions(userId) {
     }
   }
 
-
   if (!userId) {
-
     return {
       subscriptions: [],
       error: new Error(
@@ -409,7 +392,6 @@ export async function getUserSubscriptions(userId) {
       )
     }
   }
-
 
   const {
     data,
@@ -437,7 +419,6 @@ export async function getUserSubscriptions(userId) {
         }
       )
 
-
   if (error) {
 
     console.error(
@@ -450,7 +431,6 @@ export async function getUserSubscriptions(userId) {
       error
     }
   }
-
 
   return {
     subscriptions: data || [],
