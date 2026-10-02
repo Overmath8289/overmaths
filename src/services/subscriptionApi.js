@@ -1,87 +1,156 @@
 import { supabase } from '../supabaseClient'
 
+// ============================================================
+// RENDER API
+// ============================================================
+
+// IMPORTANT:
+// Replace this with your actual Render backend URL.
+const API_BASE_URL =
+  'https://overmaths.onrender.com'
+
 
 // ============================================================
-// GET PREMIUM SUBSCRIPTION
+// GET SUPABASE ACCESS TOKEN
 // ============================================================
 
-export async function getPremiumSubscription(userId) {
+async function getAccessToken() {
 
   if (!supabase) {
-    return {
-      subscription: null,
-      error: new Error(
-        'Supabase is not connected.'
-      ),
-    }
+    throw new Error(
+      'Supabase is not connected.'
+    )
   }
-
-  if (!userId) {
-    return {
-      subscription: null,
-      error: new Error(
-        'User ID is required.'
-      ),
-    }
-  }
-
-  const now =
-    new Date().toISOString()
 
   const {
     data,
     error,
-  } = await supabase
-    .from('subscriptions')
-    .select(`
-      id,
-      user_id,
-      plan,
-      status,
-      started_at,
-      expires_at,
-      created_at
-    `)
-    .eq('user_id', userId)
-    .eq('status', 'active')
-    .gt('expires_at', now)
-    .order('expires_at', {
-      ascending: false,
-    })
+  } = await supabase.auth.getSession()
 
   if (error) {
     console.error(
-      'GET PREMIUM SUBSCRIPTION ERROR:',
+      'GET SESSION ERROR:',
+      error
+    )
+
+    throw error
+  }
+
+  const session =
+    data?.session
+
+  if (!session?.access_token) {
+    throw new Error(
+      'Your login session is missing or has expired. Please sign in again.'
+    )
+  }
+
+  return session.access_token
+}
+
+
+// ============================================================
+// CHECK PREMIUM ACCESS THROUGH PYTHON API
+// ============================================================
+
+export async function getCurrentPremiumStatus() {
+
+  try {
+
+    const accessToken =
+      await getAccessToken()
+
+    console.log(
+      'CHECKING PREMIUM THROUGH RENDER API'
+    )
+
+    const response =
+      await fetch(
+        `${API_BASE_URL}/api/auth/me`,
+        {
+          method: 'GET',
+
+          headers: {
+            Authorization:
+              `Bearer ${accessToken}`,
+
+            Accept:
+              'application/json',
+          },
+        }
+      )
+
+    let result = null
+
+    try {
+      result =
+        await response.json()
+    } catch {
+      result = null
+    }
+
+    console.log(
+      'RENDER AUTH RESPONSE:',
+      result
+    )
+
+    if (!response.ok) {
+
+      return {
+        isPremium: false,
+        subscription: null,
+        subscriptions: [],
+        user: null,
+        profile: null,
+        error: new Error(
+          result?.error ||
+          'Unable to verify your account.'
+        ),
+      }
+    }
+
+    return {
+
+      isPremium:
+        result?.is_premium === true ||
+        result?.access_level === 'premium',
+
+      subscription:
+        result?.subscription || null,
+
+      subscriptions:
+        result?.subscriptions || [],
+
+      user:
+        result?.user || null,
+
+      profile:
+        result?.profile || null,
+
+      accessLevel:
+        result?.access_level || 'normal',
+
+      nextRoute:
+        result?.next_route || '/dashboard',
+
+      error: null,
+    }
+
+  } catch (error) {
+
+    console.error(
+      'PREMIUM STATUS ERROR:',
       error
     )
 
     return {
+      isPremium: false,
       subscription: null,
+      subscriptions: [],
+      user: null,
+      profile: null,
       error,
     }
-  }
-
-  const premiumSubscription =
-    (data || []).find((subscription) => {
-
-      const plan =
-        String(
-          subscription?.plan || ''
-        )
-          .trim()
-          .toLowerCase()
-
-      return (
-        plan === 'premium' ||
-        plan === 'premium monthly' ||
-        plan === 'premium annual' ||
-        plan === 'premium yearly'
-      )
-    }) || null
-
-  return {
-    subscription: premiumSubscription,
-    error: null,
   }
 }
 
@@ -89,205 +158,73 @@ export async function getPremiumSubscription(userId) {
 // ============================================================
 // HAS PREMIUM ACCESS
 // ============================================================
+//
+// userId is kept as an argument for compatibility with your
+// existing Login.jsx:
+//
+//     hasPremiumAccess(profile.id)
+//
+// The actual authentication is handled by the Supabase session
+// + Render backend.
+//
 
 export async function hasPremiumAccess(userId) {
 
-  if (!userId) {
-    return {
-      isPremium: false,
-      subscription: null,
-      error: new Error(
-        'User ID is required.'
-      ),
+  try {
+
+    if (!userId) {
+
+      return {
+        isPremium: false,
+        subscription: null,
+        error: new Error(
+          'User ID is required.'
+        ),
+      }
     }
-  }
 
-  const {
-    subscription,
-    error,
-  } =
-    await getPremiumSubscription(userId)
+    const result =
+      await getCurrentPremiumStatus()
 
-  if (error) {
+    return {
+
+      isPremium:
+        result.isPremium === true,
+
+      subscription:
+        result.subscription,
+
+      subscriptions:
+        result.subscriptions,
+
+      user:
+        result.user,
+
+      profile:
+        result.profile,
+
+      accessLevel:
+        result.accessLevel,
+
+      nextRoute:
+        result.nextRoute,
+
+      error:
+        result.error,
+    }
+
+  } catch (error) {
+
+    console.error(
+      'HAS PREMIUM ACCESS ERROR:',
+      error
+    )
+
     return {
       isPremium: false,
       subscription: null,
       error,
     }
-  }
-
-  return {
-    isPremium: Boolean(subscription),
-    subscription,
-    error: null,
-  }
-}
-
-
-// ============================================================
-// GET CURRENT PREMIUM STATUS
-//
-// Automatically:
-// Auth UUID
-//      ↓
-// users.auth_user_id
-//      ↓
-// users.id
-//      ↓
-// subscriptions.user_id
-// ============================================================
-
-export async function getCurrentPremiumStatus() {
-
-  if (!supabase) {
-    return {
-      isPremium: false,
-      subscription: null,
-      user: null,
-      error: new Error(
-        'Supabase is not connected.'
-      ),
-    }
-  }
-
-  // ----------------------------------------------------------
-  // GET AUTH USER
-  // ----------------------------------------------------------
-
-  const {
-    data: authData,
-    error: authError,
-  } =
-    await supabase.auth.getUser()
-
-  if (authError) {
-
-    console.error(
-      'CURRENT AUTH USER ERROR:',
-      authError
-    )
-
-    return {
-      isPremium: false,
-      subscription: null,
-      user: null,
-      error: authError,
-    }
-  }
-
-  const authUser =
-    authData?.user
-
-  if (!authUser) {
-    return {
-      isPremium: false,
-      subscription: null,
-      user: null,
-      error: new Error(
-        'No authenticated user.'
-      ),
-    }
-  }
-
-  console.log(
-    'CURRENT AUTH USER:',
-    authUser.id
-  )
-
-  // ----------------------------------------------------------
-  // GET STUDENT PROFILE
-  // ----------------------------------------------------------
-
-  const {
-    data: profile,
-    error: profileError,
-  } =
-    await supabase
-      .from('users')
-      .select(`
-        id,
-        auth_user_id,
-        email,
-        full_name
-      `)
-      .eq(
-        'auth_user_id',
-        authUser.id
-      )
-      .maybeSingle()
-
-  if (profileError) {
-
-    console.error(
-      'CURRENT PROFILE ERROR:',
-      profileError
-    )
-
-    return {
-      isPremium: false,
-      subscription: null,
-      user: null,
-      error: profileError,
-    }
-  }
-
-  if (!profile) {
-
-    return {
-      isPremium: false,
-      subscription: null,
-      user: null,
-      error: new Error(
-        'Student profile not found.'
-      ),
-    }
-  }
-
-  console.log(
-    'CURRENT STUDENT PROFILE:',
-    profile
-  )
-
-  // ----------------------------------------------------------
-  // CHECK PREMIUM USING users.id
-  // ----------------------------------------------------------
-
-  const {
-    subscription,
-    error: subscriptionError,
-  } =
-    await getPremiumSubscription(
-      profile.id
-    )
-
-  if (subscriptionError) {
-
-    console.error(
-      'CURRENT PREMIUM CHECK ERROR:',
-      subscriptionError
-    )
-
-    return {
-      isPremium: false,
-      subscription: null,
-      user: profile,
-      error: subscriptionError,
-    }
-  }
-
-  const isPremium =
-    Boolean(subscription)
-
-  console.log(
-    'CURRENT PREMIUM STATUS:',
-    isPremium
-  )
-
-  return {
-    isPremium,
-    subscription,
-    user: profile,
-    error: null,
   }
 }
 
@@ -295,54 +232,38 @@ export async function getCurrentPremiumStatus() {
 // ============================================================
 // GET ALL USER SUBSCRIPTIONS
 // ============================================================
+//
+// This also goes through the Render API.
+// No direct subscriptions table query from the browser.
+//
 
 export async function getUserSubscriptions(userId) {
 
-  if (!supabase) {
-    return {
-      subscriptions: [],
-      error: new Error(
-        'Supabase is not connected.'
-      ),
+  try {
+
+    if (!userId) {
+
+      return {
+        subscriptions: [],
+        error: new Error(
+          'User ID is required.'
+        ),
+      }
     }
-  }
 
-  if (!userId) {
+    const result =
+      await getCurrentPremiumStatus()
+
     return {
-      subscriptions: [],
-      error: new Error(
-        'User ID is required.'
-      ),
+
+      subscriptions:
+        result.subscriptions || [],
+
+      error:
+        result.error,
     }
-  }
 
-  const {
-    data,
-    error,
-  } =
-    await supabase
-      .from('subscriptions')
-      .select(`
-        id,
-        user_id,
-        plan,
-        status,
-        started_at,
-        expires_at,
-        created_at
-      `)
-      .eq(
-        'user_id',
-        userId
-      )
-      .order(
-        'created_at',
-        {
-          ascending: false,
-        }
-      )
-
-  if (error) {
+  } catch (error) {
 
     console.error(
       'GET USER SUBSCRIPTIONS ERROR:',
@@ -354,9 +275,49 @@ export async function getUserSubscriptions(userId) {
       error,
     }
   }
+}
 
-  return {
-    subscriptions: data || [],
-    error: null,
+
+// ============================================================
+// GET PREMIUM SUBSCRIPTION
+// ============================================================
+
+export async function getPremiumSubscription(userId) {
+
+  try {
+
+    if (!userId) {
+
+      return {
+        subscription: null,
+        error: new Error(
+          'User ID is required.'
+        ),
+      }
+    }
+
+    const result =
+      await getCurrentPremiumStatus()
+
+    return {
+
+      subscription:
+        result.subscription || null,
+
+      error:
+        result.error,
+    }
+
+  } catch (error) {
+
+    console.error(
+      'GET PREMIUM SUBSCRIPTION ERROR:',
+      error
+    )
+
+    return {
+      subscription: null,
+      error,
+    }
   }
 }

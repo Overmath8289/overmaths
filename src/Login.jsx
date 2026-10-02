@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
-import { hasPremiumAccess } from './services/subscriptionApi'
 import './Login.css'
 
 function Login() {
@@ -15,6 +14,13 @@ function Login() {
   const [message, setMessage] = useState('')
 
   // ============================================================
+  // PYTHON BACKEND
+  // ============================================================
+
+  onst BACKEND_URL =
+  import.meta.env.VITE_BACKEND_URL
+
+  // ============================================================
   // LOGIN
   // ============================================================
 
@@ -22,9 +28,9 @@ function Login() {
     e.preventDefault()
     setMessage('')
 
-    // ============================================================
+    // ========================================================
     // 1. VALIDATION
-    // ============================================================
+    // ========================================================
 
     if (!email.trim() || !password) {
       setMessage(
@@ -33,9 +39,9 @@ function Login() {
       return
     }
 
-    // ============================================================
+    // ========================================================
     // 2. SUPABASE CHECK
-    // ============================================================
+    // ========================================================
 
     if (!supabase) {
       setMessage(
@@ -47,9 +53,9 @@ function Login() {
     setLoading(true)
 
     try {
-      // ========================================================
-      // 3. AUTHENTICATE USER
-      // ========================================================
+      // ======================================================
+      // 3. AUTHENTICATE WITH SUPABASE
+      // ======================================================
 
       const {
         data: authData,
@@ -74,10 +80,19 @@ function Login() {
       }
 
       const authUser = authData?.user
+      const session = authData?.session
 
-      if (!authUser) {
+      if (!authUser || !session?.access_token) {
+        console.error(
+          'LOGIN SESSION MISSING:',
+          {
+            authUser,
+            session,
+          }
+        )
+
         setMessage(
-          'Login was unsuccessful. Please try again.'
+          'Login succeeded but your session could not be created. Please try again.'
         )
 
         return
@@ -88,14 +103,17 @@ function Login() {
         authUser.id
       )
 
-      // ========================================================
+      console.log(
+        'SUPABASE SESSION FOUND:',
+        Boolean(session.access_token)
+      )
+
+      // ======================================================
       // 4. GET STUDENT PROFILE
       //
       // auth_user_id = Supabase Auth UUID
-      // id           = users table ID
-      //
-      // subscriptions.user_id MUST use users.id
-      // ========================================================
+      // id           = public.users ID
+      // ======================================================
 
       const {
         data: profile,
@@ -129,9 +147,9 @@ function Login() {
         return
       }
 
-      // ========================================================
+      // ======================================================
       // 5. NO PROFILE
-      // ========================================================
+      // ======================================================
 
       if (!profile) {
         console.log(
@@ -154,9 +172,9 @@ function Login() {
         profile
       )
 
-      // ========================================================
+      // ======================================================
       // 6. CHECK PROFILE COMPLETION
-      // ========================================================
+      // ======================================================
 
       const hasFullName =
         Boolean(
@@ -201,87 +219,149 @@ function Login() {
         return
       }
 
-      // ========================================================
-      // 7. CHECK PREMIUM ACCESS
+      // ======================================================
+      // 7. ASK PYTHON BACKEND FOR ACCESS
       //
       // IMPORTANT:
       //
-      // profile.id = users.id
+      // We DO NOT check subscriptions directly here.
       //
-      // subscriptions.user_id = users.id
+      // Supabase Auth user ID:
       //
-      // DO NOT pass authUser.id here.
-      // ========================================================
+      // authUser.id
+      //
+      // Python backend receives the access token and resolves:
+      //
+      // auth.users.id
+      //       ↓
+      // public.users.auth_user_id
+      //       ↓
+      // public.users.id
+      //       ↓
+      // subscriptions.user_id
+      //
+      // This keeps the premium decision in one place.
+      // ======================================================
 
       console.log(
-        'CHECKING PREMIUM ACCESS FOR USER:',
-        profile.id
+        'CHECKING PREMIUM ACCESS THROUGH PYTHON BACKEND'
       )
 
-      let premium = false
+      let backendResponse
 
       try {
-        const premiumResult =
-          await hasPremiumAccess(
-            profile.id
-          )
+        backendResponse = await fetch(
+          `${BACKEND_URL}/api/auth/me`,
+          {
+            method: 'GET',
 
-        console.log(
-          'PREMIUM CHECK RESULT:',
-          premiumResult
+            headers: {
+              Authorization:
+                `Bearer ${session.access_token}`,
+
+              'Content-Type':
+                'application/json',
+            },
+          }
         )
-
-        // ======================================================
-        // hasPremiumAccess() returns:
-        //
-        // {
-        //   isPremium: true/false,
-        //   subscription: {...},
-        //   error: null
-        // }
-        // ======================================================
-
-        if (
-          premiumResult?.error
-        ) {
-          console.error(
-            'PREMIUM CHECK ERROR:',
-            premiumResult.error
-          )
-
-          premium = false
-        } else {
-          premium =
-            premiumResult?.isPremium === true
-        }
-
-        console.log(
-          'PREMIUM BOOLEAN:',
-          premium
-        )
-
-        console.log(
-          'PREMIUM SUBSCRIPTION:',
-          premiumResult?.subscription
-        )
-
-      } catch (subscriptionError) {
+      } catch (backendConnectionError) {
         console.error(
-          'PREMIUM CHECK EXCEPTION:',
-          subscriptionError
+          'PYTHON BACKEND CONNECTION ERROR:',
+          backendConnectionError
         )
 
-        premium = false
+        setMessage(
+          'We could not connect to the Overmaths server. Please make sure the Python backend is running.'
+        )
+
+        return
       }
 
-      // ========================================================
-      // 8. FINAL DESTINATION
-      // ========================================================
+      // ======================================================
+      // 8. READ PYTHON RESPONSE
+      // ======================================================
+
+      let backendData = null
+
+      try {
+        backendData =
+          await backendResponse.json()
+      } catch (jsonError) {
+        console.error(
+          'INVALID PYTHON RESPONSE:',
+          jsonError
+        )
+
+        setMessage(
+          'The Overmaths server returned an invalid response.'
+        )
+
+        return
+      }
+
+      console.log(
+        'PYTHON /api/auth/me RESPONSE:',
+        backendData
+      )
+
+      // ======================================================
+      // 9. BACKEND AUTHENTICATION FAILED
+      // ======================================================
+
+      if (
+        !backendResponse.ok ||
+        backendData?.authenticated !== true
+      ) {
+        console.error(
+          'PYTHON AUTHENTICATION ERROR:',
+          backendData
+        )
+
+        setMessage(
+          backendData?.error ||
+            'Unable to verify your Overmaths session.'
+        )
+
+        return
+      }
+
+      // ======================================================
+      // 10. GET PREMIUM STATUS FROM PYTHON
+      // ======================================================
+
+      const premium =
+        backendData?.is_premium === true ||
+        backendData?.access_level ===
+          'premium'
+
+      console.log(
+        'PYTHON PREMIUM STATUS:',
+        backendData?.is_premium
+      )
+
+      console.log(
+        'PYTHON ACCESS LEVEL:',
+        backendData?.access_level
+      )
+
+      console.log(
+        'PYTHON SUBSCRIPTION:',
+        backendData?.subscription
+      )
+
+      console.log(
+        'PYTHON SUBSCRIPTIONS:',
+        backendData?.subscriptions
+      )
 
       console.log(
         'FINAL PREMIUM ACCESS:',
         premium
       )
+
+      // ======================================================
+      // 11. FINAL DESTINATION
+      // ======================================================
 
       if (premium === true) {
         console.log(
@@ -298,9 +378,9 @@ function Login() {
         return
       }
 
-      // ========================================================
+      // ======================================================
       // NORMAL STUDENT
-      // ========================================================
+      // ======================================================
 
       console.log(
         'NORMAL STUDENT → /dashboard'
@@ -336,8 +416,6 @@ function Login() {
   return (
     <div className="login-page">
 
-      {/* BACKGROUND */}
-
       <div className="login-background">
 
         <div className="login-glow login-glow-one"></div>
@@ -354,14 +432,9 @@ function Login() {
 
       </div>
 
-
-      {/* LOGIN CONTAINER */}
-
       <div className="login-container">
 
         <div className="login-card">
-
-          {/* LOGO */}
 
           <div className="login-logo-wrapper">
 
@@ -373,9 +446,6 @@ function Login() {
 
           </div>
 
-
-          {/* BRAND */}
-
           <div className="login-brand">
 
             <span>OVER</span>
@@ -383,9 +453,6 @@ function Login() {
             <span>MATHS</span>
 
           </div>
-
-
-          {/* HEADING */}
 
           <h1>
             Welcome back
@@ -396,14 +463,9 @@ function Login() {
             Overmaths learning journey.
           </p>
 
-
-          {/* FORM */}
-
           <form
             onSubmit={handleLogin}
           >
-
-            {/* EMAIL */}
 
             <div className="login-field">
 
@@ -435,9 +497,6 @@ function Login() {
 
             </div>
 
-
-            {/* PASSWORD */}
-
             <div className="login-field">
 
               <div className="password-label-row">
@@ -460,7 +519,6 @@ function Login() {
                 </button>
 
               </div>
-
 
               <div className="login-input-wrapper">
 
@@ -486,7 +544,6 @@ function Login() {
                   disabled={loading}
                 />
 
-
                 <button
                   type="button"
                   className="password-toggle"
@@ -507,17 +564,11 @@ function Login() {
 
             </div>
 
-
-            {/* MESSAGE */}
-
             {message && (
               <div className="login-message">
                 {message}
               </div>
             )}
-
-
-            {/* LOGIN BUTTON */}
 
             <button
               type="submit"
@@ -541,9 +592,6 @@ function Login() {
 
           </form>
 
-
-          {/* DIVIDER */}
-
           <div className="login-divider">
 
             <span>
@@ -551,9 +599,6 @@ function Login() {
             </span>
 
           </div>
-
-
-          {/* REGISTER */}
 
           <div className="register-prompt">
 
@@ -575,9 +620,6 @@ function Login() {
             </button>
 
           </div>
-
-
-          {/* FOOTER */}
 
           <div className="login-footer">
 
