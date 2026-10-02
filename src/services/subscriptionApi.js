@@ -8,7 +8,7 @@ import { supabase } from '../supabaseClient'
  * NOT auth.users.id.
  */
 export async function getPremiumSubscription(userId) {
-  if (!supabase) {
+   if (!supabase) {
     return {
       subscription: null,
       error: new Error('Supabase is not connected.'),
@@ -67,6 +67,14 @@ export async function getPremiumSubscription(userId) {
 
 /**
  * Check whether a student currently has premium access.
+ *
+ * Returns:
+ *
+ * {
+ *   isPremium: true/false,
+ *   subscription: object/null,
+ *   error: null/error
+ * }
  */
 export async function hasPremiumAccess(userId) {
   const {
@@ -93,8 +101,12 @@ export async function hasPremiumAccess(userId) {
 /**
  * Get all subscriptions belonging to a student.
  *
- * Useful for account pages, payment history,
- * admin dashboards, debugging, etc.
+ * Useful for:
+ * - Subscription page
+ * - Payment history
+ * - Account pages
+ * - Admin dashboard
+ * - Debugging
  */
 export async function getUserSubscriptions(userId) {
   if (!supabase) {

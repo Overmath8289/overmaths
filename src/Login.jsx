@@ -27,7 +27,9 @@ function Login() {
     // ----------------------------------------------------------
 
     if (!email.trim() || !password) {
-      setMessage('Please enter your email and password.')
+      setMessage(
+        'Please enter your email and password.'
+      )
       return
     }
 
@@ -54,7 +56,10 @@ function Login() {
       })
 
       if (authError) {
-        console.error('AUTHENTICATION ERROR:', authError)
+        console.error(
+          'AUTHENTICATION ERROR:',
+          authError
+        )
 
         setMessage(
           authError.message ||
@@ -83,6 +88,7 @@ function Login() {
       // 2. GET STUDENT PROFILE
       //
       // IMPORTANT:
+      //
       // users.auth_user_id = Supabase Auth UUID
       // users.id = database profile ID
       //
@@ -143,8 +149,7 @@ function Login() {
       // ========================================================
       // 4. CHECK PROFILE COMPLETION
       //
-      // We only use columns that actually exist in your users
-      // table.
+      // Only columns confirmed to exist in users are used here.
       // ========================================================
 
       const hasFullName =
@@ -181,11 +186,19 @@ function Login() {
       }
 
       // ========================================================
-      // 5. CHECK PREMIUM
+      // 5. CHECK PREMIUM ACCESS
       //
       // IMPORTANT:
-      // Pass profile.id because subscriptions.user_id points
-      // to users.id.
+      //
+      // subscriptions.user_id points to users.id.
+      //
+      // Therefore we pass:
+      //
+      // profile.id
+      //
+      // NOT:
+      //
+      // authUser.id
       // ========================================================
 
       console.log(
@@ -196,22 +209,46 @@ function Login() {
       let premium = false
 
       try {
-        premium = await hasPremiumAccess(
-          profile.id
+        const premiumResult =
+          await hasPremiumAccess(profile.id)
+
+        console.log(
+          'PREMIUM CHECK RESULT:',
+          premiumResult
         )
+
+        // IMPORTANT:
+        // hasPremiumAccess() returns an object.
+        //
+        // We must read:
+        //
+        // premiumResult.isPremium
+        //
+        // and NOT use the entire object as a boolean.
+
+        premium =
+          premiumResult?.isPremium === true
+
+        if (premiumResult?.error) {
+          console.error(
+            'PREMIUM CHECK ERROR:',
+            premiumResult.error
+          )
+        }
+
       } catch (subscriptionError) {
         console.error(
           'PREMIUM CHECK ERROR:',
           subscriptionError
         )
 
-        // Do not block login because of a subscription
-        // checking problem.
+        // Do not prevent the student from logging in
+        // if the subscription check itself fails.
         premium = false
       }
 
       console.log(
-        'PREMIUM ACCESS:',
+        'FINAL PREMIUM ACCESS:',
         premium
       )
 
@@ -230,6 +267,10 @@ function Login() {
 
         return
       }
+
+      // --------------------------------------------------------
+      // NORMAL / FREE STUDENT
+      // --------------------------------------------------------
 
       console.log(
         'NORMAL USER → /dashboard'
@@ -279,6 +320,7 @@ function Login() {
 
       </div>
 
+
       {/* LOGIN CONTAINER */}
 
       <div className="login-container">
@@ -297,6 +339,7 @@ function Login() {
 
           </div>
 
+
           {/* BRAND */}
 
           <div className="login-brand">
@@ -306,6 +349,7 @@ function Login() {
             <span>MATHS</span>
 
           </div>
+
 
           {/* HEADING */}
 
@@ -317,6 +361,7 @@ function Login() {
             Sign in to continue your
             Overmaths learning journey.
           </p>
+
 
           {/* FORM */}
 
@@ -352,6 +397,7 @@ function Login() {
 
             </div>
 
+
             {/* PASSWORD */}
 
             <div className="login-field">
@@ -374,6 +420,7 @@ function Login() {
                 </button>
 
               </div>
+
 
               <div className="login-input-wrapper">
 
@@ -416,6 +463,7 @@ function Login() {
 
             </div>
 
+
             {/* MESSAGE */}
 
             {message && (
@@ -423,6 +471,7 @@ function Login() {
                 {message}
               </div>
             )}
+
 
             {/* LOGIN BUTTON */}
 
@@ -448,11 +497,17 @@ function Login() {
 
           </form>
 
+
           {/* DIVIDER */}
 
           <div className="login-divider">
-            <span>NEW TO OVERMATHS?</span>
+
+            <span>
+              NEW TO OVERMATHS?
+            </span>
+
           </div>
+
 
           {/* REGISTER */}
 
@@ -474,6 +529,7 @@ function Login() {
             </button>
 
           </div>
+
 
           {/* FOOTER */}
 
