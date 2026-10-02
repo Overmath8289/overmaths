@@ -245,3 +245,83 @@
   }
 
 }
+
+/* =========================================================
+   CURRENT PREMIUM STUDENT
+========================================================= */
+
+.premium-current-status {
+  width: 100%;
+  box-sizing: border-box;
+
+  margin: 30px 0;
+
+  padding: 30px;
+
+  border-radius: 22px;
+
+  text-align: center;
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(124, 58, 237, 0.16),
+      rgba(255, 122, 24, 0.08)
+    );
+
+  border:
+    1px solid rgba(168, 85, 247, 0.35);
+
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.25);
+}
+
+.premium-current-status-badge {
+  display: inline-flex;
+
+  padding: 8px 14px;
+
+  border-radius: 999px;
+
+  background:
+    rgba(168, 85, 247, 0.15);
+
+  border:
+    1px solid rgba(168, 85, 247, 0.35);
+
+  color: #c084fc;
+
+  font-size: 11px;
+
+  font-weight: 800;
+
+  letter-spacing: 1px;
+}
+
+.premium-current-status h2 {
+  margin: 18px 0 10px;
+
+  color: #ffffff;
+
+  font-size: 24px;
+}
+
+.premium-current-status p {
+  margin: 8px auto;
+
+  max-width: 520px;
+
+  color: #aeb7d0;
+
+  font-size: 14px;
+
+  line-height: 1.6;
+}
+
+.premium-current-status .premium-expiry {
+  color: #c7cde0;
+}
+
+.premium-current-status .premium-expiry strong {
+  color: #ffffff;
+}

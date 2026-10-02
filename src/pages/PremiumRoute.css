@@ -1,0 +1,72 @@
+.premium-route-loading {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background:
+    radial-gradient(
+      circle at 50% 40%,
+      rgba(124, 58, 237, 0.12),
+      transparent 45%
+    ),
+    #050816;
+
+  color: #ffffff;
+}
+
+.premium-route-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  gap: 18px;
+
+  text-align: center;
+}
+
+.premium-route-loader p {
+  margin: 0;
+
+  color: #9da7c5;
+
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.premium-loader-orb {
+  width: 48px;
+  height: 48px;
+
+  border-radius: 50%;
+
+  border: 3px solid rgba(168, 85, 247, 0.2);
+
+  border-top-color: #a855f7;
+  border-right-color: #ff7a18;
+
+  animation:
+    premiumRouteSpin
+    0.8s linear infinite;
+
+  box-shadow:
+    0 0 30px rgba(124, 58, 237, 0.25);
+}
+
+@keyframes premiumRouteSpin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .premium-loader-orb {
+    animation: none;
+  }
+}

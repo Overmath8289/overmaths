@@ -44,6 +44,7 @@ import PremiumRoute from './pages/PremiumRoute'
 
 import AdminDashboard from './pages/AdminDashboard'
 import AdminQuestions from './pages/AdminQuestions'
+import FreeRoute from './routes/FreeRoute'
 
 
 // ============================================================
@@ -392,16 +393,20 @@ function App() {
         ================================================== */}
 
         <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute
-              user={user}
-              loading={authLoading}
-            >
-              <Dashboard />
-            </ProtectedRoute>
-          }
-        />
+  element={
+    <ProtectedRoute
+      user={user}
+      loading={authLoading}
+    >
+      <FreeRoute />
+    </ProtectedRoute>
+  }
+>
+  <Route
+    path="/dashboard"
+    element={<Dashboard />}
+  />
+</Route>
 
 
         {/* ==================================================

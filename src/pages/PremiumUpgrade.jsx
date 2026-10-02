@@ -1,123 +1,195 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from '../supabaseClient'
 import {
   getCurrentPremiumStatus,
-} from './services/subscriptionApi'
+} from '../services/subscriptionApi'
 import './PremiumUpgrade.css'
 
 function PremiumUpgrade() {
   const navigate = useNavigate()
 
-  const [loading, setLoading] = useState(true)
+  const [checking, setChecking] = useState(true)
   const [isPremium, setIsPremium] = useState(false)
   const [subscription, setSubscription] = useState(null)
-  const [message, setMessage] = useState('')
+
+  // ============================================================
+  // CHECK CURRENT USER'S PREMIUM STATUS
+  // ============================================================
 
   useEffect(() => {
     let mounted = true
 
-    async function loadPremiumStatus() {
+    async function checkPremiumStatus() {
       try {
+        // --------------------------------------------------------
+        // 1. GET CURRENT LOGIN SESSION
+        // --------------------------------------------------------
+
         const {
-          isPremium: premiumStatus,
-          subscription: currentSubscription,
-          error,
-        } = await getCurrentPremiumStatus()
+          data: {
+            session,
+          },
+        } = await supabase.auth.getSession()
 
-        if (!mounted) return
-
-        if (error) {
-          console.error(
-            'PREMIUM STATUS ERROR:',
-            error
-          )
-
-          setMessage(
-            'We could not check your Premium status.'
-          )
-
-          setLoading(false)
+        if (!session?.user) {
+          if (mounted) {
+            setChecking(false)
+          }
 
           return
         }
 
-        setIsPremium(premiumStatus)
-        setSubscription(currentSubscription)
-        setLoading(false)
+        console.log(
+          'PREMIUM UPGRADE - AUTH USER:',
+          session.user.id
+        )
+
+        // --------------------------------------------------------
+        // 2. GET DATABASE USER
+        //
+        // auth.users.id
+        //       ↓
+        // users.auth_user_id
+        //       ↓
+        // users.id
+        //       ↓
+        // subscriptions.user_id
+        // --------------------------------------------------------
+
+        const {
+          data: profile,
+          error: profileError,
+        } = await supabase
+          .from('users')
+          .select('id')
+          .eq(
+            'auth_user_id',
+            session.user.id
+          )
+          .maybeSingle()
+
+        if (profileError) {
+          console.error(
+            'PREMIUM UPGRADE PROFILE ERROR:',
+            profileError
+          )
+
+          if (mounted) {
+            setChecking(false)
+          }
+
+          return
+        }
+
+        if (!profile) {
+          console.log(
+            'No database profile found.'
+          )
+
+          if (mounted) {
+            setChecking(false)
+          }
+
+          return
+        }
+
+        console.log(
+          'PREMIUM UPGRADE DATABASE USER:',
+          profile.id
+        )
+
+        // --------------------------------------------------------
+        // 3. CHECK PREMIUM SUBSCRIPTION
+        // --------------------------------------------------------
+
+        const result =
+          await getCurrentPremiumStatus(
+            profile.id
+          )
+
+        console.log(
+          'PREMIUM UPGRADE STATUS:',
+          result
+        )
+
+        if (mounted) {
+          setIsPremium(
+            result.isPremium
+          )
+
+          setSubscription(
+            result.subscription
+          )
+
+          setChecking(false)
+        }
+
       } catch (error) {
         console.error(
-          'PREMIUM PAGE ERROR:',
+          'PREMIUM UPGRADE CHECK ERROR:',
           error
         )
 
         if (mounted) {
-          setMessage(
-            'Unable to load Premium information.'
-          )
-
-          setLoading(false)
+          setChecking(false)
         }
       }
     }
 
-    loadPremiumStatus()
+    checkPremiumStatus()
 
     return () => {
       mounted = false
     }
   }, [])
 
+  // ============================================================
+  // SUBSCRIBE
+  // ============================================================
+
   const handleSubscribe = (plan) => {
     console.log(
-      'Selected Premium plan:',
+      'SELECTED PREMIUM PLAN:',
       plan
     )
 
     /*
-      PAYMENT FLOW WILL GO HERE.
+      PAYMENT WILL BE CONNECTED HERE.
 
-      Example:
+      Future flow:
 
       1. Create payment
-      2. Send payment to payment provider
+      2. Redirect to payment provider
       3. Verify payment
-      4. Create/update subscriptions row
-      5. Refresh Premium status
-      6. Navigate to /premium
+      4. Create/update subscription
+      5. Redirect to /premium
     */
 
-    setMessage(
-      `You selected ${plan}. Payment integration will be connected next.`
-    )
-  }
+    if (isPremium) {
+      navigate('/premium', {
+        replace: true,
+      })
 
-  const formatDate = (date) => {
-    if (!date) return ''
-
-    const parsedDate = new Date(date)
-
-    if (
-      Number.isNaN(
-        parsedDate.getTime()
-      )
-    ) {
-      return ''
+      return
     }
 
-    return parsedDate.toLocaleDateString(
-      'en-NG',
-      {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      }
+    console.log(
+      'FREE STUDENT SELECTED:',
+      plan
     )
   }
 
-  if (loading) {
+  // ============================================================
+  // LOADING
+  // ============================================================
+
+  if (checking) {
     return (
       <div className="premium-upgrade-page">
+
         <div className="premium-upgrade-container">
+
           <div className="premium-upgrade-badge">
             OVERMATHS PREMIUM
           </div>
@@ -125,10 +197,20 @@ function PremiumUpgrade() {
           <h1>
             Checking your Premium status...
           </h1>
+
+          <p className="premium-upgrade-description">
+            Please wait while we verify your account.
+          </p>
+
         </div>
+
       </div>
     )
   }
+
+  // ============================================================
+  // PAGE
+  // ============================================================
 
   return (
     <div className="premium-upgrade-page">
@@ -137,108 +219,79 @@ function PremiumUpgrade() {
 
       <div className="premium-upgrade-container">
 
-        {/* =====================================================
-            STATUS
-        ===================================================== */}
+        {/* ======================================================
+            BADGE
+        ====================================================== */}
 
-        {isPremium ? (
-          <>
-            <div className="premium-upgrade-badge">
-              PREMIUM MEMBER
+        <div className="premium-upgrade-badge">
+          OVERMATHS PREMIUM
+        </div>
+
+        {/* ======================================================
+            HEADING
+        ====================================================== */}
+
+        <h1>
+          Your preparation
+          <br />
+          can go further.
+        </h1>
+
+        <p className="premium-upgrade-description">
+          Unlock a smarter preparation experience built around
+          your exam, your performance and your progress.
+        </p>
+
+        {/* ======================================================
+            PREMIUM STUDENT STATUS
+        ====================================================== */}
+
+        {isPremium && (
+          <div className="premium-current-status">
+
+            <div className="premium-current-status-badge">
+              ✓ PREMIUM ACTIVE
             </div>
 
-            <h1>
-              Your Premium access
-              <br />
-              is active.
-            </h1>
+            <h2>
+              You are already a Premium student.
+            </h2>
 
-            <p className="premium-upgrade-description">
-              You already have access to the full
-              Overmaths Premium experience.
+            <p>
+              Your Premium access is currently active.
+              You do not need to subscribe again.
             </p>
 
             {subscription?.expires_at && (
-              <div className="premium-current-subscription">
+              <p className="premium-expiry">
+
+                Premium access expires on{' '}
 
                 <strong>
-                  Current subscription
+                  {new Date(
+                    subscription.expires_at
+                  ).toLocaleDateString()}
                 </strong>
 
-                <span>
-                  {subscription.plan}
-                </span>
-
-                <small>
-                  Expires on{' '}
-                  {formatDate(
-                    subscription.expires_at
-                  )}
-                </small>
-
-              </div>
+              </p>
             )}
 
-            <div className="premium-existing-actions">
+            <button
+              className="premium-upgrade-button"
+              onClick={() =>
+                navigate('/premium')
+              }
+            >
+              Continue to Premium
+              <span>→</span>
+            </button>
 
-              <button
-                className="premium-upgrade-button"
-                onClick={() =>
-                  navigate('/premium')
-                }
-              >
-                Go to Premium
-                <span>→</span>
-              </button>
-
-              <button
-                className="premium-return-button"
-                onClick={() =>
-                  navigate('/dashboard')
-                }
-              >
-                ← Return to Dashboard
-              </button>
-
-            </div>
-
-            <div className="premium-renewal-heading">
-              Renew or extend your Premium
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="premium-upgrade-badge">
-              OVERMATHS PREMIUM
-            </div>
-
-            <h1>
-              Your preparation
-              <br />
-              can go further.
-            </h1>
-
-            <p className="premium-upgrade-description">
-              Unlock a smarter preparation experience
-              built around your exam, your performance
-              and your progress.
-            </p>
-          </>
-        )}
-
-        {/* =====================================================
-            MESSAGE
-        ===================================================== */}
-
-        {message && (
-          <div className="premium-upgrade-message">
-            {message}
           </div>
         )}
 
-        {/* =====================================================
+        {/* ======================================================
             FEATURES
-        ===================================================== */}
+        ====================================================== */}
 
         <div className="premium-feature-grid">
 
@@ -296,97 +349,103 @@ function PremiumUpgrade() {
 
         </div>
 
-        {/* =====================================================
+        {/* ======================================================
             PRICING
-        ===================================================== */}
+            ONLY SHOW SUBSCRIPTION OPTIONS TO FREE STUDENTS
+        ====================================================== */}
 
-        <div className="premium-pricing-grid">
+        {!isPremium && (
+          <div className="premium-pricing-grid">
 
-          {/* MONTHLY */}
+            {/* MONTHLY */}
 
-          <div className="premium-price-card">
+            <div className="premium-price-card">
 
-            <span className="price-label">
-              MONTHLY
-            </span>
-
-            <h2>
-              Premium Monthly
-            </h2>
-
-            <p>
-              Flexible access to the full
-              Premium experience.
-            </p>
-
-            <button
-              className="premium-upgrade-button"
-              onClick={() =>
-                handleSubscribe(
-                  'premium monthly'
-                )
-              }
-            >
-              {isPremium
-                ? 'Renew Monthly'
-                : 'Subscribe Monthly'}
-
-              <span>
-                →
+              <span className="price-label">
+                MONTHLY
               </span>
-            </button>
+
+              <h2>
+                Premium Monthly
+              </h2>
+
+              <p>
+                Flexible access to the full
+                Premium experience.
+              </p>
+
+              <button
+                className="premium-upgrade-button"
+                onClick={() =>
+                  handleSubscribe(
+                    'premium monthly'
+                  )
+                }
+              >
+                Subscribe Monthly
+
+                <span>
+                  →
+                </span>
+              </button>
+
+            </div>
+
+            {/* ANNUAL */}
+
+            <div className="premium-price-card featured">
+
+              <span className="price-label">
+                ANNUAL
+              </span>
+
+              <h2>
+                Premium Annual
+              </h2>
+
+              <p>
+                Full Premium access for your
+                entire preparation journey.
+              </p>
+
+              <button
+                className="premium-upgrade-button"
+                onClick={() =>
+                  handleSubscribe(
+                    'premium annual'
+                  )
+                }
+              >
+                Subscribe Annual
+
+                <span>
+                  →
+                </span>
+              </button>
+
+            </div>
 
           </div>
+        )}
 
-          {/* ANNUAL */}
-
-          <div className="premium-price-card featured">
-
-            <span className="price-label">
-              ANNUAL
-            </span>
-
-            <h2>
-              Premium Annual
-            </h2>
-
-            <p>
-              Full Premium access for your
-              entire preparation journey.
-            </p>
-
-            <button
-              className="premium-upgrade-button"
-              onClick={() =>
-                handleSubscribe(
-                  'premium annual'
-                )
-              }
-            >
-              {isPremium
-                ? 'Renew Annual'
-                : 'Subscribe Annual'}
-
-              <span>
-                →
-              </span>
-            </button>
-
-          </div>
-
-        </div>
-
-        {/* =====================================================
-            RETURN
-        ===================================================== */}
+        {/* ======================================================
+            RETURN BUTTON
+        ====================================================== */}
 
         <button
           className="premium-return-button"
           onClick={() =>
-            navigate('/dashboard')
+            navigate(
+              isPremium
+                ? '/premium'
+                : '/dashboard'
+            )
           }
         >
-          ← Return to Dashboard
+          ←{' '}
+          {isPremium
+            ? 'Return to Premium'
+            : 'Return to Dashboard'}
         </button>
 
       </div>

@@ -1,96 +1,17 @@
 import { supabase } from '../supabaseClient'
 
 /**
- * Get the current authenticated student's database profile.
- *
- * Auth UUID:
- * auth.users.id
- *
- * Database profile:
- * users.id
- */
-export async function getCurrentStudentProfile() {
-  if (!supabase) {
-    return {
-      profile: null,
-      error: new Error('Supabase is not connected.'),
-    }
-  }
-
-  const {
-    data: {
-      user: authUser,
-    },
-    error: authError,
-  } = await supabase.auth.getUser()
-
-  if (authError) {
-    return {
-      profile: null,
-      error: authError,
-    }
-  }
-
-  if (!authUser) {
-    return {
-      profile: null,
-      error: new Error('No authenticated user.'),
-    }
-  }
-
-  const {
-    data: profile,
-    error: profileError,
-  } = await supabase
-    .from('users')
-    .select(`
-      id,
-      auth_user_id,
-      email,
-      full_name,
-      learning_route,
-      exam_type
-    `)
-    .eq('auth_user_id', authUser.id)
-    .maybeSingle()
-
-  if (profileError) {
-    console.error(
-      'GET STUDENT PROFILE ERROR:',
-      profileError
-    )
-
-    return {
-      profile: null,
-      error: profileError,
-    }
-  }
-
-  if (!profile) {
-    return {
-      profile: null,
-      error: new Error('Student profile not found.'),
-    }
-  }
-
-  return {
-    profile,
-    error: null,
-  }
-}
-
-
-/**
- * Get active Premium subscription.
+ * Get the current active Premium subscription
+ * for a student.
  *
  * IMPORTANT:
  * subscriptions.user_id = users.id
- *
- * It does NOT use auth.users.id.
+ * NOT auth.users.id
  */
-export async function getPremiumSubscription(userId) {
+export async function getCurrentPremiumStatus(userId) {
   if (!supabase) {
     return {
+      isPremium: false,
       subscription: null,
       error: new Error('Supabase is not connected.'),
     }
@@ -98,8 +19,9 @@ export async function getPremiumSubscription(userId) {
 
   if (!userId) {
     return {
+      isPremium: false,
       subscription: null,
-      error: new Error('Database user ID is required.'),
+      error: new Error('User ID is required.'),
     }
   }
 
@@ -121,96 +43,53 @@ export async function getPremiumSubscription(userId) {
     `)
     .eq('user_id', userId)
     .eq('status', 'active')
+    .in('plan', [
+      'premium',
+      'premium monthly',
+      'premium annual',
+      'premium yearly',
+    ])
     .gt('expires_at', now)
     .order('expires_at', {
       ascending: false,
     })
     .limit(1)
+    .maybeSingle()
 
   if (error) {
     console.error(
-      'GET PREMIUM SUBSCRIPTION ERROR:',
+      'GET CURRENT PREMIUM STATUS ERROR:',
       error
     )
 
     return {
+      isPremium: false,
       subscription: null,
       error,
     }
   }
 
-  const premiumSubscription =
-    (data || []).find((subscription) => {
-      const plan = String(
-        subscription?.plan || ''
-      )
-        .trim()
-        .toLowerCase()
-
-      return (
-        plan === 'premium' ||
-        plan === 'premium monthly' ||
-        plan === 'premium annual' ||
-        plan === 'premium yearly'
-      )
-    }) || null
-
   return {
-    subscription: premiumSubscription,
+    isPremium: Boolean(data),
+    subscription: data || null,
     error: null,
   }
 }
 
 
 /**
- * Check Premium access.
+ * Simple Premium check.
+ *
+ * Returns:
+ * true  = Premium
+ * false = normal/free
  */
 export async function hasPremiumAccess(userId) {
   const {
-    subscription,
-    error,
-  } = await getPremiumSubscription(userId)
-
-  return {
-    isPremium: Boolean(subscription),
-    subscription,
-    error,
-  }
-}
-
-
-/**
- * Get the current student's Premium status.
- *
- * This is useful for PremiumUpgrade.jsx.
- */
-export async function getCurrentPremiumStatus() {
-  const {
-    profile,
-    error: profileError,
-  } = await getCurrentStudentProfile()
-
-  if (profileError) {
-    return {
-      profile: null,
-      isPremium: false,
-      subscription: null,
-      error: profileError,
-    }
-  }
-
-  const {
     isPremium,
-    subscription,
-    error: subscriptionError,
-  } = await hasPremiumAccess(profile.id)
+  } = await getCurrentPremiumStatus(userId)
 
-  return {
-    profile,
-    isPremium,
-    subscription,
-    error: subscriptionError,
-  }
+  return isPremium
 }
 
 
