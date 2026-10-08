@@ -1,62 +1,73 @@
 
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { supabase } from './supabaseClient';
-import './Register.css';
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  ArrowRight,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  GraduationCap,
+  LockKeyhole,
+  Mail,
+  UserRound,
+  Users,
+  ShieldCheck,
+  LoaderCircle,
+  AlertCircle,
+  Sparkles,
+} from 'lucide-react'
+import { supabase } from './supabaseClient'
+import './Register.css'
 
-export default function Register() {
-  const navigate = useNavigate();
+function Register() {
+  const navigate = useNavigate()
 
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [referralCode, setReferralCode] = useState('');
+  const [fullName, setFullName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [referralCode, setReferralCode] = useState('')
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
-  const [messageType, setMessageType] = useState('error');
-  const [registered, setRegistered] = useState(false);
-  const [registeredEmail, setRegisteredEmail] = useState('');
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] =
+    useState(false)
 
-  const passwordRules = {
-    length: password.length >= 8,
-    uppercase: /[A-Z]/.test(password),
-    lowercase: /[a-z]/.test(password),
-    number: /[0-9]/.test(password),
-  };
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState('')
+  const [messageType, setMessageType] = useState('error')
+  const [registered, setRegistered] = useState(false)
 
-  const passwordIsValid = Object.values(passwordRules).every(Boolean);
+  const handleRegister = async (e) => {
+    e.preventDefault()
+    setMessage('')
 
-  const handleRegister = async (event) => {
-    event.preventDefault();
-    setMessage('');
-    setMessageType('error');
+    const cleanName = fullName.trim()
+    const cleanEmail = email.trim().toLowerCase()
+    const cleanReferralCode = referralCode.trim()
 
-    const cleanName = fullName.trim();
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanReferralCode = referralCode.trim();
-
-    if (!cleanName || !cleanEmail || !password || !confirmPassword) {
-      setMessage('Please complete all required fields.');
-      return;
+    if (!cleanName || !cleanEmail || !password) {
+      setMessage('Please complete all required fields.')
+      return
     }
 
-    if (!passwordIsValid) {
-      setMessage(
-        'Your password must have at least 8 characters, an uppercase letter, a lowercase letter, and a number.'
-      );
-      return;
+    if (password.length < 8) {
+      setMessage('Your password must contain at least 8 characters.')
+      return
     }
 
     if (password !== confirmPassword) {
-      setMessage('Your passwords do not match.');
-      return;
+      setMessage('Your passwords do not match.')
+      return
     }
 
-    setLoading(true);
+    if (!supabase) {
+      setMessage(
+        'Registration requires a working Supabase connection. Please check your environment variables.'
+      )
+      return
+    }
+
+    setLoading(true)
 
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -69,240 +80,367 @@ export default function Register() {
             referral_code: cleanReferralCode || null,
           },
         },
-      });
+      })
 
       if (error) {
-        throw error;
+        setMessage(error.message || 'Unable to create your account.')
+        return
       }
 
-      // Keep the email for the verification screen.
-      setRegisteredEmail(cleanEmail);
-      setRegistered(true);
-      setMessage(
-        data?.user?.identities?.length === 0
-          ? 'An account may already exist with this email. Try logging in or request a new verification email.'
-          : 'Registration submitted. Check your email for the verification link.'
-      );
-      setMessageType('success');
+      if (!data?.user) {
+        setMessage(
+          'We could not complete your registration. Please try again.'
+        )
+        return
+      }
 
-      // Clear the password fields, but retain the email for verification.
-      setPassword('');
-      setConfirmPassword('');
-    } catch (error) {
-      console.error('Registration error:', error);
+      setRegistered(true)
+      setMessageType('success')
       setMessage(
-        error?.message || 'Unable to create your account. Please try again.'
-      );
-      setMessageType('error');
+        'Your account request was received. Check your inbox for the verification email.'
+      )
+    } catch (error) {
+      console.error('Registration error:', error)
+      setMessage(
+        error.message || 'Something went wrong. Please try again.'
+      )
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   if (registered) {
     return (
-      <main className="register-page">
-        <section className="register-panel">
-          <div className="register-success">
-            <div className="success-icon" aria-hidden="true">
-              ✉️
-            </div>
+      <div className="register-page">
+        <div className="register-success-card">
+          <div className="register-success-icon">
+            <CheckCircle2 size={38} />
+          </div>
 
-            <h1>Check your email</h1>
+          <p className="register-eyebrow">ONE LAST STEP</p>
 
-            <p className="register-message success">
-              {message}
-            </p>
+          <h1>Check your email.</h1>
 
-            <p>
-              We sent a verification link to:
-            </p>
+          <p className="register-success-description">
+            We've submitted your registration for
+            <strong> {email.trim()}</strong>.
+            If email confirmation is enabled, open the verification
+            message and follow its instructions to activate your account.
+          </p>
 
-            <strong className="registered-email">
-              {registeredEmail}
-            </strong>
+          <div className="register-success-note">
+            <Mail size={21} />
+            <span>
+              Can't find the email? Check your spam or junk folder.
+            </span>
+          </div>
 
-            <p>
-              Open the email and click the verification link. If you cannot
-              find it, check your spam or junk folder.
-            </p>
+          <button
+            type="button"
+            className="register-submit"
+            onClick={() =>
+              navigate('/verify-email', {
+                state: { email: email.trim() },
+              })
+            }
+          >
+            <span>Continue to verification</span>
+            <ArrowRight size={18} />
+          </button>
 
+          <p className="register-bottom-text">
+            Already verified?{' '}
             <button
               type="button"
-              className="register-submit"
-              onClick={() =>
-                navigate('/verify-email', {
-                  state: { email: registeredEmail },
-                })
-              }
+              className="register-inline-link"
+              onClick={() => navigate('/login')}
             >
-              Continue to Verification <span>→</span>
+              Sign in
             </button>
-
-            <p className="register-footer">
-              Already verified your email?{' '}
-              <Link to="/login">Log in</Link>
-            </p>
-          </div>
-        </section>
-      </main>
-    );
+          </p>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <main className="register-page">
-      <section className="register-panel">
-        <header className="register-header">
-          <Link to="/" className="register-brand">
-            Overmaths
-          </Link>
-
-          <h1>Create your account</h1>
-          <p>Join Overmaths and start your learning journey.</p>
-        </header>
-
-        <form onSubmit={handleRegister} noValidate>
-          <div className="register-field">
-            <label htmlFor="fullName">Full name</label>
-            <input
-              id="fullName"
-              name="fullName"
-              type="text"
-              autoComplete="name"
-              placeholder="Enter your full name"
-              value={fullName}
-              onChange={(event) => setFullName(event.target.value)}
-              required
-              disabled={loading}
-            />
-          </div>
-
-          <div className="register-field">
-            <label htmlFor="registerEmail">Email address</label>
-            <input
-              id="registerEmail"
-              name="email"
-              type="email"
-              autoComplete="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              required
-              disabled={loading}
-            />
-          </div>
-
-          <div className="register-field">
-            <label htmlFor="registerPassword">Password</label>
-            <div className="input-shell">
-              <input
-                id="registerPassword"
-                name="password"
-                type={showPassword ? 'text' : 'password'}
-                autoComplete="new-password"
-                placeholder="Create a strong password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-                disabled={loading}
-              />
-
-              <button
-                type="button"
-                className="password-toggle"
-                onClick={() => setShowPassword((previous) => !previous)}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? 'Hide' : 'Show'}
-              </button>
-            </div>
-
-            <ul className="password-rules">
-              <li className={passwordRules.length ? 'valid' : ''}>
-                At least 8 characters
-              </li>
-              <li className={passwordRules.uppercase ? 'valid' : ''}>
-                One uppercase letter
-              </li>
-              <li className={passwordRules.lowercase ? 'valid' : ''}>
-                One lowercase letter
-              </li>
-              <li className={passwordRules.number ? 'valid' : ''}>
-                One number
-              </li>
-            </ul>
-          </div>
-
-          <div className="register-field">
-            <label htmlFor="confirmPassword">Confirm password</label>
-            <div className="input-shell">
-              <input
-                id="confirmPassword"
-                name="confirmPassword"
-                type={showConfirmPassword ? 'text' : 'password'}
-                autoComplete="new-password"
-                placeholder="Enter your password again"
-                value={confirmPassword}
-                onChange={(event) =>
-                  setConfirmPassword(event.target.value)
-                }
-                required
-                disabled={loading}
-              />
-
-              <button
-                type="button"
-                className="password-toggle"
-                onClick={() =>
-                  setShowConfirmPassword((previous) => !previous)
-                }
-                aria-label={
-                  showConfirmPassword ? 'Hide password' : 'Show password'
-                }
-              >
-                {showConfirmPassword ? 'Hide' : 'Show'}
-              </button>
-            </div>
-          </div>
-
-          <div className="register-field">
-            <label htmlFor="referralCode">
-              Referral code <span>(optional)</span>
-            </label>
-            <input
-              id="referralCode"
-              name="referralCode"
-              type="text"
-              placeholder="Enter a referral code"
-              value={referralCode}
-              onChange={(event) => setReferralCode(event.target.value)}
-              disabled={loading}
-            />
-          </div>
-
-          {message && (
-            <p
-              className={`register-message ${messageType}`}
-              role="alert"
-            >
-              {message}
-            </p>
-          )}
-
+    <div className="register-page">
+      <div className="register-layout">
+        <aside className="register-brand-panel">
           <button
-            type="submit"
-            className="register-submit"
-            disabled={loading}
+            type="button"
+            className="register-brand"
+            onClick={() => navigate('/')}
+            aria-label="Go to Overmaths home"
           >
-            {loading ? 'Creating account...' : 'Create Account'}
-            {!loading && <span>→</span>}
+            <span className="register-brand-mark">
+              <GraduationCap size={26} />
+            </span>
+            <span>OVERMATHS</span>
           </button>
-        </form>
 
-        <p className="register-footer">
-          Already have an account? <Link to="/login">Log in</Link>
-        </p>
-      </section>
-    </main>
-  );
+          <div className="register-brand-content">
+            <span className="register-brand-tag">
+              <Sparkles size={15} />
+              YOUR NEXT LEVEL STARTS HERE
+            </span>
+
+            <h1>
+              Turn your
+              <span> potential </span>
+              into performance.
+            </h1>
+
+            <p>
+              Build confidence, practise smarter, and prepare for your
+              next exam with Overmaths.
+            </p>
+
+            <div className="register-benefit">
+              <span><CheckCircle2 size={19} /></span>
+              <div>
+                <strong>Focused practice</strong>
+                <p>Work on the subjects that matter to you.</p>
+              </div>
+            </div>
+
+            <div className="register-benefit">
+              <span><CheckCircle2 size={19} /></span>
+              <div>
+                <strong>Track your progress</strong>
+                <p>Build better learning habits over time.</p>
+              </div>
+            </div>
+
+            <div className="register-benefit">
+              <span><ShieldCheck size={19} /></span>
+              <div>
+                <strong>Your learning journey</strong>
+                <p>Start with your own student account.</p>
+              </div>
+            </div>
+          </div>
+
+          <p className="register-brand-footer">
+            Smart Exam Practice · Overmaths
+          </p>
+        </aside>
+
+        <main className="register-form-panel">
+          <div className="register-form-container">
+            <div className="register-mobile-brand">
+              <span className="register-brand-mark">
+                <GraduationCap size={24} />
+              </span>
+              <strong>OVERMATHS</strong>
+            </div>
+
+            <div className="register-heading">
+              <span className="register-heading-icon">
+                <UserRound size={20} />
+              </span>
+
+              <p className="register-eyebrow">CREATE YOUR ACCOUNT</p>
+
+              <h2>Your journey starts here.</h2>
+
+              <p>
+                Create your account and get ready to learn smarter.
+              </p>
+            </div>
+
+            <form onSubmit={handleRegister} className="register-form">
+              <div className="register-field">
+                <label htmlFor="register-name">FULL NAME</label>
+
+                <div className="register-input-wrapper">
+                  <UserRound className="register-input-icon" size={19} />
+
+                  <input
+                    id="register-name"
+                    type="text"
+                    placeholder="Enter your full name"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    autoComplete="name"
+                    disabled={loading}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="register-field">
+                <label htmlFor="register-email">EMAIL ADDRESS</label>
+
+                <div className="register-input-wrapper">
+                  <Mail className="register-input-icon" size={19} />
+
+                  <input
+                    id="register-email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="email"
+                    disabled={loading}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="register-field">
+                <label htmlFor="register-password">PASSWORD</label>
+
+                <div className="register-input-wrapper">
+                  <LockKeyhole
+                    className="register-input-icon"
+                    size={19}
+                  />
+
+                  <input
+                    id="register-password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="At least 8 characters"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="new-password"
+                    minLength={8}
+                    disabled={loading}
+                    required
+                  />
+
+                  <button
+                    type="button"
+                    className="register-password-toggle"
+                    onClick={() => setShowPassword((value) => !value)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    disabled={loading}
+                  >
+                    {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="register-field">
+                <label htmlFor="register-confirm-password">
+                  CONFIRM PASSWORD
+                </label>
+
+                <div className="register-input-wrapper">
+                  <ShieldCheck
+                    className="register-input-icon"
+                    size={19}
+                  />
+
+                  <input
+                    id="register-confirm-password"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    placeholder="Enter your password again"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    autoComplete="new-password"
+                    disabled={loading}
+                    required
+                  />
+
+                  <button
+                    type="button"
+                    className="register-password-toggle"
+                    onClick={() =>
+                      setShowConfirmPassword((value) => !value)
+                    }
+                    aria-label={
+                      showConfirmPassword
+                        ? 'Hide confirmation password'
+                        : 'Show confirmation password'
+                    }
+                    disabled={loading}
+                  >
+                    {showConfirmPassword
+                      ? <EyeOff size={19} />
+                      : <Eye size={19} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="register-field">
+                <label htmlFor="register-referral">
+                  REFERRAL CODE <span>(OPTIONAL)</span>
+                </label>
+
+                <div className="register-input-wrapper">
+                  <Users className="register-input-icon" size={19} />
+
+                  <input
+                    id="register-referral"
+                    type="text"
+                    placeholder="Enter a referral code"
+                    value={referralCode}
+                    onChange={(e) => setReferralCode(e.target.value)}
+                    autoComplete="off"
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+
+              {message && (
+                <div
+                  className={`register-message ${
+                    messageType === 'success' ? 'success' : 'error'
+                  }`}
+                  role="alert"
+                >
+                  <AlertCircle size={18} />
+                  <span>{message}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="register-submit"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <LoaderCircle className="register-spinner" size={19} />
+                    <span>Creating your account...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Create Account</span>
+                    <ArrowRight size={19} />
+                  </>
+                )}
+              </button>
+            </form>
+
+            <div className="register-divider">
+              <span>ALREADY PART OF OVERMATHS?</span>
+            </div>
+
+            <div className="register-login-prompt">
+              <p>Already have an account?</p>
+
+              <button
+                type="button"
+                className="register-inline-link"
+                onClick={() => navigate('/login')}
+                disabled={loading}
+              >
+                Sign in to your account <ArrowRight size={16} />
+              </button>
+            </div>
+
+            <p className="register-terms">
+              By creating an account, you agree to use Overmaths
+              responsibly for your learning.
+            </p>
+          </div>
+        </main>
+      </div>
+    </div>
+  )
 }
+
+export default Register
+
