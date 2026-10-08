@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Navigate, Outlet } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { hasPremiumAccess } from '../services/subscriptionApi'
 import './PremiumRoute.css'
 
-function PremiumRoute() {
+function PremiumRoute({ children }) {
   const [checking, setChecking] = useState(true)
   const [allowed, setAllowed] = useState(false)
 
@@ -154,7 +154,7 @@ function PremiumRoute() {
   // PREMIUM
   // ================================================
 
-  return <Outlet />
+  return children
 }
 
 export default PremiumRoute
