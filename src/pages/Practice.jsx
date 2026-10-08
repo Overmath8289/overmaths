@@ -6,6 +6,23 @@ import "./Practice.css";
 
 const API_URL = "https://overmaths.onrender.com";
 
+
+
+function normalizeLearningRoute(value) {
+  const route = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+
+  if (route === "university" || route === "uni") {
+    return "university";
+  }
+
+  return "secondary";
+}
+
+
+
 const QUESTION_COUNTS = [5, 10, 20, 30];
 
 const SPEED_OPTIONS = [
@@ -132,7 +149,9 @@ function Practice() {
          */
 
         if (!incomingState.learningRoute && data?.learning_route) {
-          setLearningRoute(data.learning_route);
+          setLearningRoute(
+  normalizeLearningRoute(data.learning_route)
+);
         }
 
         if (!incomingState.examType && data?.exam_type) {
