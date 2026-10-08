@@ -60,6 +60,47 @@ function Register() {
       return
     }
 
+
+
+
+    const passwordChecks = [
+  { label: 'At least 8 characters', test: password.length >= 8 },
+  { label: 'One uppercase letter (A–Z)', test: /[A-Z]/.test(password) },
+  { label: 'One lowercase letter (a–z)', test: /[a-z]/.test(password) },
+  { label: 'One number (0–9)', test: /[0-9]/.test(password) },
+  { label: 'One special character (!@#$...)', test: /[^A-Za-z0-9]/.test(password) },
+];
+
+
+
+<div className="password-guide">
+  <p className="password-guide-title">Create a strong password</p>
+
+  <div className="password-checks">
+    {passwordChecks.map((check) => (
+      <div
+        key={check.label}
+        className={`password-check ${check.test ? 'passed' : ''}`}
+      >
+        {check.test ? (
+          <CheckCircle2 size={16} />
+        ) : (
+          <span className="password-check-dot" />
+        )}
+        <span>{check.label}</span>
+      </div>
+    ))}
+  </div>
+</div>
+
+
+
+
+
+
+
+
+
     if (!supabase) {
       setMessage(
         'Registration requires a working Supabase connection. Please check your environment variables.'
