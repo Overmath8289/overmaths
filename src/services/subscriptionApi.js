@@ -5,18 +5,7 @@ const API_BASE_URL =
   'https://overmaths.onrender.com'
 
 
-// ============================================================
-// GET CURRENT SUPABASE ACCESS TOKEN
-// ============================================================
-
 async function getAccessToken() {
-
-  if (!supabase) {
-    throw new Error(
-      'Supabase is not available.'
-    )
-  }
-
   const {
     data,
     error,
@@ -31,7 +20,7 @@ async function getAccessToken() {
 
   if (!token) {
     throw new Error(
-      'No active authentication session.'
+      'No active Supabase session.'
     )
   }
 
@@ -39,142 +28,90 @@ async function getAccessToken() {
 }
 
 
-// ============================================================
-// GET CURRENT USER ACCESS FROM PYTHON
-// ============================================================
-//
-// IMPORTANT:
-//
-// The frontend does NOT query:
-//
-// users
-// subscriptions
-//
-// directly for access decisions.
-//
-// Python is the authority.
-//
-// ============================================================
+/*
+============================================================
+GET CURRENT PREMIUM STATUS
+============================================================
+*/
 
-export async function getCurrentAccess() {
-
+export async function getCurrentPremiumStatus() {
   const token =
     await getAccessToken()
 
-  const response =
-    await fetch(
-      `${API_BASE_URL}/api/auth/me`,
-      {
-        method: 'GET',
+  const response = await fetch(
+    `${API_BASE_URL}/api/auth/me`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization:
+          `Bearer ${token}`,
+        'Content-Type':
+          'application/json',
+      },
+    }
+  )
 
-        headers: {
-          Authorization:
-            `Bearer ${token}`,
-
-          'Content-Type':
-            'application/json',
-        },
-      }
-    )
-
-  const data =
-    await response
-      .json()
+  const payload =
+    await response.json()
       .catch(() => ({}))
 
   if (!response.ok) {
-
     throw new Error(
-      data?.error ||
+      payload?.error ||
       'Unable to verify account access.'
     )
   }
 
-  return data
+  return payload
 }
 
 
-// ============================================================
-// ALIAS
-// ============================================================
+/*
+============================================================
+GET CURRENT ACCESS
+============================================================
+*/
 
-export async function getUserAccess() {
-
-  return getCurrentAccess()
-
+export async function getCurrentAccess() {
+  return getCurrentPremiumStatus()
 }
 
 
-// ============================================================
-// PREMIUM ACCESS
-// ============================================================
-//
-// Kept for compatibility with any other component
-// that already imports hasPremiumAccess().
-//
-// The actual decision still comes from Python.
-//
-// ============================================================
+/*
+============================================================
+CHECK PREMIUM
+============================================================
+*/
 
-export async function hasPremiumAccess(
-  _userId
-) {
+export async function hasPremiumAccess() {
+  try {
+    const access =
+      await getCurrentPremiumStatus()
 
-  const access =
-    await getCurrentAccess()
+    return {
+      isPremium:
+        access?.is_premium === true,
 
-  return {
+      subscription:
+        access?.premium_subscription ||
+        access?.subscription ||
+        null,
 
-    isPremium:
-      access?.is_premium === true,
+      error: null,
+    }
 
-    subscription:
-      access?.premium_subscription ||
-      null,
-
-    error: null,
-
-  }
-
-}
-
-
-// ============================================================
-// GET ALL SUBSCRIPTIONS
-// ============================================================
-//
-// Returned by Python, not queried directly from Supabase.
-//
-// ============================================================
-
-export async function getUserSubscriptions() {
-
-  const access =
-    await getCurrentAccess()
-
-  return (
-    Array.isArray(
-      access?.subscriptions
+  } catch (error) {
+    console.error(
+      'Premium access check failed:',
+      error
     )
-      ? access.subscriptions
-      : []
-  )
 
-}
-
-
-// ============================================================
-// GET PREMIUM SUBSCRIPTION
-// ============================================================
-
-export async function getPremiumSubscription() {
-
-  const access =
-    await getCurrentAccess()
-
-  return (
-    access?.premium_subscription ||
-    null
-  )
-
+    return {
+      isPremium: false,
+      subscription: null,
+      error:
+        error?.message ||
+        'Unable to verify premium access.',
+    }
+  }
 }

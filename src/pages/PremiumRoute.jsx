@@ -78,9 +78,7 @@ function PremiumRoute({ children }) {
         // ============================================
 
         const premium =
-          await hasPremiumAccess(
-            userProfile.id
-          )
+          await hasPremiumAccess()
 
         console.log(
           'PREMIUM ROUTE CHECK:',
