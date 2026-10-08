@@ -1,652 +1,251 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { supabase } from './supabaseClient'
-import { getCurrentAccess } from './services/subscriptionApi'
-import './Login.css'
 
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { supabase } from './supabaseClient';
+import './Login.css';
 
-function Login() {
+export default function Login() {
+  const navigate = useNavigate();
 
-  const navigate = useNavigate()
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] =
-    useState(false)
+  const handleLogin = async (event) => {
+    event.preventDefault();
+    setMessage('');
 
-  const [loading, setLoading] =
-    useState(false)
+    const cleanEmail = email.trim().toLowerCase();
 
-  const [message, setMessage] =
-    useState('')
-
-
-  // ============================================================
-  // LOGIN
-  // ============================================================
-
-  const handleLogin = async (e) => {
-
-    e.preventDefault()
-
-    setMessage('')
-
-
-    // ----------------------------------------------------------
-    // VALIDATION
-    // ----------------------------------------------------------
-
-    if (
-      !email.trim() ||
-      !password
-    ) {
-
-      setMessage(
-        'Please enter your email and password.'
-      )
-
-      return
+    if (!cleanEmail || !password) {
+      setMessage('Please enter your email address and password.');
+      return;
     }
 
-
-    // ----------------------------------------------------------
-    // SUPABASE CHECK
-    // ----------------------------------------------------------
-
-    if (!supabase) {
-
-      setMessage(
-        'Login is available on the live Overmaths website. Local testing is currently running without Supabase.'
-      )
-
-      return
-    }
-
-
-    setLoading(true)
-
+    setLoading(true);
 
     try {
-
-      // ========================================================
-      // 1. AUTHENTICATE WITH SUPABASE
-      // ========================================================
-
-      const {
-        data: authData,
-        error: authError,
-      } =
+      const { data: authData, error: authError } =
         await supabase.auth.signInWithPassword({
-          email: email.trim(),
+          email: cleanEmail,
           password,
-        })
-
-
-      // --------------------------------------------------------
-      // AUTH ERROR
-      // --------------------------------------------------------
+        });
 
       if (authError) {
+        const errorMessage = String(authError.message || '').toLowerCase();
 
-        console.error(
-          'AUTHENTICATION ERROR:',
-          authError
-        )
+        if (
+          errorMessage.includes('email not confirmed') ||
+          errorMessage.includes('email_not_confirmed')
+        ) {
+          navigate('/verify-email', {
+            replace: true,
+            state: { email: cleanEmail },
+          });
+          return;
+        }
 
-        setMessage(
-          authError.message ||
-          'Unable to sign in. Please check your email and password.'
-        )
-
-        return
+        throw authError;
       }
 
-
-      // --------------------------------------------------------
-      // AUTH USER
-      // --------------------------------------------------------
-
-      const authUser =
-        authData?.user
-
+      const authUser = authData?.user;
 
       if (!authUser) {
+        throw new Error('Login could not be completed. Please try again.');
+      }
 
+      // Find the student's Overmaths profile linked to this Auth account.
+      const { data: profile, error: profileError } = await supabase
+        .from('users')
+        .select('id, auth_user_id, email, full_name, learning_route, exam_type')
+        .eq('auth_user_id', authUser.id)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error('Profile lookup error:', profileError);
         setMessage(
-          'Login was unsuccessful. Please try again.'
-        )
-
-        return
+          'You are signed in, but we could not load your student profile. Please try again.'
+        );
+        return;
       }
 
-
-      console.log(
-        'AUTHENTICATED USER:',
-        authUser.id
-      )
-
-
-      // ========================================================
-      // 2. ASK PYTHON FOR ACCOUNT ACCESS
-      // ========================================================
-      //
-      // Python checks:
-      //
-      // Supabase authentication
-      //        ↓
-      // Student profile
-      //        ↓
-      // Email verification
-      //        ↓
-      // Subscription
-      //        ↓
-      // Premium status
-      //
-      // React does NOT query subscriptions directly.
-      //
-      // ========================================================
-
-      const access =
-        await getCurrentAccess()
-
-
-      console.log(
-        'OVERMATHS ACCESS:',
-        access
-      )
-
-
-      // ========================================================
-      // 3. EMAIL VERIFICATION
-      // ========================================================
-
+      // New accounts may need to finish setting up their Overmaths profile.
       if (
-        access?.verified !== true
+        !profile ||
+        !profile.full_name ||
+        !profile.learning_route ||
+        !profile.exam_type
       ) {
-
-        console.log(
-          'EMAIL NOT VERIFIED'
-        )
-
-        navigate(
-          '/verify-email',
-          {
-            replace: true,
-          }
-        )
-
-        return
+        navigate('/student-profile', { replace: true });
+        return;
       }
 
+      // Check whether the student has an active premium subscription.
+      const now = new Date().toISOString();
 
-      // ========================================================
-      // 4. STUDENT PROFILE
-      // ========================================================
+      const { data: subscriptions, error: subscriptionError } = await supabase
+        .from('subscriptions')
+        .select('id, plan, status, started_at, expires_at')
+        .eq('user_id', profile.id)
+        .eq('status', 'active')
+        .eq('plan', 'premium')
+        .gt('expires_at', now)
+        .order('expires_at', { ascending: false })
+        .limit(1);
 
-      if (
-        !access?.profile
-      ) {
-
-        console.log(
-          'NO STUDENT PROFILE'
-        )
-
-        navigate(
-          '/student-profile',
-          {
-            replace: true,
-          }
-        )
-
-        return
+      if (subscriptionError) {
+        console.error('Subscription lookup error:', subscriptionError);
+        // A subscription lookup problem should not block ordinary login.
+        navigate('/dashboard', { replace: true });
+        return;
       }
 
-
-      // ========================================================
-      // 5. PROFILE COMPLETION
-      // ========================================================
-
-      if (
-        access?.profile_complete !== true
-      ) {
-
-        console.log(
-          'PROFILE INCOMPLETE'
-        )
-
-        navigate(
-          '/student-profile',
-          {
-            replace: true,
-          }
-        )
-
-        return
+      if (subscriptions && subscriptions.length > 0) {
+        navigate('/premium-dashboard', { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
       }
-
-
-      // ========================================================
-      // 6. PREMIUM CHECK
-      // ========================================================
-
-      console.log(
-        'BACKEND PREMIUM STATUS:',
-        access?.is_premium
-      )
-
-      console.log(
-        'BACKEND ACCESS LEVEL:',
-        access?.access_level
-      )
-
-
-      // ========================================================
-      // 7. PREMIUM STUDENT
-      // ========================================================
-
-      if (
-        access?.is_premium === true
-      ) {
-
-        console.log(
-          'PREMIUM STUDENT → /premium'
-        )
-
-        navigate(
-          '/premium',
-          {
-            replace: true,
-          }
-        )
-
-        return
-      }
-
-
-      // ========================================================
-      // 8. NORMAL / FREE STUDENT
-      // ========================================================
-
-      console.log(
-        'NORMAL STUDENT → /dashboard'
-      )
-
-      navigate(
-        '/dashboard',
-        {
-          replace: true,
-        }
-      )
-
-    }
-
-
-    // ==========================================================
-    // LOGIN ERROR
-    // ==========================================================
-
-    catch (error) {
-
-      console.error(
-        'LOGIN ERROR:',
-        error
-      )
+    } catch (error) {
+      console.error('Login error:', error);
 
       setMessage(
         error?.message ||
-        'Something went wrong while signing in. Please try again.'
-      )
+          'Unable to log in. Please check your details and try again.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  const handleForgotPassword = async () => {
+    setMessage('');
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!cleanEmail) {
+      setMessage('Enter your email address first, then select Forgot password.');
+      return;
     }
 
+    setLoading(true);
 
-    // ==========================================================
-    // FINISH
-    // ==========================================================
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
 
-    finally {
+      if (error) {
+        throw error;
+      }
 
-      setLoading(false)
-
+      setMessage('If the email is registered, a password reset link has been requested. Check your inbox and spam folder.');
+    } catch (error) {
+      console.error('Password reset error:', error);
+      setMessage(
+        error?.message || 'Unable to request a password reset. Please try again.'
+      );
+    } finally {
+      setLoading(false);
     }
-
-  }
-
-
-  // ============================================================
-  // PAGE
-  // ============================================================
+  };
 
   return (
-
-    <div className="login-page">
-
-
-      {/* ====================================================
-          BACKGROUND
-      ==================================================== */}
-
-      <div className="login-background">
-
-        <div
-          className="login-glow login-glow-one"
-        />
-
-        <div
-          className="login-glow login-glow-two"
-        />
-
-        <div
-          className="login-glow login-glow-three"
-        />
-
-        <div className="login-grid" />
-
-        <div
-          className="login-orb login-orb-one"
-        />
-
-        <div
-          className="login-orb login-orb-two"
-        />
-
-      </div>
-
-
-      {/* ====================================================
-          LOGIN CONTAINER
-      ==================================================== */}
-
-      <div className="login-container">
-
-        <div className="login-card">
-
-
-          {/* ==================================================
-              LOGO
-          ================================================== */}
-
-          <div className="login-logo-wrapper">
-
-            <img
-              src="/overmaths-logo.png"
-              alt="Overmaths"
-              className="login-logo"
-            />
-
-          </div>
-
-
-          {/* ==================================================
-              BRAND
-          ================================================== */}
-
-          <div className="login-brand">
-
-            <span>
-              OVER
-            </span>
-
-            <span>
-              MATHS
-            </span>
-
-          </div>
-
-
-          {/* ==================================================
-              HEADING
-          ================================================== */}
-
-          <h1>
-            Welcome back
-          </h1>
-
-
-          <p className="login-subtitle">
-            Sign in to continue your
-            Overmaths learning journey.
-          </p>
-
-
-          {/* ==================================================
-              FORM
-          ================================================== */}
-
-          <form
-            onSubmit={handleLogin}
-          >
-
-
-            {/* EMAIL */}
-
-            <div className="login-field">
-
-              <label
-                htmlFor="login-email"
-              >
-                EMAIL
-              </label>
-
-
-              <div className="login-input-wrapper">
-
-                <span className="login-input-icon">
-                  @
-                </span>
-
-
-                <input
-                  id="login-email"
-                  type="email"
-                  placeholder="Enter your email"
-                  value={email}
-                  onChange={(e) =>
-                    setEmail(
-                      e.target.value
-                    )
-                  }
-                  autoComplete="email"
-                  disabled={loading}
-                />
-
-              </div>
-
-            </div>
-
-
-            {/* PASSWORD */}
-
-            <div className="login-field">
-
-              <div className="password-label-row">
-
-                <label
-                  htmlFor="login-password"
-                >
-                  PASSWORD
-                </label>
-
-
-                <button
-                  type="button"
-                  className="forgot-password"
-                  onClick={() =>
-                    navigate(
-                      '/forgot-password'
-                    )
-                  }
-                  disabled={loading}
-                >
-                  Forgot password?
-                </button>
-
-              </div>
-
-
-              <div className="login-input-wrapper">
-
-                <span className="login-input-icon">
-                  •
-                </span>
-
-
-                <input
-                  id="login-password"
-                  type={
-                    showPassword
-                      ? 'text'
-                      : 'password'
-                  }
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) =>
-                    setPassword(
-                      e.target.value
-                    )
-                  }
-                  autoComplete="current-password"
-                  disabled={loading}
-                />
-
-
-                <button
-                  type="button"
-                  className="password-toggle"
-                  onClick={() =>
-                    setShowPassword(
-                      (current) =>
-                        !current
-                    )
-                  }
-                  disabled={loading}
-                >
-
-                  {showPassword
-                    ? 'HIDE'
-                    : 'SHOW'}
-
-                </button>
-
-              </div>
-
-            </div>
-
-
-            {/* MESSAGE */}
-
-            {message && (
-
-              <div className="login-message">
-
-                {message}
-
-              </div>
-
-            )}
-
-
-            {/* LOGIN BUTTON */}
-
-            <button
-              type="submit"
-              className="login-submit"
+    <main className="login-page">
+      <section className="login-card">
+        <header className="login-header">
+          <Link to="/" className="login-brand">
+            Overmaths
+          </Link>
+
+          <h1>Welcome back</h1>
+          <p>Log in to continue your learning journey.</p>
+        </header>
+
+        <form onSubmit={handleLogin}>
+          <div className="login-field">
+            <label htmlFor="loginEmail">Email address</label>
+            <input
+              id="loginEmail"
+              name="email"
+              type="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
               disabled={loading}
-            >
-
-              <span>
-
-                {loading
-                  ? 'Signing in...'
-                  : 'Sign In'}
-
-              </span>
-
-
-              {!loading && (
-
-                <span className="login-arrow">
-                  →
-                </span>
-
-              )}
-
-            </button>
-
-
-          </form>
-
-
-          {/* ==================================================
-              DIVIDER
-          ================================================== */}
-
-          <div className="login-divider">
-
-            <span>
-              NEW TO OVERMATHS?
-            </span>
-
+            />
           </div>
 
+          <div className="login-field">
+            <label htmlFor="loginPassword">Password</label>
 
-          {/* ==================================================
-              REGISTER
-          ================================================== */}
+            <div className="login-input-wrapper">
+              <input
+                id="loginPassword"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                disabled={loading}
+              />
 
-          <div className="register-prompt">
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPassword((previous) => !previous)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
+          </div>
 
-            <p>
-              Don't have an account?
-            </p>
-
-
+          <div className="login-options">
             <button
               type="button"
-              className="register-link"
-              onClick={() =>
-                navigate('/register')
-              }
+              className="forgot-password"
+              onClick={handleForgotPassword}
               disabled={loading}
             >
-
-              Create your Overmaths account →
-
+              Forgot password?
             </button>
-
           </div>
 
+          {message && (
+            <p className="login-message" role="alert">
+              {message}
+            </p>
+          )}
 
-          {/* ==================================================
-              FOOTER
-          ================================================== */}
+          <button
+            type="submit"
+            className="login-submit"
+            disabled={loading}
+          >
+            {loading ? 'Logging in...' : 'Log In'}
+          </button>
+        </form>
 
-          <div className="login-footer">
+        <p className="login-footer">
+          Don’t have an account? <Link to="/register">Create one</Link>
+        </p>
 
-            <span>
-              Smart Exam Practice
-            </span>
-
-            <span className="footer-dot">
-              •
-            </span>
-
-            <span>
-              Overmaths
-            </span>
-
-          </div>
-
-
-        </div>
-
-      </div>
-
-    </div>
-
-  )
-
+        <p className="login-verification-link">
+          Need to verify your email?{' '}
+          <Link
+            to="/verify-email"
+            state={{ email: email.trim().toLowerCase() }}
+          >
+            Go to verification
+          </Link>
+        </p>
+      </section>
+    </main>
+  );
 }
-
-
-export default Login
