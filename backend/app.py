@@ -468,66 +468,88 @@ def determine_user_access(
     subscriptions
 ):
     """
-    Determine the authenticated user's access level.
+    Determine the authenticated user's
+    profile completion and access level.
     """
 
-    metadata = user.get(
-        "user_metadata"
-    ) or {}
+    profile = profile or {}
 
-    nickname = (
-        metadata.get("nickname")
+    # --------------------------------------------------------
+    # PROFILE DATA
+    # --------------------------------------------------------
+
+    full_name = (
+        profile.get("full_name")
         or ""
     ).strip()
 
     learning_route = (
         profile.get("learning_route")
-        if profile
-        else None
-    )
+        or ""
+    ).strip().lower()
 
     exam_type = (
         profile.get("exam_type")
-        if profile
-        else None
-    )
+        or ""
+    ).strip()
 
     # --------------------------------------------------------
     # PROFILE COMPLETION
+    #
+    # University does not require exam_type.
+    # O-Level / secondary does.
     # --------------------------------------------------------
 
-    profile_complete = bool(
-        nickname
-        and learning_route
-        and exam_type
+    has_full_name = bool(
+        full_name
+    )
+
+    has_learning_route = bool(
+        learning_route
+    )
+
+    has_exam_type = (
+        True
+        if learning_route == "university"
+        else bool(exam_type)
+    )
+
+    profile_complete = (
+        has_full_name
+        and has_learning_route
+        and has_exam_type
     )
 
     # --------------------------------------------------------
-    # DEFAULT
+    # DEFAULT ACCESS
     # --------------------------------------------------------
 
     access_level = "normal"
+
+    valid_subscription = None
 
     # --------------------------------------------------------
     # PREMIUM
     # --------------------------------------------------------
 
-    valid_subscription = None
-
-    for subscription in subscriptions or []:
+    for subscription in (
+        subscriptions or []
+    ):
 
         if is_valid_premium_subscription(
             subscription
         ):
 
-            valid_subscription = subscription
+            valid_subscription = (
+                subscription
+            )
 
             access_level = "premium"
 
             break
 
     # --------------------------------------------------------
-    # ROUTE
+    # NEXT ROUTE
     # --------------------------------------------------------
 
     if not profile_complete:
@@ -536,7 +558,7 @@ def determine_user_access(
 
     elif access_level == "premium":
 
-        next_route = "/premium-dashboard"
+        next_route = "/premium"
 
     else:
 
@@ -548,27 +570,34 @@ def determine_user_access(
 
     return {
 
-        "profile_complete": profile_complete,
+        "profile_complete":
+            profile_complete,
 
-        "access_level": access_level,
+        "access_level":
+            access_level,
 
-        "is_premium": (
-            access_level == "premium"
-        ),
+        "is_premium":
+            access_level == "premium",
 
-        "next_route": next_route,
+        "next_route":
+            next_route,
 
-        "nickname": nickname,
+        "nickname":
+            full_name,
 
-        "learning_route": learning_route,
+        "learning_route":
+            profile.get(
+                "learning_route"
+            ),
 
-        "exam_type": exam_type,
+        "exam_type":
+            profile.get(
+                "exam_type"
+            ),
 
-        "premium_subscription": (
-            valid_subscription
-        ),
+        "premium_subscription":
+            valid_subscription,
     }
-
 
 # ============================================================
 # AUTH — CURRENT USER
@@ -638,6 +667,17 @@ def auth_me():
     auth_user_id = user.get("id")
 
     email = user.get("email")
+    
+    
+    
+    email_confirmed_at = user.get(
+    "email_confirmed_at"
+    )
+
+    email_verified = bool(
+    email_confirmed_at
+    )
+    
 
     print(
         "CURRENT AUTH USER:",
@@ -664,7 +704,7 @@ def auth_me():
         return jsonify({
 
             "authenticated": True,
-
+            "verified": email_verified,
             "error": profile_error
 
         }), profile_status
