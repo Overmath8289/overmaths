@@ -16,6 +16,7 @@ import {
   AlertCircle,
   Sparkles,
 } from 'lucide-react'
+
 import { supabase } from './supabaseClient'
 import './Register.css'
 
@@ -29,29 +30,59 @@ function Register() {
   const [referralCode, setReferralCode] = useState('')
 
   const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] =
-    useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [messageType, setMessageType] = useState('error')
   const [registered, setRegistered] = useState(false)
 
+  // Live password-strength requirements
+  const passwordChecks = [
+    {
+      label: 'At least 8 characters',
+      test: password.length >= 8,
+    },
+    {
+      label: 'One uppercase letter (A–Z)',
+      test: /[A-Z]/.test(password),
+    },
+    {
+      label: 'One lowercase letter (a–z)',
+      test: /[a-z]/.test(password),
+    },
+    {
+      label: 'One number (0–9)',
+      test: /[0-9]/.test(password),
+    },
+    {
+      label: 'One special character (!@#$...)',
+      test: /[^A-Za-z0-9]/.test(password),
+    },
+  ]
+
   const handleRegister = async (e) => {
     e.preventDefault()
     setMessage('')
+    setMessageType('error')
 
     const cleanName = fullName.trim()
     const cleanEmail = email.trim().toLowerCase()
     const cleanReferralCode = referralCode.trim()
 
-    if (!cleanName || !cleanEmail || !password) {
+    if (!cleanName || !cleanEmail || !password || !confirmPassword) {
       setMessage('Please complete all required fields.')
       return
     }
 
-    if (password.length < 8) {
-      setMessage('Your password must contain at least 8 characters.')
+    const isStrongPassword = passwordChecks.every(
+      (check) => check.test
+    )
+
+    if (!isStrongPassword) {
+      setMessage(
+        'Please meet all the password requirements before continuing.'
+      )
       return
     }
 
@@ -59,47 +90,6 @@ function Register() {
       setMessage('Your passwords do not match.')
       return
     }
-
-
-
-
-    const passwordChecks = [
-  { label: 'At least 8 characters', test: password.length >= 8 },
-  { label: 'One uppercase letter (A–Z)', test: /[A-Z]/.test(password) },
-  { label: 'One lowercase letter (a–z)', test: /[a-z]/.test(password) },
-  { label: 'One number (0–9)', test: /[0-9]/.test(password) },
-  { label: 'One special character (!@#$...)', test: /[^A-Za-z0-9]/.test(password) },
-];
-
-
-
-<div className="password-guide">
-  <p className="password-guide-title">Create a strong password</p>
-
-  <div className="password-checks">
-    {passwordChecks.map((check) => (
-      <div
-        key={check.label}
-        className={`password-check ${check.test ? 'passed' : ''}`}
-      >
-        {check.test ? (
-          <CheckCircle2 size={16} />
-        ) : (
-          <span className="password-check-dot" />
-        )}
-        <span>{check.label}</span>
-      </div>
-    ))}
-  </div>
-</div>
-
-
-
-
-
-
-
-
 
     if (!supabase) {
       setMessage(
@@ -142,6 +132,7 @@ function Register() {
       )
     } catch (error) {
       console.error('Registration error:', error)
+
       setMessage(
         error.message || 'Something went wrong. Please try again.'
       )
@@ -150,6 +141,7 @@ function Register() {
     }
   }
 
+  // Registration success screen
   if (registered) {
     return (
       <div className="register-page">
@@ -164,9 +156,9 @@ function Register() {
 
           <p className="register-success-description">
             We've submitted your registration for
-            <strong> {email.trim()}</strong>.
-            If email confirmation is enabled, open the verification
-            message and follow its instructions to activate your account.
+            <strong> {email.trim()}</strong>. If email confirmation is
+            enabled, open the verification message and follow its
+            instructions to activate your account.
           </p>
 
           <div className="register-success-note">
@@ -207,6 +199,7 @@ function Register() {
   return (
     <div className="register-page">
       <div className="register-layout">
+        {/* Left branding panel */}
         <aside className="register-brand-panel">
           <button
             type="button"
@@ -217,6 +210,7 @@ function Register() {
             <span className="register-brand-mark">
               <GraduationCap size={26} />
             </span>
+
             <span>OVERMATHS</span>
           </button>
 
@@ -238,7 +232,10 @@ function Register() {
             </p>
 
             <div className="register-benefit">
-              <span><CheckCircle2 size={19} /></span>
+              <span>
+                <CheckCircle2 size={19} />
+              </span>
+
               <div>
                 <strong>Focused practice</strong>
                 <p>Work on the subjects that matter to you.</p>
@@ -246,7 +243,10 @@ function Register() {
             </div>
 
             <div className="register-benefit">
-              <span><CheckCircle2 size={19} /></span>
+              <span>
+                <CheckCircle2 size={19} />
+              </span>
+
               <div>
                 <strong>Track your progress</strong>
                 <p>Build better learning habits over time.</p>
@@ -254,7 +254,10 @@ function Register() {
             </div>
 
             <div className="register-benefit">
-              <span><ShieldCheck size={19} /></span>
+              <span>
+                <ShieldCheck size={19} />
+              </span>
+
               <div>
                 <strong>Your learning journey</strong>
                 <p>Start with your own student account.</p>
@@ -267,12 +270,14 @@ function Register() {
           </p>
         </aside>
 
+        {/* Registration form panel */}
         <main className="register-form-panel">
           <div className="register-form-container">
             <div className="register-mobile-brand">
               <span className="register-brand-mark">
                 <GraduationCap size={24} />
               </span>
+
               <strong>OVERMATHS</strong>
             </div>
 
@@ -281,7 +286,9 @@ function Register() {
                 <UserRound size={20} />
               </span>
 
-              <p className="register-eyebrow">CREATE YOUR ACCOUNT</p>
+              <p className="register-eyebrow">
+                CREATE YOUR ACCOUNT
+              </p>
 
               <h2>Your journey starts here.</h2>
 
@@ -291,11 +298,15 @@ function Register() {
             </div>
 
             <form onSubmit={handleRegister} className="register-form">
+              {/* Full name */}
               <div className="register-field">
                 <label htmlFor="register-name">FULL NAME</label>
 
                 <div className="register-input-wrapper">
-                  <UserRound className="register-input-icon" size={19} />
+                  <UserRound
+                    className="register-input-icon"
+                    size={19}
+                  />
 
                   <input
                     id="register-name"
@@ -310,11 +321,15 @@ function Register() {
                 </div>
               </div>
 
+              {/* Email */}
               <div className="register-field">
                 <label htmlFor="register-email">EMAIL ADDRESS</label>
 
                 <div className="register-input-wrapper">
-                  <Mail className="register-input-icon" size={19} />
+                  <Mail
+                    className="register-input-icon"
+                    size={19}
+                  />
 
                   <input
                     id="register-email"
@@ -329,6 +344,7 @@ function Register() {
                 </div>
               </div>
 
+              {/* Password */}
               <div className="register-field">
                 <label htmlFor="register-password">PASSWORD</label>
 
@@ -341,27 +357,67 @@ function Register() {
                   <input
                     id="register-password"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="At least 8 characters"
+                    placeholder="Create a strong password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     autoComplete="new-password"
                     minLength={8}
                     disabled={loading}
+                    aria-describedby="password-guide"
                     required
                   />
 
                   <button
                     type="button"
                     className="register-password-toggle"
-                    onClick={() => setShowPassword((value) => !value)}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    onClick={() =>
+                      setShowPassword((value) => !value)
+                    }
+                    aria-label={
+                      showPassword ? 'Hide password' : 'Show password'
+                    }
                     disabled={loading}
                   >
-                    {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
+                    {showPassword ? (
+                      <EyeOff size={19} />
+                    ) : (
+                      <Eye size={19} />
+                    )}
                   </button>
+                </div>
+
+                {/* Live strong-password guide */}
+                <div
+                  className="password-guide"
+                  id="password-guide"
+                >
+                  <p className="password-guide-title">
+                    <ShieldCheck size={16} />
+                    Create a strong password
+                  </p>
+
+                  <div className="password-checks">
+                    {passwordChecks.map((check) => (
+                      <div
+                        key={check.label}
+                        className={`password-check ${
+                          check.test ? 'passed' : ''
+                        }`}
+                      >
+                        {check.test ? (
+                          <CheckCircle2 size={16} />
+                        ) : (
+                          <span className="password-check-dot" />
+                        )}
+
+                        <span>{check.label}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 
+              {/* Confirm password */}
               <div className="register-field">
                 <label htmlFor="register-confirm-password">
                   CONFIRM PASSWORD
@@ -378,7 +434,9 @@ function Register() {
                     type={showConfirmPassword ? 'text' : 'password'}
                     placeholder="Enter your password again"
                     value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    onChange={(e) =>
+                      setConfirmPassword(e.target.value)
+                    }
                     autoComplete="new-password"
                     disabled={loading}
                     required
@@ -397,33 +455,62 @@ function Register() {
                     }
                     disabled={loading}
                   >
-                    {showConfirmPassword
-                      ? <EyeOff size={19} />
-                      : <Eye size={19} />}
+                    {showConfirmPassword ? (
+                      <EyeOff size={19} />
+                    ) : (
+                      <Eye size={19} />
+                    )}
                   </button>
                 </div>
+
+                {confirmPassword && (
+                  <p
+                    className={`register-password-match ${
+                      password === confirmPassword ? 'matched' : ''
+                    }`}
+                  >
+                    {password === confirmPassword ? (
+                      <>
+                        <CheckCircle2 size={15} />
+                        Passwords match
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle size={15} />
+                        Passwords do not match
+                      </>
+                    )}
+                  </p>
+                )}
               </div>
 
+              {/* Optional referral code */}
               <div className="register-field">
                 <label htmlFor="register-referral">
                   REFERRAL CODE <span>(OPTIONAL)</span>
                 </label>
 
                 <div className="register-input-wrapper">
-                  <Users className="register-input-icon" size={19} />
+                  <Users
+                    className="register-input-icon"
+                    size={19}
+                  />
 
                   <input
                     id="register-referral"
                     type="text"
                     placeholder="Enter a referral code"
                     value={referralCode}
-                    onChange={(e) => setReferralCode(e.target.value)}
+                    onChange={(e) =>
+                      setReferralCode(e.target.value)
+                    }
                     autoComplete="off"
                     disabled={loading}
                   />
                 </div>
               </div>
 
+              {/* Feedback */}
               {message && (
                 <div
                   className={`register-message ${
@@ -431,11 +518,17 @@ function Register() {
                   }`}
                   role="alert"
                 >
-                  <AlertCircle size={18} />
+                  {messageType === 'success' ? (
+                    <CheckCircle2 size={18} />
+                  ) : (
+                    <AlertCircle size={18} />
+                  )}
+
                   <span>{message}</span>
                 </div>
               )}
 
+              {/* Submit */}
               <button
                 type="submit"
                 className="register-submit"
@@ -443,7 +536,10 @@ function Register() {
               >
                 {loading ? (
                   <>
-                    <LoaderCircle className="register-spinner" size={19} />
+                    <LoaderCircle
+                      className="register-spinner"
+                      size={19}
+                    />
                     <span>Creating your account...</span>
                   </>
                 ) : (
@@ -468,7 +564,8 @@ function Register() {
                 onClick={() => navigate('/login')}
                 disabled={loading}
               >
-                Sign in to your account <ArrowRight size={16} />
+                Sign in to your account
+                <ArrowRight size={16} />
               </button>
             </div>
 
