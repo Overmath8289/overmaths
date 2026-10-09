@@ -1,2232 +1,1266 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
 /* =========================================================
-   OVERMATHS BRAND SYSTEM
-========================================================= */
-
-:root {
-  --om-bg: #050816;
-  --om-bg-2: #080d24;
-  --om-bg-3: #0b1230;
-
-  --om-purple: #7c3aed;
-  --om-purple-light: #a855f7;
-
-  --om-orange: #ff7a18;
-  --om-orange-light: #ff9d32;
-
-  --om-white: #f8fafc;
-  --om-text: #e8ebf7;
-  --om-muted: #9da6c2;
-  --om-dim: #68728f;
-
-  --om-border: rgba(255, 255, 255, 0.08);
-
-  --om-radius: 18px;
-
-  font-family: 'Inter', sans-serif;
-}
-
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-html {
-  scroll-behavior: smooth;
-}
-
-body {
-  margin: 0;
-  background: var(--om-bg);
-  color: var(--om-white);
-  font-family: 'Inter', sans-serif;
-}
-
-button,
-input,
-textarea,
-select {
-  font-family: inherit;
-}
-
-button {
-  cursor: pointer;
-}
-
-button:focus-visible {
-  outline: 2px solid var(--om-orange);
-  outline-offset: 3px;
-}
-
-
-/* =========================================================
-   MAIN SITE
+OVERMATHS LANDING PAGE — PHOTO-LED LIGHT THEME
+Append to App.css
 ========================================================= */
 
 .overmaths-site {
-  min-height: 100vh;
-  overflow: hidden;
-  background:
-    radial-gradient(
-      circle at 15% 20%,
-      rgba(124, 58, 237, 0.09),
-      transparent 30%
-    ),
-    radial-gradient(
-      circle at 85% 65%,
-      rgba(255, 122, 24, 0.06),
-      transparent 28%
-    ),
-    var(--om-bg);
+--om-ink: #17203e;
+--om-muted: #626d88;
+--om-purple: #6d3be8;
+--om-orange: #ff821f;
+--om-border: rgba(23, 32, 62, 0.1);
+color: var(--om-ink);
+background: #f7f9ff;
+font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+overflow: hidden;
 }
 
-
-/* =========================================================
-   HEADER
-========================================================= */
-
-.site-header {
-  position: sticky;
-  top: 0;
-  z-index: 100;
-
-  height: 78px;
-
-  background: rgba(5, 8, 22, 0.78);
-
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-}
-
-.site-nav {
-  width: min(1200px, 92%);
-  height: 100%;
-  margin: auto;
-
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-
-/* =========================================================
-   BRAND
-========================================================= */
-
-.brand {
-  border: none;
-  background: transparent;
-
-  width: 165px;
-
-  display: flex;
-  align-items: center;
-
-  padding: 0;
-}
-
-.brand img {
-  width: 155px;
-  height: auto;
-
-  display: block;
-
-  mix-blend-mode: screen;
-}
-
-
-/* =========================================================
-   DESKTOP NAV
-========================================================= */
-
-.desktop-nav {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.desktop-nav button {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-
-  padding: 9px 12px;
-
-  border: none;
-  background: transparent;
-
-  color: #9ea7c0;
-
-  font-size: 12px;
-  font-weight: 600;
-
-  border-radius: 9px;
-
-  transition: 0.25s ease;
-}
-
-.desktop-nav button:hover {
-  color: white;
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.desktop-nav button:first-child {
-  color: white;
-}
-
-
-/* =========================================================
-   NAV ACTIONS
-========================================================= */
-
-.nav-actions {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.nav-login,
-.nav-register {
-  border-radius: 10px;
-
-  font-size: 12px;
-  font-weight: 700;
-
-  transition: 0.25s ease;
-}
-
-.nav-login {
-  padding: 10px 15px;
-
-  color: #d8dced;
-
-  border: 1px solid rgba(255, 255, 255, 0.11);
-
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.nav-login:hover {
-  color: white;
-  border-color: rgba(168, 85, 247, 0.5);
-}
-
-.nav-register {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-
-  padding: 10px 15px;
-
-  color: white;
-
-  border: none;
-
-  background:
-    linear-gradient(
-      100deg,
-      var(--om-purple),
-      var(--om-orange)
-    );
-
-  box-shadow:
-    0 7px 22px rgba(124, 58, 237, 0.22);
-}
-
-.nav-register:hover {
-  transform: translateY(-2px);
-}
-
-
-/* =========================================================
-   HERO
-========================================================= */
-
-.hero {
-  position: relative;
-
-  min-height: 720px;
-
-  display: flex;
-  align-items: center;
-
-  padding: 90px 0 100px;
-
-  overflow: hidden;
-
-  background:
-    radial-gradient(
-      circle at 78% 40%,
-      rgba(124, 58, 237, 0.17),
-      transparent 30%
-    ),
-    radial-gradient(
-      circle at 95% 80%,
-      rgba(255, 122, 24, 0.09),
-      transparent 25%
-    );
-}
-
-.hero-inner {
-  position: relative;
-  z-index: 2;
-
-  width: min(1200px, 92%);
-  margin: auto;
-
-  display: grid;
-  grid-template-columns: 0.95fr 1.05fr;
-  gap: 65px;
-
-  align-items: center;
-}
-
-
-/* =========================================================
-   HERO BACKGROUND LIGHTS
-========================================================= */
-
-.hero-glow {
-  position: absolute;
-
-  border-radius: 50%;
-
-  pointer-events: none;
-
-  filter: blur(70px);
-}
-
-.hero-glow-one {
-  width: 420px;
-  height: 420px;
-
-  right: -120px;
-  top: 80px;
-
-  background: rgba(124, 58, 237, 0.13);
-}
-
-.hero-glow-two {
-  width: 250px;
-  height: 250px;
-
-  left: -120px;
-  bottom: 0;
-
-  background: rgba(255, 122, 24, 0.06);
-}
-
-
-/* =========================================================
-   HERO COPY
-========================================================= */
-
-.hero-copy {
-  max-width: 600px;
-}
-
-.hero-eyebrow {
-  width: fit-content;
-
-  display: flex;
-  align-items: center;
-  gap: 9px;
-
-  margin-bottom: 25px;
-
-  padding: 8px 13px;
-
-  border-radius: 30px;
-
-  color: #c7b8ff;
-
-  background: rgba(124, 58, 237, 0.09);
-
-  border: 1px solid rgba(168, 85, 247, 0.18);
-
-  font-size: 10px;
-  font-weight: 800;
-
-  letter-spacing: 1.2px;
-}
-
-.eyebrow-dot {
-  width: 7px;
-  height: 7px;
-
-  border-radius: 50%;
-
-  background: var(--om-orange);
-
-  box-shadow: 0 0 12px var(--om-orange);
-}
-
-.hero-copy h1 {
-  font-size: clamp(48px, 5.2vw, 72px);
-
-  line-height: 1.02;
-
-  letter-spacing: -3.5px;
-
-  font-weight: 800;
-
-  margin-bottom: 27px;
-}
-
-.hero-copy h1 span {
-  background:
-    linear-gradient(
-      100deg,
-      #a855f7,
-      #ff7a18
-    );
-
-  -webkit-background-clip: text;
-  background-clip: text;
-
-  -webkit-text-fill-color: transparent;
-}
-
-.hero-text {
-  max-width: 570px;
-
-  color: var(--om-muted);
-
-  font-size: 16px;
-
-  line-height: 1.8;
-
-  margin-bottom: 32px;
-}
-
-
-/* =========================================================
-   HERO BUTTONS
-========================================================= */
-
-.hero-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-
-  margin-bottom: 34px;
-}
-
-.hero-primary,
-.hero-secondary {
-  min-height: 52px;
-
-  padding: 0 19px;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-
-  border-radius: 10px;
-
-  font-size: 13px;
-  font-weight: 700;
-
-  transition: 0.3s ease;
-}
-
-.hero-primary {
-  color: white;
-
-  border: none;
-
-  background:
-    linear-gradient(
-      100deg,
-      #7138e9,
-      #ff7617
-    );
-
-  box-shadow:
-    0 13px 30px rgba(124, 58, 237, 0.23);
-}
-
-.hero-primary:hover {
-  transform: translateY(-3px);
-
-  box-shadow:
-    0 18px 38px rgba(124, 58, 237, 0.32);
-}
-
-.hero-secondary {
-  color: #d9dced;
-
-  border: 1px solid rgba(255, 255, 255, 0.1);
-
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.hero-secondary:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(168, 85, 247, 0.35);
-}
-
-.play-icon {
-  width: 27px;
-  height: 27px;
-
-  display: grid;
-  place-items: center;
-
-  border-radius: 50%;
-
-  color: #d3baff;
-
-  background: rgba(124, 58, 237, 0.2);
-}
-
-
-/* =========================================================
-   HERO TRUST
-========================================================= */
-
-.hero-trust {
-  display: flex;
-  align-items: center;
-  gap: 22px;
-
-  flex-wrap: wrap;
-}
-
-.trust-item {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-
-  color: #8992ac;
-
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.trust-icon {
-  width: 21px;
-  height: 21px;
-
-  display: grid;
-  place-items: center;
-
-  border-radius: 50%;
-
-  color: #c59cff;
-
-  background: rgba(124, 58, 237, 0.14);
-}
-
-
-/* =========================================================
-   HERO PRODUCT VISUAL
-========================================================= */
-
-.hero-visual {
-  position: relative;
-
-  min-height: 510px;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.visual-glow {
-  position: absolute;
-
-  width: 460px;
-  height: 460px;
-
-  border-radius: 50%;
-
-  background:
-    radial-gradient(
-      circle,
-      rgba(124, 58, 237, 0.20),
-      transparent 68%
-    );
-
-  filter: blur(20px);
-}
-
-
-/* =========================================================
-   EXAM WINDOW
-========================================================= */
-
-.exam-window {
-  position: relative;
-  z-index: 3;
-
-  width: min(100%, 515px);
-
-  border-radius: 20px;
-
-  background:
-    linear-gradient(
-      145deg,
-      rgba(17, 23, 64, 0.97),
-      rgba(6, 11, 37, 0.98)
-    );
-
-  border: 1px solid rgba(168, 85, 247, 0.25);
-
-  box-shadow:
-    0 35px 90px rgba(0, 0, 0, 0.42),
-    0 0 60px rgba(124, 58, 237, 0.12);
-
-  overflow: hidden;
-}
-
-.window-top {
-  height: 58px;
-
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-
-  padding: 0 20px;
-
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.window-brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-
-  color: #cdd2e5;
-
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.mini-logo {
-  width: 27px;
-  height: 27px;
-
-  display: grid;
-  place-items: center;
-
-  border-radius: 8px;
-
-  color: white;
-
-  font-size: 12px;
-  font-weight: 800;
-
-  background:
-    linear-gradient(
-      135deg,
-      var(--om-purple),
-      var(--om-orange)
-    );
-}
-
-.window-timer {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-
-  color: #ffad45;
-
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.timer-dot {
-  width: 6px;
-  height: 6px;
-
-  border-radius: 50%;
-
-  background: #ff8b24;
-
-  box-shadow: 0 0 10px #ff8b24;
-}
-
-.exam-content {
-  padding: 25px;
-}
-
-.exam-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-
-  margin-bottom: 9px;
-
-  color: #78829e;
-
-  font-size: 9px;
-  font-weight: 800;
-
-  letter-spacing: 0.8px;
-}
-
-.exam-progress {
-  height: 4px;
-
-  margin-bottom: 23px;
-
-  overflow: hidden;
-
-  border-radius: 10px;
-
-  background: rgba(255, 255, 255, 0.07);
-}
-
-.exam-progress div {
-  width: 43%;
-  height: 100%;
-
-  border-radius: inherit;
-
-  background:
-    linear-gradient(
-      90deg,
-      var(--om-purple),
-      var(--om-orange)
-    );
-}
-
-.exam-content h3 {
-  color: #f1f3fa;
-
-  font-size: 17px;
-
-  line-height: 1.65;
-
-  font-weight: 600;
-
-  margin-bottom: 20px;
-}
-
-.answer-list {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-
-.answer {
-  position: relative;
-
-  min-height: 43px;
-
-  display: flex;
-  align-items: center;
-
-  padding: 0 12px;
-
-  gap: 12px;
-
-  color: #abb2ca;
-
-  border: 1px solid rgba(255, 255, 255, 0.07);
-
-  border-radius: 9px;
-
-  background: rgba(255, 255, 255, 0.025);
-
-  font-size: 12px;
-}
-
-.answer > span {
-  width: 25px;
-  height: 25px;
-
-  display: grid;
-  place-items: center;
-
-  border-radius: 7px;
-
-  color: #969eb8;
-
-  background: rgba(255, 255, 255, 0.05);
-
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.answer.selected {
-  color: white;
-
-  border-color: rgba(168, 85, 247, 0.55);
-
-  background:
-    linear-gradient(
-      90deg,
-      rgba(124, 58, 237, 0.18),
-      rgba(255, 122, 24, 0.06)
-    );
-}
-
-.answer.selected > span {
-  color: white;
-
-  background:
-    linear-gradient(
-      135deg,
-      var(--om-purple),
-      var(--om-orange)
-    );
-}
-
-.answer-check {
-  width: 21px;
-  height: 21px;
-
-  display: grid;
-  place-items: center;
-
-  margin-left: auto;
-
-  border-radius: 50%;
-
-  color: white;
-
-  background: #7c3aed;
-}
-
-.exam-bottom {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-
-  margin-top: 22px;
-
-  padding-top: 17px;
-
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-
-  color: #707a96;
-
-  font-size: 10px;
-}
-
-.exam-bottom span {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.exam-bottom button {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-
-  border: none;
-  background: transparent;
-
-  color: #b994ff;
-
-  font-size: 11px;
-  font-weight: 700;
+.overmaths-site *,
+.overmaths-site *::before,
+.overmaths-site *::after {
+box-sizing: border-box;
+}
+
+.overmaths-site button,
+.overmaths-site a {
+font: inherit;
+}
+
+.overmaths-site button {
+cursor: pointer;
+}
+
+.overmaths-site a {
+text-decoration: none;
 }
-
-
-/* =========================================================
-   FLOATING STATS
-========================================================= */
-
-.floating-stat {
-  position: absolute;
-  z-index: 5;
-
-  min-width: 145px;
-
-  display: flex;
-  align-items: center;
-  gap: 10px;
-
-  padding: 12px;
-
-  border-radius: 13px;
-
-  background: rgba(12, 18, 49, 0.94);
-
-  border: 1px solid rgba(255, 255, 255, 0.08);
-
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.3);
-
-  backdrop-filter: blur(15px);
+
+.overmaths-site .site-header {
+min-height: 82px;
+padding: 0 clamp(20px, 6vw, 90px);
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 28px;
+position: sticky;
+top: 0;
+z-index: 50;
+background: rgba(255, 255, 255, 0.94);
+backdrop-filter: blur(16px);
+border-bottom: 1px solid rgba(23, 32, 62, 0.08);
 }
 
-.stat-one {
-  top: 50px;
-  left: -10px;
+.overmaths-site .brand {
+display: inline-flex;
+align-items: center;
+gap: 10px;
+border: 0;
+padding: 0;
+color: var(--om-ink);
+background: transparent;
+white-space: nowrap;
+}
+
+.overmaths-site .brand-mark {
+width: 39px;
+height: 39px;
+display: grid;
+place-items: center;
+border-radius: 13px;
+color: white;
+font-size: 23px;
+font-weight: 900;
+background: linear-gradient(135deg, #6d3be8, #ff821f);
+box-shadow: 0 7px 18px rgba(109, 59, 232, 0.2);
+}
+
+.overmaths-site .brand-name {
+font-size: 22px;
+letter-spacing: -1px;
+font-weight: 850;
+}
+
+.overmaths-site .brand-name span {
+color: var(--om-purple);
+}
+
+.overmaths-site .desktop-nav {
+display: flex;
+align-items: center;
+justify-content: center;
+gap: clamp(15px, 2.3vw, 32px);
+}
+
+.overmaths-site .desktop-nav a {
+color: #66708a;
+font-size: 13px;
+font-weight: 650;
+transition: color 0.2s ease;
+}
+
+.overmaths-site .desktop-nav a:hover,
+.overmaths-site .footer-column a:hover {
+color: var(--om-purple);
 }
+
+.overmaths-site .header-actions {
+display: flex;
+align-items: center;
+gap: 10px;
+}
+
+.overmaths-site .nav-login,
+.overmaths-site .nav-register,
+.overmaths-site .hero-primary,
+.overmaths-site .hero-secondary,
+.overmaths-site .premium-action {
+min-height: 45px;
+padding: 0 19px;
+display: inline-flex;
+justify-content: center;
+align-items: center;
+gap: 10px;
+border-radius: 12px;
+font-size: 13px;
+font-weight: 750;
+transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.overmaths-site .nav-login {
+color: #28314e;
+background: #fff;
+border: 1px solid var(--om-border);
+}
+
+.overmaths-site .nav-register,
+.overmaths-site .hero-primary,
+.overmaths-site .premium-action {
+color: #fff;
+border: 0;
+background: linear-gradient(110deg, #6d3be8, #ff821f);
+box-shadow: 0 10px 25px rgba(109, 59, 232, 0.16);
+}
 
-.stat-two {
-  right: -5px;
-  bottom: 50px;
+.overmaths-site .nav-register:hover,
+.overmaths-site .hero-primary:hover,
+.overmaths-site .premium-action:hover {
+transform: translateY(-2px);
+box-shadow: 0 14px 30px rgba(109, 59, 232, 0.23);
 }
 
-.stat-icon {
-  width: 34px;
-  height: 34px;
+/* HERO */
 
-  display: grid;
-  place-items: center;
-
-  border-radius: 10px;
+.overmaths-site .hero {
+width: min(1320px, 100%);
+min-height: 640px;
+margin: 0 auto;
+padding: 72px clamp(24px, 6vw, 84px) 82px;
+display: grid;
+grid-template-columns: minmax(0, 1fr) minmax(0, 0.92fr);
+align-items: center;
+gap: clamp(40px, 6vw, 84px);
+background:
+radial-gradient(circle at 80% 35%, rgba(124, 58, 237, 0.1), transparent 34%),
+radial-gradient(circle at 8% 85%, rgba(255, 130, 31, 0.08), transparent 25%),
+#f7f9ff;
 }
 
-.stat-icon.purple {
-  color: #c69cff;
-  background: rgba(124, 58, 237, 0.18);
+.overmaths-site .hero-copy {
+max-width: 600px;
 }
 
-.stat-icon.orange {
-  color: #ffad54;
-  background: rgba(255, 122, 24, 0.14);
+.overmaths-site .eyebrow {
+display: inline-flex;
+align-items: center;
+gap: 9px;
+color: var(--om-purple);
+font-size: 10px;
+font-weight: 850;
+letter-spacing: 1.7px;
+line-height: 1.6;
 }
-
-.floating-stat strong {
-  display: block;
 
-  color: white;
-
-  font-size: 13px;
+.overmaths-site .eyebrow-dot {
+width: 8px;
+height: 8px;
+border-radius: 50%;
+background: var(--om-orange);
+box-shadow: 0 0 0 4px rgba(255, 130, 31, 0.12);
 }
-
-.floating-stat span {
-  display: block;
 
-  margin-top: 2px;
+.overmaths-site .hero-copy h1 {
+margin: 23px 0 20px;
+color: #17203e;
+font-size: clamp(44px, 5.2vw, 70px);
+font-weight: 850;
+letter-spacing: -3.5px;
+line-height: 1.06;
+}
 
-  color: #707993;
+.overmaths-site .hero-copy h1 span {
+color: var(--om-purple);
+}
 
-  font-size: 9px;
+.overmaths-site .hero-text {
+max-width: 540px;
+margin: 0;
+color: var(--om-muted);
+font-size: 16px;
+line-height: 1.9;
 }
 
-
-/* =========================================================
-   STATS STRIP
-========================================================= */
-
-.stats-strip {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-
-  background: rgba(255, 255, 255, 0.018);
+.overmaths-site .hero-actions {
+display: flex;
+flex-wrap: wrap;
+align-items: center;
+gap: 14px;
+margin-top: 30px;
 }
-
-.stats-inner {
-  width: min(1000px, 92%);
-  min-height: 95px;
 
-  margin: auto;
-
-  display: grid;
-  grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
-
-  align-items: center;
+.overmaths-site .hero-secondary {
+color: #28314e;
+background: #fff;
+border: 1px solid var(--om-border);
 }
-
-.stat-block {
-  text-align: center;
+
+.overmaths-site .trust-row {
+margin-top: 30px;
+display: flex;
+flex-wrap: wrap;
+gap: 12px 20px;
 }
-
-.stat-block strong {
-  display: block;
 
-  margin-bottom: 5px;
-
-  color: #e6e8f3;
-
-  font-size: 17px;
+.overmaths-site .trust-row span {
+color: #626d88;
+font-size: 11px;
+font-weight: 600;
 }
-
-.stat-block span {
-  color: #737d99;
-
-  font-size: 9px;
-  font-weight: 600;
 
-  letter-spacing: 0.3px;
+.overmaths-site .trust-row b {
+color: #6d3be8;
+margin-right: 4px;
 }
 
-.stat-divider {
-  width: 1px;
-  height: 35px;
+/* PHOTO CARD */
 
-  background: rgba(255, 255, 255, 0.08);
+.overmaths-site .hero-photo-visual {
+position: relative;
+min-width: 0;
+min-height: 500px;
 }
-
-
-/* =========================================================
-   GENERAL SECTIONS
-========================================================= */
-
-.section {
-  width: min(1200px, 92%);
-
-  margin: auto;
 
-  padding: 110px 0;
+.overmaths-site .hero-photo-frame {
+position: absolute;
+inset: 12px 0 15px;
+overflow: hidden;
+border: 7px solid rgba(255, 255, 255, 0.9);
+border-radius: 29px;
+background: #e7eafa;
+box-shadow: 0 30px 80px rgba(30, 35, 80, 0.18);
 }
 
-.section-heading {
-  max-width: 720px;
-
-  margin: 0 auto 55px;
-
-  text-align: center;
+.overmaths-site .hero-graduation-image {
+width: 100%;
+height: 100%;
+display: block;
+object-fit: cover;
+object-position: center;
 }
-
-.section-eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-
-  margin-bottom: 17px;
 
-  color: #b17cff;
-
-  font-size: 10px;
-  font-weight: 800;
-
-  letter-spacing: 1.2px;
+.overmaths-site .hero-photo-shade {
+position: absolute;
+inset: 35% 0 0;
+background: linear-gradient(transparent, rgba(7, 12, 35, 0.86));
 }
 
-.section-heading .section-eyebrow {
-  justify-content: center;
+.overmaths-site .hero-photo-caption {
+position: absolute;
+left: 22px;
+right: 22px;
+bottom: 22px;
+display: flex;
+align-items: center;
+gap: 12px;
+color: #fff;
 }
-
-.section-eyebrow span {
-  width: 24px;
-  height: 2px;
-
-  border-radius: 10px;
 
-  background:
-    linear-gradient(
-      90deg,
-      var(--om-purple),
-      var(--om-orange)
-    );
+.overmaths-site .photo-caption-mark {
+width: 38px;
+height: 38px;
+flex: 0 0 38px;
+display: grid;
+place-items: center;
+border-radius: 12px;
+color: white;
+font-weight: 900;
+background: linear-gradient(135deg, #7138e9, #ff7617);
 }
 
-.section-heading h2,
-.how-copy h2,
-.about-copy h2 {
-  font-size: clamp(32px, 4vw, 47px);
-
-  line-height: 1.1;
-
-  letter-spacing: -2px;
-
-  margin-bottom: 17px;
+.overmaths-site .hero-photo-caption strong,
+.overmaths-site .hero-photo-caption small {
+display: block;
 }
 
-.section-heading h2 span,
-.how-copy h2 span,
-.about-copy h2 span,
-.final-cta h2 span,
-.premium-copy h2 span {
-  color: #9b73f6;
+.overmaths-site .hero-photo-caption strong {
+margin-bottom: 5px;
+font-size: 14px;
 }
-
-.section-heading > p,
-.how-copy > p,
-.about-copy > p {
-  color: var(--om-muted);
 
-  font-size: 14px;
-
-  line-height: 1.8;
+.overmaths-site .hero-photo-caption small {
+color: #e0e5f7;
+font-size: 11px;
 }
-
 
-/* =========================================================
-   SUBJECTS
-========================================================= */
-
-.courses {
-  position: relative;
+.overmaths-site .floating-stat {
+position: absolute;
+z-index: 5;
+display: flex;
+align-items: center;
+gap: 11px;
+padding: 14px 16px;
+border: 1px solid rgba(23, 32, 62, 0.06);
+border-radius: 16px;
+background: rgba(255, 255, 255, 0.97);
+box-shadow: 0 15px 45px rgba(23, 32, 62, 0.14);
 }
-
-.subject-grid {
-  display: grid;
 
-  grid-template-columns: repeat(3, 1fr);
-
-  gap: 17px;
+.overmaths-site .floating-stat strong,
+.overmaths-site .floating-stat span:not(.stat-icon) {
+display: block;
 }
-
-.subject-item {
-  position: relative;
-
-  min-height: 220px;
-
-  display: flex;
-  flex-direction: column;
-
-  align-items: flex-start;
-
-  padding: 28px;
-
-  text-align: left;
-
-  border: 1px solid rgba(255, 255, 255, 0.07);
 
-  border-radius: 18px;
-
-  background:
-    linear-gradient(
-      145deg,
-      rgba(14, 21, 55, 0.92),
-      rgba(7, 12, 35, 0.95)
-    );
-
-  color: white;
-
-  overflow: hidden;
-
-  transition: 0.3s ease;
+.overmaths-site .floating-stat strong {
+margin-bottom: 4px;
+color: #17203e;
+font-size: 12px;
 }
-
-.subject-item::before {
-  content: '';
-
-  position: absolute;
-
-  width: 180px;
-  height: 180px;
-
-  right: -80px;
-  top: -80px;
 
-  border-radius: 50%;
-
-  background: rgba(124, 58, 237, 0.09);
-
-  filter: blur(25px);
+.overmaths-site .floating-stat div span {
+color: #7b849b;
+font-size: 10px;
 }
-
-.subject-item:hover {
-  transform: translateY(-6px);
-
-  border-color: rgba(168, 85, 247, 0.32);
 
-  box-shadow:
-    0 20px 45px rgba(0, 0, 0, 0.25);
+.overmaths-site .stat-icon {
+width: 35px;
+height: 35px;
+display: grid;
+place-items: center;
+border-radius: 11px;
+font-size: 17px;
+font-weight: 800;
 }
-
-.subject-icon {
-  position: relative;
-
-  width: 52px;
-  height: 52px;
-
-  display: grid;
-  place-items: center;
-
-  margin-bottom: 22px;
 
-  border-radius: 14px;
-
-  font-size: 27px;
-  font-weight: 700;
-
-  background: rgba(124, 58, 237, 0.14);
-
-  color: #b98cff;
-
-  border: 1px solid rgba(168, 85, 247, 0.2);
+.overmaths-site .stat-icon.purple {
+color: #6d3be8;
+background: #f0eaff;
 }
 
-.math .subject-icon {
-  color: #ffad43;
-  background: rgba(255, 122, 24, 0.1);
-  border-color: rgba(255, 122, 24, 0.2);
+.overmaths-site .stat-icon.orange {
+color: #d66b10;
+background: #fff0df;
 }
 
-.chemistry .subject-icon {
-  color: #62ddc0;
-  background: rgba(45, 211, 170, 0.08);
-  border-color: rgba(45, 211, 170, 0.18);
+.overmaths-site .stat-one {
+top: 40px;
+left: -25px;
 }
 
-.subject-info {
-  position: relative;
+.overmaths-site .stat-two {
+right: -20px;
+bottom: 65px;
 }
 
-.subject-info small {
-  color: #69738e;
-
-  font-size: 8px;
-  font-weight: 800;
-
-  letter-spacing: 1px;
+.overmaths-site .photo-note {
+position: absolute;
+z-index: 5;
+top: 28px;
+left: 27px;
+padding: 9px 12px;
+border-radius: 30px;
+color: #27314e;
+background: rgba(255, 255, 255, 0.94);
+box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+font-size: 9px;
+font-weight: 800;
+letter-spacing: 0.5px;
 }
 
-.subject-info h3 {
-  margin: 7px 0 8px;
+/* STATS */
 
-  font-size: 20px;
+.overmaths-site .stats-strip {
+width: min(1150px, calc(100% - 48px));
+margin: -25px auto 0;
+position: relative;
+z-index: 10;
+display: grid;
+grid-template-columns: repeat(4, 1fr);
+align-items: center;
+padding: 28px 20px;
+border: 1px solid rgba(23, 32, 62, 0.08);
+border-radius: 20px;
+background: #fff;
+box-shadow: 0 20px 55px rgba(30, 40, 80, 0.06);
 }
-
-.subject-info p {
-  max-width: 280px;
-
-  color: #858ea8;
 
-  font-size: 11px;
-
-  line-height: 1.7;
+.overmaths-site .stat-block {
+padding: 4px 15px;
+text-align: center;
 }
-
-.subject-arrow {
-  position: absolute;
-
-  right: 25px;
-  bottom: 25px;
-
-  width: 34px;
-  height: 34px;
-
-  display: grid;
-  place-items: center;
-
-  border-radius: 50%;
-
-  color: #b58aff;
-
-  background: rgba(124, 58, 237, 0.1);
 
-  transition: 0.25s ease;
+.overmaths-site .stat-block strong,
+.overmaths-site .stat-block span {
+display: block;
 }
 
-.subject-item:hover .subject-arrow {
-  color: white;
-
-  background:
-    linear-gradient(
-      135deg,
-      var(--om-purple),
-      var(--om-orange)
-    );
-
-  transform: translateX(3px);
+.overmaths-site .stat-block strong {
+margin-bottom: 7px;
+color: #17203e;
+font-size: 15px;
+font-weight: 800;
 }
-
-
-/* =========================================================
-   HOW IT WORKS
-========================================================= */
 
-.how-section {
-  max-width: none;
-  width: 100%;
-
-  padding-left: 5%;
-  padding-right: 5%;
-
-  background:
-    radial-gradient(
-      circle at 15% 50%,
-      rgba(124, 58, 237, 0.07),
-      transparent 30%
-    );
+.overmaths-site .stat-block span {
+color: #707a93;
+font-size: 11px;
+line-height: 1.6;
 }
 
-.how-layout {
-  width: min(1200px, 100%);
-  margin: auto;
-
-  display: grid;
-  grid-template-columns: 0.8fr 1.2fr;
+.overmaths-site .stat-divider {
+width: 1px;
+height: 37px;
+background: rgba(23, 32, 62, 0.12);
+}
 
-  gap: 100px;
+/* SHARED SECTIONS */
 
-  align-items: center;
+.overmaths-site .section-pad {
+padding: 100px clamp(24px, 7vw, 100px);
 }
 
-.how-copy {
-  max-width: 450px;
+.overmaths-site .section-heading {
+max-width: 720px;
+margin: 0 auto 48px;
+text-align: center;
 }
 
-.how-copy > p {
-  margin-bottom: 28px;
+.overmaths-site .section-heading h2,
+.overmaths-site .how-copy h2,
+.overmaths-site .about-copy h2 {
+margin: 15px 0;
+color: #17203e;
+font-size: clamp(31px, 3.5vw, 45px);
+font-weight: 850;
+letter-spacing: -1.8px;
+line-height: 1.15;
 }
 
-.text-action {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-
-  border: none;
-  background: transparent;
-
-  color: #c09bff;
-
-  font-size: 12px;
-  font-weight: 700;
-
-  padding: 0;
+.overmaths-site .section-heading > p,
+.overmaths-site .how-copy > p,
+.overmaths-site .about-copy > p {
+color: #626d88;
+font-size: 14px;
+line-height: 1.9;
 }
 
-.text-action:hover {
-  color: white;
+.overmaths-site .subject-grid {
+width: min(1150px, 100%);
+margin: 0 auto;
+display: grid;
+grid-template-columns: repeat(4, minmax(0, 1fr));
+gap: 20px;
 }
 
-.steps {
-  display: flex;
-  flex-direction: column;
+.overmaths-site .subject-item {
+min-height: 270px;
+padding: 25px 23px;
+border: 1px solid rgba(23, 32, 62, 0.08);
+border-radius: 20px;
+background: linear-gradient(145deg, #fff, #f0f3ff);
+box-shadow: 0 12px 30px rgba(30, 40, 80, 0.045);
+transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
-
-.step {
-  position: relative;
-
-  display: grid;
-
-  grid-template-columns: 42px 48px 1fr;
-
-  gap: 18px;
 
-  align-items: center;
-
-  padding: 24px 0;
-
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+.overmaths-site .subject-item:hover {
+transform: translateY(-5px);
+box-shadow: 0 20px 42px rgba(30, 40, 80, 0.09);
 }
 
-.step:last-child {
-  border-bottom: none;
+.overmaths-site .subject-icon {
+width: 48px;
+height: 48px;
+margin-bottom: 18px;
+display: grid;
+place-items: center;
+border-radius: 15px;
+font-size: 24px;
+font-weight: 800;
 }
 
-.step-number {
-  color: #4f5872;
+.overmaths-site .subject-icon.violet { color: #6d3be8; background: #eee7ff; }
+.overmaths-site .subject-icon.blue { color: #2862d8; background: #e6efff; }
+.overmaths-site .subject-icon.orange { color: #d66b10; background: #fff0df; }
+.overmaths-site .subject-icon.green { color: #18865b; background: #e1f7ec; }
 
-  font-size: 10px;
-  font-weight: 800;
+.overmaths-site .subject-code {
+color: #8a92a8;
+font-size: 10px;
+font-weight: 850;
+letter-spacing: 1.5px;
 }
-
-.step-icon {
-  width: 48px;
-  height: 48px;
-
-  display: grid;
-  place-items: center;
 
-  border-radius: 13px;
-
-  color: #b38aff;
-
-  background: rgba(124, 58, 237, 0.11);
-
-  border: 1px solid rgba(168, 85, 247, 0.18);
+.overmaths-site .subject-item h3 {
+margin: 9px 0;
+color: #17203e;
+font-size: 19px;
+letter-spacing: -0.4px;
 }
-
-.step h3 {
-  margin-bottom: 6px;
 
-  color: #e9ebf4;
-
-  font-size: 14px;
+.overmaths-site .subject-item p {
+min-height: 61px;
+margin: 0;
+color: #66708a;
+font-size: 12px;
+line-height: 1.8;
 }
-
-.step p {
-  color: #737d98;
 
-  font-size: 11px;
-
-  line-height: 1.7;
+.overmaths-site .subject-link,
+.overmaths-site .text-link {
+margin-top: 20px;
+padding: 0;
+display: inline-flex;
+align-items: center;
+gap: 9px;
+color: #6334d8;
+border: 0;
+background: transparent;
+font-size: 12px;
+font-weight: 800;
 }
-
-
-/* =========================================================
-   PREMIUM
-========================================================= */
-
-.premium-section {
-  position: relative;
-
-  width: min(1200px, 92%);
-
-  margin: 0 auto 100px;
 
-  overflow: hidden;
-
-  border-radius: 25px;
-
-  border: 1px solid rgba(168, 85, 247, 0.2);
-
-  background:
-    radial-gradient(
-      circle at 90% 10%,
-      rgba(255, 122, 24, 0.16),
-      transparent 30%
-    ),
-    radial-gradient(
-      circle at 10% 90%,
-      rgba(124, 58, 237, 0.2),
-      transparent 35%
-    ),
-    linear-gradient(
-      130deg,
-      #0d1235,
-      #080c26
-    );
+.overmaths-site .subjects-note {
+margin: 28px auto 0;
+color: #7b849b;
+font-size: 11px;
+text-align: center;
 }
-
-.premium-glow {
-  position: absolute;
 
-  width: 350px;
-  height: 350px;
+/* HOW IT WORKS */
 
-  right: -130px;
-  bottom: -170px;
-
-  border-radius: 50%;
-
-  background: rgba(124, 58, 237, 0.18);
-
-  filter: blur(60px);
+.overmaths-site .how-section {
+display: grid;
+grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+align-items: center;
+gap: clamp(40px, 8vw, 110px);
+background: linear-gradient(110deg, #f0f3ff, #f8f9ff);
 }
-
-.premium-inner {
-  position: relative;
 
-  display: grid;
-
-  grid-template-columns: 1fr 1fr;
-
-  gap: 60px;
-
-  align-items: center;
-
-  padding: 65px;
+.overmaths-site .how-copy {
+max-width: 490px;
 }
 
-.premium-copy {
-  max-width: 480px;
+.overmaths-site .how-copy .hero-primary {
+margin-top: 20px;
 }
-
-.premium-badge {
-  width: fit-content;
-
-  display: flex;
-  align-items: center;
-  gap: 7px;
-
-  margin-bottom: 20px;
-
-  padding: 7px 11px;
 
-  color: #ffc078;
-
-  border-radius: 30px;
-
-  background: rgba(255, 122, 24, 0.08);
-
-  border: 1px solid rgba(255, 122, 24, 0.18);
-
-  font-size: 9px;
-  font-weight: 800;
-
-  letter-spacing: 1px;
+.overmaths-site .steps-list {
+border-top: 1px solid rgba(23, 32, 62, 0.1);
 }
-
-.premium-copy h2 {
-  font-size: clamp(32px, 4vw, 47px);
-
-  line-height: 1.08;
-
-  letter-spacing: -2px;
 
-  margin-bottom: 18px;
+.overmaths-site .step {
+min-height: 118px;
+padding: 24px 0;
+display: grid;
+grid-template-columns: 40px minmax(0, 1fr) 25px;
+align-items: start;
+gap: 18px;
+border-bottom: 1px solid rgba(23, 32, 62, 0.1);
 }
 
-.premium-copy p {
-  color: #8f98b2;
-
-  font-size: 13px;
-
-  line-height: 1.8;
-
-  margin-bottom: 27px;
+.overmaths-site .step-number {
+padding-top: 3px;
+color: #8b93a8;
+font-size: 12px;
+font-weight: 850;
 }
-
-.premium-action {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-
-  padding: 13px 17px;
-
-  border: none;
-  border-radius: 10px;
-
-  color: white;
-
-  background:
-    linear-gradient(
-      100deg,
-      var(--om-purple),
-      var(--om-orange)
-    );
 
-  font-size: 12px;
-  font-weight: 700;
+.overmaths-site .step h3 {
+margin: 0 0 8px;
+color: #17203e;
+font-size: 17px;
 }
 
-.premium-features {
-  display: grid;
-
-  grid-template-columns: 1fr 1fr;
-
-  gap: 12px;
+.overmaths-site .step p {
+margin: 0;
+color: #66708a;
+font-size: 12px;
+line-height: 1.8;
 }
-
-.premium-feature {
-  display: flex;
-  align-items: flex-start;
-
-  gap: 11px;
 
-  padding: 18px;
-
-  border-radius: 13px;
-
-  background: rgba(255, 255, 255, 0.035);
-
-  border: 1px solid rgba(255, 255, 255, 0.06);
+.overmaths-site .step-arrow {
+color: #6d3be8;
+font-size: 20px;
 }
-
-.premium-feature > span {
-  width: 35px;
-  height: 35px;
 
-  flex-shrink: 0;
+/* PREMIUM */
 
-  display: grid;
-  place-items: center;
-
-  border-radius: 10px;
-
-  color: #bd94ff;
-
-  background: rgba(124, 58, 237, 0.13);
+.overmaths-site .premium-section {
+position: relative;
+display: grid;
+grid-template-columns: minmax(0, 1.1fr) minmax(300px, 0.9fr);
+align-items: center;
+gap: 50px;
+margin: 75px clamp(20px, 5vw, 70px);
+padding: clamp(35px, 5vw, 70px);
+overflow: hidden;
+border: 1px solid rgba(124, 58, 237, 0.2);
+border-radius: 30px;
+background:
+radial-gradient(circle at 90% 10%, rgba(255, 122, 24, 0.18), transparent 30%),
+radial-gradient(circle at 10% 90%, rgba(124, 58, 237, 0.24), transparent 35%),
+linear-gradient(130deg, #171b45, #0b1030);
 }
-
-.premium-feature strong {
-  display: block;
 
-  color: #e4e7f1;
-
-  font-size: 11px;
-
-  margin-bottom: 4px;
+.overmaths-site .premium-eyebrow {
+color: #ffb16e;
+font-size: 10px;
+font-weight: 850;
+letter-spacing: 1.7px;
 }
 
-.premium-feature small {
-  color: #69738e;
-
-  font-size: 9px;
+.overmaths-site .premium-copy h2 {
+max-width: 600px;
+margin: 17px 0;
+color: #fff;
+font-size: clamp(32px, 4vw, 48px);
+font-weight: 850;
+letter-spacing: -1.8px;
+line-height: 1.12;
 }
-
 
-/* =========================================================
-   ABOUT
-========================================================= */
-
-.about {
-  display: grid;
-
-  grid-template-columns: 1fr 1fr;
-
-  gap: 90px;
-
-  align-items: center;
+.overmaths-site .premium-copy > p {
+max-width: 550px;
+color: #c1c9e3;
+font-size: 13px;
+line-height: 1.9;
 }
 
-.about-visual {
-  position: relative;
-
-  min-height: 360px;
-
-  display: grid;
-  place-items: center;
+.overmaths-site .premium-features {
+margin: 25px 0;
+display: grid;
+gap: 10px;
 }
-
-.about-orbit {
-  position: absolute;
-
-  border-radius: 50%;
 
-  border: 1px solid rgba(124, 58, 237, 0.18);
+.overmaths-site .premium-feature {
+padding: 12px 14px;
+display: flex;
+align-items: center;
+gap: 10px;
+border: 1px solid rgba(255, 255, 255, 0.08);
+border-radius: 12px;
+color: #edf0ff;
+background: rgba(255, 255, 255, 0.055);
+font-size: 12px;
 }
 
-.orbit-one {
-  width: 300px;
-  height: 300px;
+.overmaths-site .premium-feature span {
+color: #ffb16e;
+font-weight: 900;
 }
 
-.orbit-two {
-  width: 210px;
-  height: 210px;
-
-  border-color: rgba(255, 122, 24, 0.16);
+.overmaths-site .premium-action {
+min-height: 48px;
 }
-
-.about-center {
-  position: relative;
-  z-index: 2;
-
-  width: 150px;
-  height: 150px;
-
-  display: flex;
-  flex-direction: column;
-
-  align-items: center;
-  justify-content: center;
-
-  border-radius: 50%;
-
-  background:
-    radial-gradient(
-      circle,
-      #182052,
-      #090e2a
-    );
-
-  border: 1px solid rgba(168, 85, 247, 0.3);
 
-  box-shadow:
-    0 0 60px rgba(124, 58, 237, 0.18);
+.overmaths-site .premium-note {
+display: block;
+margin-top: 14px;
+color: #aeb8d7;
+font-size: 10px;
+line-height: 1.7;
 }
 
-.about-center img {
-  width: 105px;
-
-  margin-bottom: 5px;
-
-  mix-blend-mode: screen;
+.overmaths-site .premium-art {
+min-height: 330px;
+position: relative;
+display: grid;
+place-items: center;
 }
 
-.about-center span {
-  color: #69738f;
-
-  font-size: 8px;
+.overmaths-site .premium-orbit {
+position: absolute;
+border: 1px solid rgba(255, 255, 255, 0.15);
+border-radius: 50%;
 }
-
-.about-floating {
-  position: absolute;
-
-  z-index: 3;
-
-  display: flex;
-  align-items: center;
-  gap: 7px;
-
-  padding: 10px 13px;
-
-  border-radius: 10px;
 
-  color: #c7cbe0;
-
-  background: rgba(11, 17, 47, 0.94);
-
-  border: 1px solid rgba(255, 255, 255, 0.08);
-
-  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
-
-  font-size: 10px;
-  font-weight: 700;
+.overmaths-site .orbit-one {
+width: 300px;
+height: 300px;
 }
 
-.floating-top {
-  top: 35px;
-  right: 15%;
+.overmaths-site .orbit-two {
+width: 230px;
+height: 230px;
+border-color: rgba(255, 177, 110, 0.28);
 }
 
-.floating-bottom {
-  bottom: 35px;
-  left: 13%;
+.overmaths-site .premium-glass-card {
+position: relative;
+z-index: 2;
+width: min(260px, 90%);
+padding: 27px;
+border: 1px solid rgba(255, 255, 255, 0.2);
+border-radius: 24px;
+background: linear-gradient(145deg, rgba(255,255,255,.16), rgba(255,255,255,.055));
+box-shadow: 0 30px 80px rgba(0, 0, 0, 0.2);
+backdrop-filter: blur(15px);
+transform: rotate(-4deg);
 }
 
-.about-copy {
-  max-width: 530px;
+.overmaths-site .premium-crown {
+width: 42px;
+height: 42px;
+margin-bottom: 22px;
+display: grid;
+place-items: center;
+border-radius: 13px;
+color: #21173f;
+background: linear-gradient(135deg, #ffd18c, #ff821f);
+font-size: 22px;
 }
 
-.about-copy > p {
-  margin-bottom: 15px;
+.overmaths-site .premium-glass-card small,
+.overmaths-site .premium-card-footer {
+display: block;
+color: #c6cbea;
+font-size: 9px;
+font-weight: 800;
+letter-spacing: 1.5px;
 }
 
-.about-points {
-  margin-top: 28px;
-
-  display: flex;
-  flex-direction: column;
-  gap: 11px;
+.overmaths-site .premium-glass-card strong {
+display: block;
+margin: 12px 0 25px;
+color: white;
+font-size: 28px;
+line-height: 1.15;
+letter-spacing: -1px;
 }
-
-.about-points div {
-  display: flex;
-  align-items: center;
-  gap: 9px;
 
-  color: #9ca5bf;
-
-  font-size: 11px;
+.overmaths-site .premium-card-line {
+display: block;
+width: 100%;
+height: 1px;
+margin-bottom: 17px;
+background: rgba(255, 255, 255, 0.2);
 }
 
-.about-points svg {
-  color: #a67bf8;
+.overmaths-site .premium-bubble {
+position: absolute;
+z-index: 3;
+padding: 11px 16px;
+border: 1px solid rgba(255, 255, 255, 0.1);
+border-radius: 30px;
+color: white;
+background: rgba(255, 255, 255, 0.13);
+backdrop-filter: blur(10px);
+font-size: 11px;
+font-weight: 750;
 }
-
 
-/* =========================================================
-   FINAL CTA
-========================================================= */
+.overmaths-site .bubble-one { top: 35px; right: 0; }
+.overmaths-site .bubble-two { bottom: 38px; left: 0; }
 
-.final-cta {
-  position: relative;
+/* ABOUT */
 
-  padding: 120px 5%;
-
-  text-align: center;
-
-  overflow: hidden;
-
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-
-  background:
-    radial-gradient(
-      circle at 50% 50%,
-      rgba(124, 58, 237, 0.16),
-      transparent 38%
-    );
+.overmaths-site .about-section {
+display: grid;
+grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
+align-items: center;
+gap: clamp(40px, 8vw, 110px);
 }
-
-.cta-glow {
-  position: absolute;
-
-  width: 500px;
-  height: 500px;
-
-  left: 50%;
-  top: 50%;
-
-  transform: translate(-50%, -50%);
 
-  border-radius: 50%;
-
-  background: rgba(124, 58, 237, 0.07);
-
-  filter: blur(70px);
+.overmaths-site .about-copy {
+max-width: 600px;
 }
-
-.cta-content {
-  position: relative;
-  z-index: 2;
-
-  max-width: 680px;
 
-  margin: auto;
+.overmaths-site .about-copy .text-link {
+margin-top: 12px;
 }
 
-.cta-content .section-eyebrow {
-  justify-content: center;
+.overmaths-site .about-visual {
+min-height: 350px;
+position: relative;
+display: grid;
+place-items: center;
 }
 
-.final-cta h2 {
-  font-size: clamp(36px, 5vw, 55px);
-
-  line-height: 1.05;
-
-  letter-spacing: -2.5px;
-
-  margin-bottom: 18px;
+.overmaths-site .about-orbit {
+position: absolute;
+width: 300px;
+height: 300px;
+border: 1px solid rgba(124, 58, 237, 0.16);
+border-radius: 50%;
 }
-
-.final-cta p {
-  max-width: 560px;
 
-  margin: 0 auto 28px;
-
-  color: #8992ad;
-
-  font-size: 14px;
-
-  line-height: 1.8;
+.overmaths-site .about-center {
+position: relative;
+z-index: 2;
+width: 225px;
+height: 225px;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+gap: 10px;
+border: 1px solid rgba(124, 58, 237, 0.2);
+border-radius: 35px;
+background: #fff;
+box-shadow: 0 20px 70px rgba(67, 45, 145, 0.12);
+transform: rotate(-4deg);
 }
-
-.cta-actions {
-  display: flex;
-  align-items: center;
-  justify-content: center;
 
-  gap: 18px;
-
-  flex-wrap: wrap;
+.overmaths-site .about-logo {
+width: 55px;
+height: 55px;
+display: grid;
+place-items: center;
+border-radius: 17px;
+color: #fff;
+background: linear-gradient(135deg, #6d3be8, #ff821f);
+font-size: 30px;
+font-weight: 900;
 }
-
-.cta-login {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-
-  border: none;
-  background: transparent;
-
-  color: #737d97;
 
-  font-size: 11px;
+.overmaths-site .about-center strong {
+color: #17203e;
+font-size: 24px;
+font-weight: 850;
+letter-spacing: -1px;
 }
 
-.cta-login strong {
-  color: #b58cff;
+.overmaths-site .about-center strong span {
+color: #6d3be8;
 }
 
-
-/* =========================================================
-   FOOTER
-========================================================= */
-
-.site-footer {
-  background: #030611;
-
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+.overmaths-site .about-center small {
+color: #7b849b;
+font-size: 8px;
+font-weight: 850;
+letter-spacing: 1.3px;
 }
-
-.footer-top {
-  width: min(1200px, 92%);
-
-  margin: auto;
-
-  padding: 65px 0;
-
-  display: grid;
-
-  grid-template-columns: 2fr 1fr 1fr 1fr;
 
-  gap: 50px;
+.overmaths-site .about-floating {
+position: absolute;
+z-index: 3;
+padding: 13px 16px;
+border: 1px solid rgba(23, 32, 62, 0.08);
+border-radius: 13px;
+color: #28314e;
+background: rgba(255, 255, 255, 0.96);
+box-shadow: 0 12px 35px rgba(23, 32, 62, 0.1);
+font-size: 11px;
+font-weight: 800;
 }
 
-.footer-brand img {
-  width: 145px;
+.overmaths-site .about-float-top { top: 28px; right: 0; }
+.overmaths-site .about-float-bottom { bottom: 25px; left: 0; }
 
-  margin-bottom: 13px;
+/* FINAL CTA */
 
-  mix-blend-mode: screen;
+.overmaths-site .final-cta {
+position: relative;
+min-height: 420px;
+padding: 85px clamp(24px, 9vw, 130px);
+display: flex;
+align-items: center;
+background:
+linear-gradient(90deg, rgba(7, 12, 35, 0.92), rgba(7, 12, 35, 0.55)),
+url("https://images.openai.com/static-rsc-4/88imW6NgAxODqiJKtKMyUXwv6p57AhZrN17mFgwpmd8cu_zZHsd8wOhA0pAngKgpGbkSNozfljX81x7IMGuUbDfWgZMKw5URHhystmxHLaFAHh0lqJzMWL9QAx5Y8cxDK_npPAsUOWceUUyXB6SIpNAUOvxfuUtR-9f2XnL29JqZ8oGkDmszFoxpygYfuzeM?purpose=fullsizet")
+center / cover no-repeat;
 }
 
-.footer-brand p {
-  max-width: 290px;
-
-  color: #69738e;
-
-  font-size: 11px;
-
-  line-height: 1.7;
-
-  margin-bottom: 17px;
+.overmaths-site .final-cta-content {
+width: min(650px, 100%);
 }
 
-.footer-social {
-  display: flex;
-  gap: 7px;
+.overmaths-site .cta-eyebrow {
+color: #ffc18e;
 }
-
-.footer-social button {
-  width: 29px;
-  height: 29px;
-
-  display: grid;
-  place-items: center;
-
-  border-radius: 8px;
-
-  color: #858da5;
 
-  background: rgba(255, 255, 255, 0.04);
-
-  border: 1px solid rgba(255, 255, 255, 0.06);
-
-  font-size: 11px;
+.overmaths-site .final-cta h2 {
+margin: 18px 0;
+color: #fff;
+font-size: clamp(37px, 5vw, 58px);
+font-weight: 850;
+letter-spacing: -2px;
+line-height: 1.08;
 }
 
-.footer-social button:hover {
-  color: white;
-  border-color: rgba(168, 85, 247, 0.3);
+.overmaths-site .final-cta p {
+max-width: 520px;
+color: #e0e5f7;
+font-size: 14px;
+line-height: 1.9;
 }
 
-.footer-column {
-  display: flex;
-  flex-direction: column;
-
-  gap: 12px;
+.overmaths-site .cta-login {
+padding: 10px;
+border: 0;
+color: #e0e5f7;
+background: transparent;
+font-size: 12px;
+font-weight: 700;
 }
-
-.footer-column h4 {
-  margin-bottom: 5px;
 
-  color: #d9dcea;
+/* FOOTER */
 
-  font-size: 11px;
+.overmaths-site .site-footer {
+padding: 60px clamp(24px, 7vw, 100px) 20px;
+color: #a0a9c5;
+background: #0b1030;
+border-top: 1px solid rgba(255, 255, 255, 0.09);
 }
-
-.footer-column button {
-  width: fit-content;
-
-  padding: 0;
-
-  border: none;
-  background: transparent;
-
-  color: #69738e;
 
-  font-size: 10px;
-
-  transition: 0.2s ease;
+.overmaths-site .footer-main {
+width: min(1200px, 100%);
+margin: 0 auto;
+padding-bottom: 45px;
+display: grid;
+grid-template-columns: 1.5fr repeat(3, 1fr);
+gap: 40px;
 }
 
-.footer-column button:hover {
-  color: #c39cff;
+.overmaths-site .footer-brand-button .brand-name {
+color: #fff;
 }
-
-.footer-bottom {
-  width: min(1200px, 92%);
-
-  margin: auto;
-
-  padding: 18px 0;
 
-  display: flex;
-  justify-content: space-between;
-
-  gap: 20px;
+.overmaths-site .footer-brand p {
+max-width: 250px;
+margin-top: 18px;
+color: #a0a9c5;
+font-size: 12px;
+line-height: 1.8;
+}
 
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+.overmaths-site .footer-column {
+display: flex;
+flex-direction: column;
+align-items: flex-start;
+gap: 14px;
+}
 
-  color: #4d566e;
+.overmaths-site .footer-column h4 {
+margin: 0 0 6px;
+color: #f0f2ff;
+font-size: 13px;
+}
 
-  font-size: 9px;
+.overmaths-site .footer-column a,
+.overmaths-site .footer-column button {
+padding: 0;
+border: 0;
+color: #a0a9c5;
+background: transparent;
+font-size: 12px;
+text-align: left;
 }
 
+.overmaths-site .footer-bottom {
+width: min(1200px, 100%);
+margin: 0 auto;
+padding-top: 20px;
+display: flex;
+flex-wrap: wrap;
+justify-content: space-between;
+gap: 12px;
+border-top: 1px solid rgba(255, 255, 255, 0.1);
+color: #9aa3bf;
+font-size: 10px;
+}
 
-/* =========================================================
-   RESPONSIVE
-========================================================= */
+/* RESPONSIVE */
 
 @media (max-width: 1050px) {
-
-  .desktop-nav {
-    display: none;
-  }
-
-  .hero-inner {
-    grid-template-columns: 1fr;
-
-    text-align: center;
-  }
-
-  .hero-copy {
-    max-width: 700px;
-    margin: auto;
-  }
-
-  .hero-eyebrow {
-    margin-left: auto;
-    margin-right: auto;
-  }
-
-  .hero-text {
-    margin-left: auto;
-    margin-right: auto;
-  }
-
-  .hero-actions,
-  .hero-trust {
-    justify-content: center;
-  }
-
-  .hero-visual {
-    max-width: 650px;
-    width: 100%;
-
-    margin: auto;
-  }
-
-  .how-layout {
-    grid-template-columns: 1fr;
-
-    gap: 50px;
-  }
-
-  .how-copy {
-    max-width: 650px;
-  }
-
-  .premium-inner {
-    grid-template-columns: 1fr;
-  }
-
-  .about {
-    grid-template-columns: 1fr;
-  }
-
-  .about-visual {
-    order: 2;
-  }
-
-  .about-copy {
-    max-width: 700px;
-  }
-
-  .footer-top {
-    grid-template-columns: 2fr 1fr 1fr;
-  }
+.overmaths-site .site-header {
+gap: 16px;
+padding-right: 24px;
+padding-left: 24px;
 }
 
-
-@media (max-width: 750px) {
-
-  .site-header {
-    height: 70px;
-  }
-
-  .brand {
-    width: 130px;
-  }
-
-  .brand img {
-    width: 125px;
-  }
-
-  .nav-login {
-    display: none;
-  }
-
-  .nav-register {
-    padding: 9px 12px;
-  }
-
-  .hero {
-    padding-top: 65px;
-    padding-bottom: 70px;
-  }
-
-  .hero-copy h1 {
-    font-size: 46px;
-
-    letter-spacing: -2.5px;
-  }
-
-  .hero-text {
-    font-size: 14px;
-  }
-
-  .hero-trust {
-    gap: 13px;
-  }
-
-  .hero-visual {
-    min-height: 420px;
-  }
-
-  .exam-window {
-    width: 100%;
-  }
-
-  .floating-stat {
-    transform: scale(0.85);
-  }
-
-  .stat-one {
-    left: -20px;
-  }
-
-  .stat-two {
-    right: -20px;
-  }
-
-  .stats-inner {
-    grid-template-columns: 1fr 1fr;
-
-    gap: 20px;
-
-    padding: 25px 0;
-  }
-
-  .stat-divider {
-    display: none;
-  }
-
-  .subject-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .premium-inner {
-    padding: 40px 25px;
-  }
-
-  .premium-features {
-    grid-template-columns: 1fr;
-  }
-
-  .footer-top {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .footer-brand {
-    grid-column: 1 / -1;
-  }
-
-  .footer-bottom {
-    flex-direction: column;
-  }
+.overmaths-site .desktop-nav {
+gap: 14px;
 }
 
+.overmaths-site .desktop-nav a {
+font-size: 11px;
+}
 
-@media (max-width: 520px) {
+.overmaths-site .hero {
+gap: 40px;
+}
 
-  .site-nav {
-    width: 90%;
-  }
+.overmaths-site .hero-photo-visual {
+min-height: 440px;
+}
 
-  .nav-register span {
-    display: none;
-  }
+.overmaths-site .subject-grid {
+grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+}
 
-  .nav-register {
-    width: 38px;
-    height: 38px;
+@media (max-width: 760px) {
+.overmaths-site .site-header {
+min-height: 72px;
+flex-wrap: wrap;
+padding: 14px 20px;
+}
 
-    justify-content: center;
+.overmaths-site .desktop-nav {
+order: 3;
+width: 100%;
+padding: 4px 0 2px;
+justify-content: flex-start;
+overflow-x: auto;
+}
 
-    padding: 0;
-  }
+.overmaths-site .desktop-nav a {
+flex: 0 0 auto;
+font-size: 11px;
+}
 
-  .hero {
-    padding-top: 50px;
-  }
+.overmaths-site .brand-mark {
+width: 34px;
+height: 34px;
+}
 
-  .hero-copy h1 {
-    font-size: 39px;
+.overmaths-site .brand-name {
+font-size: 19px;
+}
 
-    letter-spacing: -2px;
-  }
+.overmaths-site .nav-login,
+.overmaths-site .nav-register {
+min-height: 38px;
+padding: 0 12px;
+font-size: 11px;
+}
 
-  .hero-actions {
-    flex-direction: column;
+.overmaths-site .hero {
+grid-template-columns: 1fr;
+padding: 55px 24px 65px;
+}
 
-    width: 100%;
-  }
+.overmaths-site .hero-copy h1 {
+font-size: clamp(43px, 9vw, 62px);
+letter-spacing: -2.5px;
+}
 
-  .hero-primary,
-  .hero-secondary {
-    width: 100%;
-  }
+.overmaths-site .hero-text {
+font-size: 14px;
+}
 
-  .hero-trust {
-    flex-direction: column;
-  }
+.overmaths-site .hero-photo-visual {
+width: 100%;
+min-height: 390px;
+margin-top: 8px;
+}
 
-  .hero-visual {
-    min-height: 350px;
-  }
+.overmaths-site .hero-photo-frame {
+inset: 10px 5px;
+border-width: 5px;
+border-radius: 22px;
+}
 
-  .exam-window {
-    border-radius: 15px;
-  }
+.overmaths-site .stat-one {
+top: 18px;
+left: -5px;
+}
 
-  .window-top {
-    padding: 0 13px;
-  }
+.overmaths-site .stat-two {
+right: -5px;
+bottom: 35px;
+}
 
-  .exam-content {
-    padding: 18px;
-  }
+.overmaths-site .photo-note {
+top: 22px;
+left: 20px;
+font-size: 8px;
+}
 
-  .exam-content h3 {
-    font-size: 14px;
-  }
+.overmaths-site .stats-strip {
+grid-template-columns: repeat(2, 1fr);
+gap: 18px 0;
+margin-top: -12px;
+}
 
-  .floating-stat {
-    display: none;
-  }
+.overmaths-site .stat-divider {
+display: none;
+}
 
-  .section {
-    padding: 75px 0;
-  }
+.overmaths-site .stat-block strong {
+font-size: 13px;
+}
 
-  .section-heading h2,
-  .how-copy h2,
-  .about-copy h2 {
-    font-size: 32px;
+.overmaths-site .stat-block span {
+font-size: 10px;
+}
 
-    letter-spacing: -1.5px;
-  }
+.overmaths-site .section-pad {
+padding: 70px 24px;
+}
 
-  .premium-section {
-    width: 94%;
+.overmaths-site .how-section,
+.overmaths-site .about-section,
+.overmaths-site .premium-section {
+grid-template-columns: 1fr;
+}
 
-    margin-bottom: 70px;
-  }
+.overmaths-site .premium-section {
+margin: 30px 16px;
+padding: 35px 24px;
+gap: 25px;
+}
 
-  .premium-copy h2 {
-    font-size: 32px;
-  }
+.overmaths-site .premium-art {
+min-height: 300px;
+}
 
-  .about-visual {
-    min-height: 290px;
-  }
+.overmaths-site .footer-main {
+grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+}
 
-  .orbit-one {
-    width: 240px;
-    height: 240px;
-  }
+@media (max-width: 480px) {
+.overmaths-site .header-actions {
+gap: 6px;
+}
 
-  .orbit-two {
-    width: 170px;
-    height: 170px;
-  }
+.overmaths-site .nav-login {
+display: none;
+}
 
-  .about-center {
-    width: 125px;
-    height: 125px;
-  }
+.overmaths-site .hero {
+padding: 42px 18px 55px;
+}
 
-  .about-center img {
-    width: 85px;
-  }
+.overmaths-site .hero-copy h1 {
+font-size: 43px;
+}
 
-  .floating-top {
-    right: 0;
-  }
+.overmaths-site .hero-actions {
+align-items: stretch;
+flex-direction: column;
+}
 
-  .floating-bottom {
-    left: 0;
-  }
+.overmaths-site .hero-actions > * {
+width: 100%;
+}
 
-  .final-cta {
-    padding: 85px 5%;
-  }
+.overmaths-site .hero-secondary {
+min-height: 43px;
+}
 
-  .final-cta h2 {
-    font-size: 35px;
-  }
+.overmaths-site .trust-row {
+gap: 10px;
+}
 
-  .footer-top {
-    grid-template-columns: 1fr;
-  }
+.overmaths-site .trust-row span {
+font-size: 10px;
+}
 
-  .footer-brand {
-    grid-column: auto;
-  }
+.overmaths-site .hero-photo-visual {
+min-height: 310px;
+}
+
+.overmaths-site .floating-stat {
+padding: 9px;
+gap: 7px;
+}
+
+.overmaths-site .floating-stat strong {
+font-size: 10px;
+}
+
+.overmaths-site .floating-stat div span {
+font-size: 9px;
+}
+
+.overmaths-site .stat-icon {
+width: 28px;
+height: 28px;
+font-size: 13px;
+}
+
+.overmaths-site .photo-note {
+max-width: 75%;
+font-size: 7px;
+}
+
+.overmaths-site .hero-photo-caption {
+left: 12px;
+right: 12px;
+bottom: 13px;
+}
+
+.overmaths-site .hero-photo-caption strong {
+font-size: 11px;
+}
+
+.overmaths-site .hero-photo-caption small {
+font-size: 9px;
+}
+
+.overmaths-site .subject-grid {
+grid-template-columns: 1fr;
+}
+
+.overmaths-site .subject-item {
+min-height: auto;
+}
+
+.overmaths-site .subject-item p {
+min-height: auto;
+}
+
+.overmaths-site .step {
+grid-template-columns: 30px minmax(0, 1fr) 18px;
+gap: 10px;
+}
+
+.overmaths-site .about-orbit {
+width: 260px;
+height: 260px;
+}
+
+.overmaths-site .about-center {
+width: 195px;
+height: 195px;
+}
+
+.overmaths-site .about-float-top {
+right: -5px;
+}
+
+.overmaths-site .about-float-bottom {
+left: -5px;
+}
+
+.overmaths-site .final-cta {
+padding: 65px 22px;
+}
+
+.overmaths-site .footer-main {
+gap: 30px 20px;
+}
+
+.overmaths-site .footer-bottom {
+flex-direction: column;
+}
+}
+
+@media (prefers-reduced-motion: reduce) {
+.overmaths-site *,
+.overmaths-site *::before,
+.overmaths-site *::after {
+scroll-behavior: auto !important;
+transition-duration: 0.01ms !important;
+}
 }
