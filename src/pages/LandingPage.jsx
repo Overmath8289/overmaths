@@ -35,7 +35,7 @@ onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
 aria-label="Overmaths home"
 > <span className="brand-mark">O</span> <span className="brand-name">Over<span>maths</span></span> </button>
 
-```
+
     <nav className="desktop-nav" aria-label="Main navigation">
       <a href="#home">Home</a>
       <a href="#subjects">Subjects</a>
@@ -328,7 +328,7 @@ aria-label="Overmaths home"
     </div>
   </footer>
 </div>
-```
+
 
 );
 }
