@@ -1,7 +1,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { supabase } from "../supabase";
+import { supabase } from "../supabaseClient";
 import MathText from "../components/MathText";
 import "./Quiz.css";
 
