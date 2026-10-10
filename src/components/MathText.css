@@ -1,0 +1,106 @@
+
+/* Overmaths mathematical content */
+
+.math-text {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+/* KaTeX should inherit the surrounding quiz typography. */
+.math-text .katex {
+  font-size: 1em;
+  max-width: 100%;
+}
+
+/* Display equations can scroll horizontally when very long. */
+.math-text-block {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin: 0.75rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25rem 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.math-text-block .katex-display {
+  width: max-content;
+  min-width: 100%;
+  margin: 0;
+  padding: 0.25rem 0.5rem;
+  text-align: center;
+}
+
+/* Inline equations should remain aligned with sentence text. */
+.math-text .katex,
+.math-text .katex-display {
+  white-space: normal;
+}
+
+/* Question and answer text should be comfortable on small screens. */
+.quiz-question .math-text,
+.quiz-option .math-text,
+.quiz-explanation .math-text {
+  font-size: clamp(0.95rem, 1.8vw, 1.08rem);
+  line-height: 1.8;
+}
+
+/* Prevent images or other content from expanding a quiz card. */
+.quiz-question,
+.quiz-option,
+.quiz-explanation {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Tablets and smaller laptops */
+@media (max-width: 768px) {
+  .math-text {
+    line-height: 1.8;
+  }
+
+  .math-text-block {
+    margin: 0.6rem 0;
+  }
+
+  .math-text-block .katex-display {
+    text-align: left;
+  }
+}
+
+/* Mobile phones */
+@media (max-width: 480px) {
+  .math-text {
+    font-size: 0.96rem;
+    line-height: 1.85;
+  }
+
+  .math-text-block {
+    margin: 0.5rem 0;
+  }
+
+  .math-text-block .katex-display {
+    padding: 0.25rem 0.35rem;
+  }
+
+  .math-text .katex {
+    font-size: 0.98em;
+  }
+}
+
+/* Respect users who prefer less animation. */
+@media (prefers-reduced-motion: reduce) {
+  .math-text,
+  .math-text-block {
+    scroll-behavior: auto;
+  }
+}

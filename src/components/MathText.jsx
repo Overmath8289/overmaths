@@ -1,93 +1,18 @@
+
 import React from "react";
 import { InlineMath, BlockMath } from "react-katex";
 import "katex/dist/katex.min.css";
-
-/*
-  MathText
-  --------
-
-  Purpose:
-  - Render existing LaTeX.
-  - Clean common raw mathematical notation from Supabase.
-  - Convert common Unicode maths symbols to LaTeX.
-  - Convert fractions, powers, subscripts and set notation.
-  - Support:
-      $x^2$
-      $$x^2$$
-      \(x^2\)
-      \[x^2\]
-      raw LaTeX
-      raw/plain mathematical expressions
-      normal text mixed with mathematics.
-
-  Important:
-  - Existing \[...\] and \(...\) are preserved.
-  - Existing $...$ and $$...$$ are preserved.
-  - Normal English text is not converted into mathematics.
-*/
-
-/* =========================================================
-   BASIC CLEANING
-========================================================= */
-
-function cleanText(text) {
-  return String(text)
-    .replace(/\uFEFF/g, "")
-    .replace(/\u200B/g, "")
-    .replace(/\u200C/g, "")
-    .replace(/\u200D/g, "")
-    .replace(/\u00A0/g, " ")
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n");
-}
-
-/* =========================================================
-   LATEX COMMAND MAP
-========================================================= */
+import "./MathText.css";
 
 const GREEK = {
-  α: "\\alpha",
-  β: "\\beta",
-  γ: "\\gamma",
-  δ: "\\delta",
-  ε: "\\epsilon",
-  ϵ: "\\varepsilon",
-  ζ: "\\zeta",
-  η: "\\eta",
-  θ: "\\theta",
-  ϑ: "\\vartheta",
-  ι: "\\iota",
-  κ: "\\kappa",
-  λ: "\\lambda",
-  μ: "\\mu",
-  ν: "\\nu",
-  ξ: "\\xi",
-  ο: "o",
-  π: "\\pi",
-  ϖ: "\\varpi",
-  ρ: "\\rho",
-  ϱ: "\\varrho",
-  σ: "\\sigma",
-  ς: "\\varsigma",
-  τ: "\\tau",
-  υ: "\\upsilon",
-  φ: "\\phi",
-  ϕ: "\\varphi",
-  χ: "\\chi",
-  ψ: "\\psi",
-  ω: "\\omega",
-
-  Γ: "\\Gamma",
-  Δ: "\\Delta",
-  Θ: "\\Theta",
-  Λ: "\\Lambda",
-  Ξ: "\\Xi",
-  Π: "\\Pi",
-  Σ: "\\Sigma",
-  Υ: "\\Upsilon",
-  Φ: "\\Phi",
-  Ψ: "\\Psi",
-  Ω: "\\Omega",
+  "α": "\\alpha", "β": "\\beta", "γ": "\\gamma",
+  "δ": "\\delta", "ε": "\\epsilon", "ϵ": "\\varepsilon",
+  "θ": "\\theta", "λ": "\\lambda", "μ": "\\mu",
+  "π": "\\pi", "ρ": "\\rho", "σ": "\\sigma",
+  "φ": "\\phi", "ϕ": "\\varphi", "ω": "\\omega",
+  "Γ": "\\Gamma", "Δ": "\\Delta", "Θ": "\\Theta",
+  "Λ": "\\Lambda", "Π": "\\Pi", "Σ": "\\Sigma",
+  "Φ": "\\Phi", "Ω": "\\Omega"
 };
 
 const SYMBOLS = {
@@ -95,157 +20,100 @@ const SYMBOLS = {
   "≥": "\\geq",
   "≠": "\\neq",
   "≈": "\\approx",
-  "≃": "\\simeq",
-  "≅": "\\cong",
   "∞": "\\infty",
   "∈": "\\in",
   "∉": "\\notin",
   "⊂": "\\subset",
-  "⊃": "\\supset",
   "⊆": "\\subseteq",
+  "⊃": "\\supset",
   "⊇": "\\supseteq",
   "∩": "\\cap",
   "∪": "\\cup",
   "∅": "\\varnothing",
-  "→": "\\to",
-  "←": "\\leftarrow",
-  "↔": "\\leftrightarrow",
   "±": "\\pm",
   "∓": "\\mp",
   "×": "\\times",
   "÷": "\\div",
   "·": "\\cdot",
+  "→": "\\to",
+  "←": "\\leftarrow",
+  "↔": "\\leftrightarrow",
   "∝": "\\propto",
+  "√": "\\sqrt{}",
   "∑": "\\sum",
   "∏": "\\prod",
   "∫": "\\int",
   "∂": "\\partial",
-  "∇": "\\nabla",
+  "∇": "\\nabla"
 };
 
-/* =========================================================
-   SMALL HELPERS
-========================================================= */
+const SUPER = {
+  "⁰": "0", "¹": "1", "²": "2", "³": "3",
+  "⁴": "4", "⁵": "5", "⁶": "6", "⁷": "7",
+  "⁸": "8", "⁹": "9", "⁺": "+", "⁻": "-",
+  "⁽": "(", "⁾": ")"
+};
 
-function replaceUnicodeSymbols(text) {
+const SUB = {
+  "₀": "0", "₁": "1", "₂": "2", "₃": "3",
+  "₄": "4", "₅": "5", "₆": "6", "₇": "7",
+  "₈": "8", "₉": "9", "₊": "+", "₋": "-",
+  "₍": "(", "₎": ")"
+};
+
+function cleanText(value) {
+  return String(value)
+    .replace(/\uFEFF/g, "")
+    .replace(/[\u200B-\u200D]/g, "")
+    .replace(/\u00A0/g, " ")
+    .replace(/\r\n?/g, "\n")
+    .replace(/\bExplanation\s+Explanation\s*:/gi, "Explanation:")
+    .replace(/\bExplanationExplanation\s*:/gi, "Explanation:");
+}
+
+function replaceSymbols(text) {
   let result = text;
 
-  Object.entries(GREEK).forEach(([symbol, latex]) => {
-    result = result.replaceAll(symbol, latex);
-  });
+  for (const [symbol, command] of Object.entries(GREEK)) {
+    result = result.replaceAll(symbol, command);
+  }
 
-  Object.entries(SYMBOLS).forEach(([symbol, latex]) => {
-    result = result.replaceAll(symbol, latex);
-  });
+  for (const [symbol, command] of Object.entries(SYMBOLS)) {
+    if (symbol === "√") continue;
+    result = result.replaceAll(symbol, command);
+  }
 
   return result;
 }
 
-/*
-  Convert Unicode superscripts.
-  Example:
-    x²     -> x^2
-    x³     -> x^3
-    10⁻⁴   -> 10^-4
-*/
-
-function convertUnicodeSuperscripts(text) {
-  const superscriptMap = {
-    "⁰": "0",
-    "¹": "1",
-    "²": "2",
-    "³": "3",
-    "⁴": "4",
-    "⁵": "5",
-    "⁶": "6",
-    "⁷": "7",
-    "⁸": "8",
-    "⁹": "9",
-    "⁺": "+",
-    "⁻": "-",
-    "⁽": "(",
-    "⁾": ")",
-  };
-
-  let result = text;
-
-  result = result.replace(
-    /([A-Za-z0-9.)]+)([⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁽⁾]+)/g,
-    (_, base, superscripts) => {
-      const converted = [...superscripts]
-        .map((char) => superscriptMap[char] ?? char)
-        .join("");
-
-      return `${base}^{${converted}}`;
-    }
+function convertSuperscripts(text) {
+  return text.replace(
+    /([A-Za-z0-9.)])([⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁽⁾]+)/g,
+    (_, base, exponent) =>
+      `${base}^{${[...exponent].map(c => SUPER[c]).join("")}}`
   );
-
-  return result;
 }
 
-/*
-  Convert Unicode subscripts.
-  Example:
-    x₁ -> x_1
-    R₂ -> R_2
-*/
-
-function convertUnicodeSubscripts(text) {
-  const subscriptMap = {
-    "₀": "0",
-    "₁": "1",
-    "₂": "2",
-    "₃": "3",
-    "₄": "4",
-    "₅": "5",
-    "₆": "6",
-    "₇": "7",
-    "₈": "8",
-    "₉": "9",
-    "₊": "+",
-    "₋": "-",
-    "₍": "(",
-    "₎": ")",
-  };
-
+function convertSubscripts(text) {
   return text.replace(
     /([A-Za-z])([₀₁₂₃₄₅₆₇₈₉₊₋₍₎]+)/g,
-    (_, base, subscripts) => {
-      const converted = [...subscripts]
-        .map((char) => subscriptMap[char] ?? char)
-        .join("");
-
-      return `${base}_{${converted}}`;
-    }
+    (_, base, subscript) =>
+      `${base}_{${[...subscript].map(c => SUB[c]).join("")}}`
   );
 }
 
-/*
-  Convert a normal slash fraction when it clearly looks mathematical.
+function convertRoots(text) {
+  return text
+    .replace(/√\s*\(([^()]+)\)/g, "\\sqrt{$1}")
+    .replace(/√\s*([A-Za-z0-9]+)/g, "\\sqrt{$1}");
+}
 
-  Examples:
-    5/9       -> \frac{5}{9}
-    3/4       -> \frac{3}{4}
-
-  We deliberately do NOT convert every slash.
-*/
-
-function convertSimpleFractions(text) {
+function convertFractions(text) {
   return text.replace(
     /(?<![A-Za-z0-9])(-?\d+(?:\.\d+)?)\s*\/\s*(-?\d+(?:\.\d+)?)(?![A-Za-z0-9])/g,
     "\\frac{$1}{$2}"
   );
 }
-
-/*
-  Convert common powers.
-
-  Examples:
-    x^2       -> x^{2}
-    x^-2      -> x^{-2}
-    10^4      -> 10^{4}
-    10^{-4}   stays essentially unchanged
-*/
 
 function normalizePowers(text) {
   return text.replace(
@@ -254,627 +122,198 @@ function normalizePowers(text) {
   );
 }
 
-/*
-  Convert escaped/plain subscripts.
-
-  Examples:
-    R_1       -> R_{1}
-    R\_1      -> R_{1}
-    x_12      -> x_{12}
-*/
-
-function normalizeSubscripts(text) {
+function normalizeSubscriptSyntax(text) {
+  // Avoid adding braces a second time to already formatted subscripts.
   return text
     .replace(
-      /([A-Za-zΑ-Ωα-ω])\\?_([A-Za-z0-9]+)/g,
-      "$1_{$2}"
+      /([A-Za-zΑ-Ωα-ω])\\?_([A-Za-z0-9]+)(?![A-Za-z0-9])/g,
+      (_, base, sub) => `${base}_{${sub}}`
     )
     .replace(
-      /([A-Za-zΑ-Ωα-ω])_([A-Za-z0-9]+)/g,
+      /([A-Za-zΑ-Ωα-ω])_\{([^{}]+)\}/g,
       "$1_{$2}"
     );
 }
 
-/*
-  Square root.
+function cleanMath(value) {
+  let result = value.trim();
 
-  Examples:
-    √x       -> \sqrt{x}
-    √(x+1)   -> \sqrt{x+1}
-*/
-
-function normalizeSquareRoots(text) {
-  let result = text;
-
-  result = result.replace(
-    /√\s*\(([^()]*)\)/g,
-    "\\sqrt{$1}"
-  );
-
-  result = result.replace(
-    /√\s*([A-Za-z0-9]+)/g,
-    "\\sqrt{$1}"
-  );
-
-  return result;
-}
-
-/*
-  Normalize multiplication.
-
-  We only change multiplication inside mathematical content.
-*/
-
-function normalizeMultiplication(text) {
-  return text
-    .replace(/\s*[×]\s*/g, " \\times ")
-    .replace(/\s+\*\s+/g, " \\times ");
-}
-
-/*
-  Escape set braces when the expression looks like set notation.
-
-  Example:
-    M={x:3<x≤8}
-
-  becomes:
-    M=\{x:3<x\leq8\}
-*/
-
-function normalizeSetNotation(text) {
-  let result = text;
-
-  result = result.replace(
-    /([A-Za-z])\s*=\s*\{([^{}]+)\}/g,
-    (_, name, contents) => {
-      return `${name}=\\{${contents}\\}`;
-    }
-  );
-
-  return result;
-}
-
-/*
-  Clean raw mathematical content.
-*/
-
-function cleanMath(math) {
-  let result = math.trim();
-
-  result = replaceUnicodeSymbols(result);
-  result = convertUnicodeSuperscripts(result);
-  result = convertUnicodeSubscripts(result);
-  result = normalizeSquareRoots(result);
-  result = normalizeSubscripts(result);
+  result = replaceSymbols(result);
+  result = convertSuperscripts(result);
+  result = convertSubscripts(result);
+  result = convertRoots(result);
+  result = normalizeSubscriptSyntax(result);
   result = normalizePowers(result);
-  result = convertSimpleFractions(result);
-  result = normalizeMultiplication(result);
-  result = normalizeSetNotation(result);
+  result = convertFractions(result);
 
-  /*
-    Clean common spacing around operators.
-    We do not aggressively remove all spaces because
-    readable LaTeX is useful for debugging.
-  */
-  result = result
-    .replace(/\s*≤\s*/g, " \\leq ")
-    .replace(/\s*≥\s*/g, " \\geq ")
-    .replace(/\s*∈\s*/g, " \\in ")
-    .replace(/\s*∩\s*/g, " \\cap ")
-    .replace(/\s*∪\s*/g, " \\cup ");
+  // Convert multiplication symbols without modifying normal words.
+  result = result.replace(/×/g, "\\times");
 
   return result.trim();
 }
 
-/* =========================================================
-   DETECT EXPLICIT MATH
-========================================================= */
+function looksLikeMath(value) {
+  const text = value.trim();
+  if (!text) return false;
 
-function hasExplicitMathDelimiters(text) {
-  return (
-    text.includes("\\[") ||
-    text.includes("\\]") ||
-    text.includes("\\(") ||
-    text.includes("\\)") ||
-    text.includes("$$") ||
-    /\$[^$]+\$/.test(text)
+  // Raw LaTeX commands are a strong signal.
+  if (
+    /\\(?:frac|sqrt|mathrm|mathbf|times|div|alpha|beta|theta|pi|leq|geq|neq|infty|sum|int)\b/.test(text)
+  ) {
+    return true;
+  }
+
+  // Recognizable mathematical symbols.
+  if (/[≤≥≠≈∈∉⊂⊃⊆⊇∩∪∅√∞±∓×÷∝∑∏∫∂∇αβγδεθλμπρσφω]/.test(text)) {
+    return true;
+  }
+
+  // Simple numeric fraction, such as 3/4.
+  if (/^-?\d+(?:\.\d+)?\s*\/\s*-?\d+(?:\.\d+)?$/.test(text)) {
+    return true;
+  }
+
+  // Powers, equations and inequalities.
+  if (/^[A-Za-z0-9()]+\s*\^\s*-?[A-Za-z0-9.+-]+$/.test(text)) {
+    return true;
+  }
+
+  if (/^[A-Za-z0-9()]+\s*(?:=|<|>|≤|≥|≠)\s*.+$/.test(text)) {
+    return true;
+  }
+
+  // Do not convert arbitrary English sentences just because
+  // they contain a plus sign, slash or equals sign.
+  return false;
+}
+
+function renderMath(math, display, key) {
+  const value = cleanMath(math);
+
+  if (!value) return null;
+
+  return display ? (
+    <div className="math-text-block" key={key}>
+      <BlockMath math={value} />
+    </div>
+  ) : (
+    <InlineMath math={value} key={key} />
   );
 }
 
-/* =========================================================
-   PARSE \[...\] AND \(...\)
-========================================================= */
+function parseContent(text, prefix = "math") {
+  // Recognize existing delimiters without changing the original text.
+  const delimiter =
+    /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\]|\$[^$\n]+?\$|\\\([\s\S]+?\\\))/g;
 
-function parseExplicitLatex(text) {
   const parts = [];
-  let buffer = "";
-  let i = 0;
-
-  const flushText = () => {
-    if (buffer) {
-      parts.push({
-        type: "text",
-        value: buffer,
-      });
-
-      buffer = "";
-    }
-  };
-
-  while (i < text.length) {
-    /* Block math \[...\] */
-    if (text.startsWith("\\[", i)) {
-      const end = text.indexOf("\\]", i + 2);
-
-      if (end !== -1) {
-        flushText();
-
-        parts.push({
-          type: "block",
-          value: text.slice(i + 2, end),
-        });
-
-        i = end + 2;
-        continue;
-      }
-    }
-
-    /* Inline math \(...\) */
-    if (text.startsWith("\\(", i)) {
-      const end = text.indexOf("\\)", i + 2);
-
-      if (end !== -1) {
-        flushText();
-
-        parts.push({
-          type: "inline",
-          value: text.slice(i + 2, end),
-        });
-
-        i = end + 2;
-        continue;
-      }
-    }
-
-    buffer += text[i];
-    i++;
-  }
-
-  flushText();
-
-  return parts;
-}
-
-/* =========================================================
-   PARSE $...$ AND $$...$$
-========================================================= */
-
-function parseDollarMath(text) {
-  const parts = [];
-  const regex = /(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$)/g;
-
   let lastIndex = 0;
   let match;
+  let index = 0;
 
-  while ((match = regex.exec(text)) !== null) {
+  while ((match = delimiter.exec(text)) !== null) {
     if (match.index > lastIndex) {
       parts.push({
         type: "text",
         value: text.slice(lastIndex, match.index),
+        key: `${prefix}-${index++}`
       });
     }
 
-    const value = match[0];
+    const token = match[0];
+    let value;
+    let display = false;
 
-    if (value.startsWith("$$")) {
-      parts.push({
-        type: "block",
-        value: value.slice(2, -2),
-      });
+    if (token.startsWith("$$")) {
+      value = token.slice(2, -2);
+      display = true;
+    } else if (token.startsWith("\\[")) {
+      value = token.slice(2, -2);
+      display = true;
+    } else if (token.startsWith("\\(")) {
+      value = token.slice(2, -2);
     } else {
-      parts.push({
-        type: "inline",
-        value: value.slice(1, -1),
-      });
+      value = token.slice(1, -1);
+      display = token.startsWith("$$");
     }
 
-    lastIndex = regex.lastIndex;
+    parts.push({
+      type: "math",
+      value,
+      display,
+      key: `${prefix}-${index++}`
+    });
+
+    lastIndex = delimiter.lastIndex;
   }
 
   if (lastIndex < text.length) {
     parts.push({
       type: "text",
       value: text.slice(lastIndex),
+      key: `${prefix}-${index++}`
     });
   }
 
-  return parts;
-}
+  // Automatically render only lines that are clearly equations.
+  return parts.flatMap(part => {
+    if (part.type !== "text") return [part];
 
-/* =========================================================
-   FIND RAW LATEX COMMANDS
-========================================================= */
+    const lines = part.value.split("\n");
 
-const LATEX_COMMANDS =
-  /\\(?:frac|sqrt|text|mathrm|mathbf|times|div|pm|mp|cdot|Omega|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|pi|rho|sigma|phi|omega|Delta|Sigma|Pi|Phi|leq|geq|neq|in|cap|cup|subset|subseteq|supset|supseteq|infty|sum|prod|int|partial|nabla)\b/;
+    return lines.flatMap((line, lineIndex) => {
+      const output = [];
 
-function containsRawLatex(text) {
-  return LATEX_COMMANDS.test(text);
-}
-
-/* =========================================================
-   RAW LATEX READER
-========================================================= */
-
-function readBalanced(text, startIndex) {
-  if (text[startIndex] !== "{") {
-    return {
-      value: "",
-      end: startIndex,
-    };
-  }
-
-  let depth = 0;
-
-  for (let i = startIndex; i < text.length; i++) {
-    if (text[i] === "{") {
-      depth++;
-    } else if (text[i] === "}") {
-      depth--;
-
-      if (depth === 0) {
-        return {
-          value: text.slice(startIndex + 1, i),
-          end: i + 1,
-        };
+      if (looksLikeMath(line)) {
+        output.push({
+          type: "math",
+          value: line,
+          display: true,
+          key: `${part.key}-auto-${lineIndex}`
+        });
+      } else if (line) {
+        output.push({
+          type: "text",
+          value: line,
+          key: `${part.key}-text-${lineIndex}`
+        });
       }
-    }
-  }
-
-  return {
-    value: text.slice(startIndex + 1),
-    end: text.length,
-  };
-}
-
-/* =========================================================
-   RAW MATH DETECTION
-========================================================= */
-
-/*
-  We only automatically treat a chunk as mathematics when
-  there are recognizable mathematical signals.
-
-  This prevents ordinary English from becoming math.
-*/
-
-function looksLikeMath(text) {
-  const value = text.trim();
-
-  if (!value) return false;
-
-  /* Already has LaTeX commands */
-  if (containsRawLatex(value)) return true;
-
-  /* Mathematical Unicode symbols */
-  if (
-    /[≤≥≠≈∈∉⊂⊃⊆⊇∩∪∅√∞±∓×÷·∝∑∏∫∂∇αβγδεζηθικλμνξπρστφχψωΑΒΓΔΘΛΞΠΣΥΦΨΩ]/.test(
-      value
-    )
-  ) {
-    return true;
-  }
-
-  /* Fractions */
-  if (
-    /^\s*-?\d+(?:\.\d+)?\s*\/\s*-?\d+(?:\.\d+)?\s*$/.test(
-      value
-    )
-  ) {
-    return true;
-  }
-
-  /* Powers */
-  if (/^[A-Za-z0-9()]+\s*\^\s*-?[A-Za-z0-9.+-]+$/.test(value)) {
-    return true;
-  }
-
-  /* Simple equation / inequality */
-  if (
-    /[A-Za-z0-9)]\s*(?:=|<|>|≤|≥|≠)\s*[A-Za-z0-9({√π]/.test(
-      value
-    )
-  ) {
-    return true;
-  }
-
-  /* Set notation */
-  if (
-    /^[A-Za-z]\s*=\s*\{[\s\S]+\}$/.test(value)
-  ) {
-    return true;
-  }
-
-  /* Expressions containing multiple mathematical operators */
-  const operatorCount = (
-    value.match(/[=<>+\-*/^]/g) || []
-  ).length;
-
-  if (
-    operatorCount >= 2 &&
-    /[A-Za-z0-9]/.test(value)
-  ) {
-    return true;
-  }
-
-  return false;
-}
-
-/* =========================================================
-   CONVERT A RAW MATH CHUNK
-========================================================= */
-
-function convertRawMathChunk(text) {
-  return cleanMath(text);
-}
-
-/* =========================================================
-   AUTOMATIC RAW MATH PARSER
-========================================================= */
-
-/*
-  This parser is intentionally conservative.
-
-  It looks for:
-  - equations
-  - inequalities
-  - fractions
-  - powers
-  - set expressions
-  - mathematical Unicode
-  - obvious mathematical chunks
-*/
-
-function parseAutomaticMath(text) {
-  const parts = [];
-  let buffer = "";
-
-  const flushText = () => {
-    if (buffer) {
-      parts.push({
-        type: "text",
-        value: buffer,
-      });
-
-      buffer = "";
-    }
-  };
-
-  /*
-    First handle line-by-line mathematical expressions.
-
-    This is particularly useful for Supabase explanations
-    where formulas may appear on their own line.
-  */
-
-  const lines = text.split("\n");
-
-  lines.forEach((line, lineIndex) => {
-    const trimmed = line.trim();
-
-    if (trimmed && looksLikeMath(trimmed)) {
-      flushText();
-
-      parts.push({
-        type: "block",
-        value: convertRawMathChunk(trimmed),
-      });
-    } else {
-      buffer += line;
 
       if (lineIndex < lines.length - 1) {
-        buffer += "\n";
+        output.push({
+          type: "newline",
+          key: `${part.key}-newline-${lineIndex}`
+        });
       }
-    }
-  });
 
-  flushText();
-
-  return parts;
-}
-
-/* =========================================================
-   MIXED CONTENT
-========================================================= */
-
-function renderParts(parts, keyPrefix) {
-  return parts.map((part, index) => {
-    const key = `${keyPrefix}-${index}`;
-
-    if (part.type === "block") {
-      return (
-        <BlockMath
-          key={key}
-          math={cleanMath(part.value)}
-        />
-      );
-    }
-
-    if (part.type === "inline") {
-      return (
-        <InlineMath
-          key={key}
-          math={cleanMath(part.value)}
-        />
-      );
-    }
-
-    return (
-      <React.Fragment key={key}>
-        {renderTextWithAutomaticMath(part.value, key)}
-      </React.Fragment>
-    );
+      return output;
+    });
   });
 }
-
-/*
-  Handle a normal text section.
-
-  We don't turn every piece of text into mathematics.
-*/
-
-function renderTextWithAutomaticMath(text, keyPrefix) {
-  if (!text) return null;
-
-  /*
-    First check explicit LaTeX delimiters.
-  */
-  if (
-    text.includes("\\[") ||
-    text.includes("\\(")
-  ) {
-    return renderParts(
-      parseExplicitLatex(text),
-      keyPrefix
-    );
-  }
-
-  /*
-    Then dollar delimiters.
-  */
-  if (
-    text.includes("$")
-  ) {
-    return renderParts(
-      parseDollarMath(text),
-      keyPrefix
-    );
-  }
-
-  /*
-    Look for lines that are clearly mathematics.
-  */
-  const automaticParts = parseAutomaticMath(text);
-
-  if (
-    automaticParts.length === 1 &&
-    automaticParts[0].type === "text"
-  ) {
-    return automaticParts[0].value;
-  }
-
-  return renderParts(
-    automaticParts,
-    keyPrefix
-  );
-}
-
-/* =========================================================
-   MAIN COMPONENT
-========================================================= */
 
 export default function MathText({
   children,
   className = "",
+  as: Component = "div"
 }) {
-  if (
-    children === null ||
-    children === undefined
-  ) {
-    return null;
-  }
+  if (children === null || children === undefined) return null;
 
-  let text = cleanText(children);
+  const text = cleanText(children);
+  const parts = parseContent(text);
 
-  /*
-    Preserve your existing explanation cleanup.
-  */
-  text = text.replace(
-    /\bExplanation\s+Explanation\s*:/gi,
-    "Explanation:"
-  );
-
-  text = text.replace(
-    /\bExplanationExplanation\s*:/gi,
-    "Explanation:"
-  );
-
-  const trimmed = text.trim();
-
-  /*
-    Entire \[...\] expression.
-  */
-  if (
-    trimmed.startsWith("\\[") &&
-    trimmed.endsWith("\\]")
-  ) {
-    return (
-      <span className={`math-text ${className}`}>
-        <BlockMath
-          math={trimmed.slice(2, -2).trim()}
-        />
-      </span>
-    );
-  }
-
-  /*
-    Entire \(...\) expression.
-  */
-  if (
-    trimmed.startsWith("\\(") &&
-    trimmed.endsWith("\\)")
-  ) {
-    return (
-      <span className={`math-text ${className}`}>
-        <InlineMath
-          math={trimmed.slice(2, -2).trim()}
-        />
-      </span>
-    );
-  }
-
-  /*
-    Entire $$...$$ expression.
-  */
-  if (
-    trimmed.startsWith("$$") &&
-    trimmed.endsWith("$$")
-  ) {
-    return (
-      <span className={`math-text ${className}`}>
-        <BlockMath
-          math={trimmed.slice(2, -2).trim()}
-        />
-      </span>
-    );
-  }
-
-  /*
-    Entire $...$ expression.
-  */
-  if (
-    trimmed.startsWith("$") &&
-    trimmed.endsWith("$") &&
-    trimmed.length > 2
-  ) {
-    return (
-      <span className={`math-text ${className}`}>
-        <InlineMath
-          math={trimmed.slice(1, -1).trim()}
-        />
-      </span>
-    );
-  }
-
-  /*
-    Normal mixed content.
-  */
   return (
-    <span className={`math-text ${className}`}>
-      {renderTextWithAutomaticMath(
-        text,
-        "math"
-      )}
-    </span>
+    <Component className={`math-text ${className}`.trim()}>
+      {parts.map(part => {
+        if (part.type === "math") {
+          return renderMath(part.value, part.display, part.key);
+        }
+
+        if (part.type === "newline") {
+          return <br key={part.key} />;
+        }
+
+        return <React.Fragment key={part.key}>{part.value}</React.Fragment>;
+      })}
+    </Component>
   );
 }
