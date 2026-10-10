@@ -1,140 +1,60 @@
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
 
-import {
-  useLocation,
-  useNavigate,
-} from "react-router-dom";
-
-import { supabase } from "../supabaseClient";
-
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { supabase } from "../supabase";
 import MathText from "../components/MathText";
-
 import "./Quiz.css";
 
 const API_URL = "https://overmaths.onrender.com";
 
-const TIMEOUT_ANSWER = "__TIMEOUT__";
-const SKIPPED_ANSWER = "__SKIPPED__";
+const LETTERS = ["A", "B", "C", "D"];
 
-function normalizeAnswer(answer) {
-  if (!answer) return null;
+const normalizeAnswer = (answer) => {
+  if (answer == null) return "";
+  const value = String(answer).trim().toUpperCase();
+  const match = value.match(/^[A-D]$/);
+  if (match) return value;
 
-  const value = String(answer)
-    .trim()
-    .toLowerCase();
+  const optionMatch = value.match(/^OPTION\s+([A-D])$/);
+  if (optionMatch) return optionMatch[1];
 
-  if (
-    value === "a" ||
-    value === "option a" ||
-    value === "option_a" ||
-    value === "option-a"
-  ) {
-    return "A";
+  return value;
+};
+
+const shuffle = (items) => {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
   }
+  return result;
+};
 
-  if (
-    value === "b" ||
-    value === "option b" ||
-    value === "option_b" ||
-    value === "option-b"
-  ) {
-    return "B";
-  }
+const formatTime = (seconds) => {
+  const safe = Math.max(0, Number(seconds) || 0);
+  const minutes = Math.floor(safe / 60);
+  const remaining = safe % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remaining).padStart(2, "0")}`;
+};
 
-  if (
-    value === "c" ||
-    value === "option c" ||
-    value === "option_c" ||
-    value === "option-c"
-  ) {
-    return "C";
-  }
-
-  if (
-    value === "d" ||
-    value === "option d" ||
-    value === "option_d" ||
-    value === "option-d"
-  ) {
-    return "D";
-  }
-
-  return null;
-}
-
-function isAnswerCorrect(
-  selectedAnswer,
-  correctAnswer
-) {
-  const selected =
-    normalizeAnswer(selectedAnswer);
-
-  const correct =
-    normalizeAnswer(correctAnswer);
-
-  return Boolean(
-    selected &&
-      correct &&
-      selected === correct
+const getCorrectAnswer = (question) =>
+  normalizeAnswer(
+    question?.correction_answer ??
+      question?.correct_answer ??
+      question?.correctAnswer
   );
-}
 
-function shuffleArray(array) {
-  const shuffled = [...array];
-
-  for (
-    let i = shuffled.length - 1;
-    i > 0;
-    i -= 1
-  ) {
-    const randomIndex = Math.floor(
-      Math.random() * (i + 1)
-    );
-
-    [
-      shuffled[i],
-      shuffled[randomIndex],
-    ] = [
-      shuffled[randomIndex],
-      shuffled[i],
-    ];
-  }
-
-  return shuffled;
-}
-
-function buildOptions(question) {
-  return [
-    {
-      key: "A",
-      text: question.option_a ?? "",
-    },
-    {
-      key: "B",
-      text: question.option_b ?? "",
-    },
-    {
-      key: "C",
-      text: question.option_c ?? "",
-    },
-    {
-      key: "D",
-      text: question.option_d ?? "",
-    },
-  ];
-}
+const getOptions = (question) =>
+  LETTERS.map((letter) => ({
+    letter,
+    text: question?.[`option_${letter.toLowerCase()}`] ?? "",
+  }));
 
 export default function Quiz() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const navigationState =
-    location.state || {};
+  const navigationState = location.state || {};
 
   const {
     subject = "",
@@ -149,1208 +69,353 @@ export default function Quiz() {
     examType = "",
   } = navigationState;
 
-  const isExaminationMode =
-    String(mode)
-      .toLowerCase()
-      .includes("examination") ||
-    String(mode)
-      .toLowerCase()
-      .includes("exam");
+  const isExamMode = /exam|examination|test/i.test(mode);
 
-  const parsedQuestionCount =
-    Math.max(
-      1,
-      Math.min(
-        Number(questionCount) || 10,
-        100
-      )
-    );
+  const [questions, setQuestions] = useState([]);
+  const [answers, setAnswers] = useState({});
+  const [markedForReview, setMarkedForReview] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(Number(timePerQuestion) || 30);
+  const [sessionSeconds, setSessionSeconds] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [showQuitModal, setShowQuitModal] = useState(false);
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [showCalculator, setShowCalculator] = useState(false);
+  const [calculatorValue, setCalculatorValue] = useState("");
+  const [calculatorResult, setCalculatorResult] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
+  const [userId, setUserId] = useState(null);
 
-  const parsedTimePerQuestion =
-    Math.max(
-      5,
-      Number(timePerQuestion) || 30
-    );
+  const timerRef = useRef(null);
+  const sessionTimerRef = useRef(null);
+  const savedRef = useRef(false);
 
-  const [questions, setQuestions] =
-    useState([]);
+  const currentQuestion = questions[currentIndex];
 
-  const [loading, setLoading] =
-    useState(true);
+  const answeredCount = Object.keys(answers).length;
+  const reviewCount = markedForReview.length;
+  const unansweredCount = Math.max(0, questions.length - answeredCount);
+  const progress = questions.length
+    ? Math.round((answeredCount / questions.length) * 100)
+    : 0;
 
-  const [loadingError, setLoadingError] =
-    useState("");
+  const correctCount = useMemo(
+    () =>
+      questions.reduce((count, question, index) => {
+        const selected = answers[index];
+        return selected && selected === getCorrectAnswer(question)
+          ? count + 1
+          : count;
+      }, 0),
+    [questions, answers]
+  );
 
-  const [currentIndex, setCurrentIndex] =
-    useState(0);
+  const incorrectCount = Math.max(0, answeredCount - correctCount);
+  const percentage = questions.length
+    ? Math.round((correctCount / questions.length) * 100)
+    : 0;
 
-  const [answers, setAnswers] =
-    useState({});
+  const stopTimers = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
+    timerRef.current = null;
+    sessionTimerRef.current = null;
+  }, []);
 
-  const [answerTimes, setAnswerTimes] =
-    useState({});
+  const fetchQuestions = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    setSubmitted(false);
+    setAnswers({});
+    setMarkedForReview([]);
+    setCurrentIndex(0);
+    setSessionSeconds(0);
+    setSaveMessage("");
+    savedRef.current = false;
 
-  const [
-    skippedQuestions,
-    setSkippedQuestions,
-  ] = useState({});
+    try {
+      const params = new URLSearchParams();
+      if (courseId) params.set("course_id", String(courseId));
+      else if (subject) params.set("subject", subject);
 
-  const answersRef =
-    useRef({});
-
-  const answerTimesRef =
-    useRef({});
-
-  const skippedRef =
-    useRef({});
-
-  const userRef =
-    useRef(null);
-
-  const [timeLeft, setTimeLeft] =
-    useState(parsedTimePerQuestion);
-
-  const [showFeedback, setShowFeedback] =
-    useState(false);
-
-  const [feedbackType, setFeedbackType] =
-    useState("");
-
-  const [
-    sessionFinished,
-    setSessionFinished,
-  ] = useState(false);
-
-  const [finalScore, setFinalScore] =
-    useState(0);
-
-  const [user, setUser] =
-    useState(null);
-
-  const [saving, setSaving] =
-    useState(false);
-
-  const [
-    showQuitModal,
-    setShowQuitModal,
-  ] = useState(false);
-
-  /* =========================================================
-     CALCULATOR
-     ========================================================= */
-
-  const [
-    showCalculator,
-    setShowCalculator,
-  ] = useState(false);
-
-  const [
-    calculatorDisplay,
-    setCalculatorDisplay,
-  ] = useState("0");
-
-  function calculatorInput(value) {
-    setCalculatorDisplay((previous) => {
-      if (previous === "Error") {
-        return value;
+      if (topic && topic.toLowerCase() !== "mixed") {
+        params.set("topic", topic);
       }
 
-      if (
-        previous === "0" &&
-        /^[0-9.]$/.test(value)
-      ) {
-        return value;
-      }
+      params.set("limit", String(Number(questionCount) || 10));
 
-      if (
-        /^[+\-*/]$/.test(value) &&
-        /[+\-*/]$/.test(previous)
-      ) {
-        return previous;
-      }
-
-      if (
-        value === "." &&
-        /(?:^|[+\-*/])[^+\-*/]*\.$/.test(
-          previous
-        )
-      ) {
-        return previous;
-      }
-
-      return previous + value;
-    });
-  }
-
-  function clearCalculator() {
-    setCalculatorDisplay("0");
-  }
-
-  function backspaceCalculator() {
-    setCalculatorDisplay((previous) => {
-      if (
-        previous === "Error" ||
-        previous.length <= 1
-      ) {
-        return "0";
-      }
-
-      return previous.slice(0, -1);
-    });
-  }
-
-  function calculateCalculator() {
-    setCalculatorDisplay((previous) => {
-      try {
-        const expression =
-          previous.replace(
-            /[^0-9+\-*/().%]/g,
-            ""
-          );
-
-        if (!expression) {
-          return "0";
-        }
-
-        const percentExpression =
-          expression.replace(
-            /(\d+(?:\.\d+)?)%/g,
-            "($1/100)"
-          );
-
-        const result = Function(
-          `"use strict"; return (${percentExpression})`
-        )();
-
-        if (
-          typeof result !== "number" ||
-          !Number.isFinite(result)
-        ) {
-          return "Error";
-        }
-
-        return String(
-          Math.round(
-            (result + Number.EPSILON) *
-              100000000
-          ) / 100000000
-        );
-      } catch {
-        return "Error";
-      }
-    });
-  }
-
-  function calculatorSquareRoot() {
-    setCalculatorDisplay((previous) => {
-      try {
-        const value =
-          Number(previous);
-
-        if (
-          !Number.isFinite(value) ||
-          value < 0
-        ) {
-          return "Error";
-        }
-
-        return String(
-          Math.sqrt(value)
-        );
-      } catch {
-        return "Error";
-      }
-    });
-  }
-
-  useEffect(() => {
-    if (!showCalculator) {
-      return undefined;
-    }
-
-    function handleCalculatorKeyboard(
-      event
-    ) {
-      if (
-        event.key >= "0" &&
-        event.key <= "9"
-      ) {
-        calculatorInput(event.key);
-      } else if (
-        ["+", "-", "*", "/"].includes(
-          event.key
-        )
-      ) {
-        calculatorInput(event.key);
-      } else if (
-        event.key === "."
-      ) {
-        calculatorInput(".");
-      } else if (
-        event.key === "%"
-      ) {
-        calculatorInput("%");
-      } else if (
-        event.key === "Enter" ||
-        event.key === "="
-      ) {
-        event.preventDefault();
-        calculateCalculator();
-      } else if (
-        event.key === "Backspace"
-      ) {
-        backspaceCalculator();
-      } else if (
-        event.key === "Escape"
-      ) {
-        setShowCalculator(false);
-      }
-    }
-
-    window.addEventListener(
-      "keydown",
-      handleCalculatorKeyboard
-    );
-
-    return () => {
-      window.removeEventListener(
-        "keydown",
-        handleCalculatorKeyboard
+      const response = await fetch(
+        `${API_URL}/api/questions?${params.toString()}`
       );
-    };
-  }, [showCalculator]);
 
-  useEffect(() => {
-    if (!showCalculator) {
-      return;
-    }
+      if (!response.ok) {
+        throw new Error("We couldn't load the questions. Please try again.");
+      }
 
-    const previousOverflow =
-      document.body.style.overflow;
+      const data = await response.json();
+      const list = Array.isArray(data)
+        ? data
+        : data.questions || data.data || [];
 
-    /*
-     * Keep the quiz itself from horizontally
-     * shifting while the calculator is open.
-     * The timer intentionally continues running.
-     */
-    document.body.style.overflowX =
-      "hidden";
-
-    return () => {
-      document.body.style.overflowX =
-        previousOverflow;
-    };
-  }, [showCalculator]);
-
-  const currentQuestion =
-    questions[currentIndex];
-
-  useEffect(() => {
-    answersRef.current = answers;
-  }, [answers]);
-
-  useEffect(() => {
-    answerTimesRef.current =
-      answerTimes;
-  }, [answerTimes]);
-
-  useEffect(() => {
-    skippedRef.current =
-      skippedQuestions;
-  }, [skippedQuestions]);
-
-  useEffect(() => {
-    let mounted = true;
-
-    async function loadUser() {
-      try {
-        const {
-          data: { session },
-          error,
-        } = await supabase.auth.getSession();
-
-        if (error) {
-          console.error(
-            "QUIZ SESSION ERROR:",
-            error
-          );
-          return;
-        }
-
-        const authUser =
-          session?.user || null;
-
-        userRef.current =
-          authUser;
-
-        if (mounted) {
-          setUser(authUser);
-        }
-      } catch (error) {
-        console.error(
-          "QUIZ SESSION ERROR:",
-          error
+      if (!list.length) {
+        throw new Error(
+          "No questions were found for this selection. Try another topic or subject."
         );
       }
+
+      setQuestions(shuffle(list));
+      setTimeLeft(Number(timePerQuestion) || 30);
+    } catch (err) {
+      setError(err.message || "Something went wrong while loading questions.");
+    } finally {
+      setLoading(false);
     }
+  }, [courseId, subject, topic, questionCount, timePerQuestion]);
+
+  useEffect(() => {
+    fetchQuestions();
+  }, [fetchQuestions]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadUser = async () => {
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (active) setUserId(data?.user?.id || null);
+      } catch {
+        if (active) setUserId(null);
+      }
+    };
 
     loadUser();
-
     return () => {
-      mounted = false;
+      active = false;
     };
   }, []);
 
   useEffect(() => {
-    let mounted = true;
+    if (loading || submitted || !questions.length) return undefined;
 
-    async function loadQuestions() {
-      setLoading(true);
-      setLoadingError("");
-
-      try {
-        const params =
-          new URLSearchParams();
-
-        if (courseId) {
-          params.set(
-            "course_id",
-            String(courseId)
-          );
-        } else if (subject) {
-          params.set(
-            "subject",
-            subject
-          );
-        } else {
-          throw new Error(
-            "No subject or course was selected."
-          );
-        }
-
-        if (
-          topic &&
-          topic !== "mixed"
-        ) {
-          params.set(
-            "topic",
-            topic
-          );
-        }
-
-        params.set(
-          "limit",
-          String(parsedQuestionCount)
-        );
-
-        const response =
-          await fetch(
-            `${API_URL}/api/questions?${params.toString()}`
-          );
-
-        if (!response.ok) {
-          let message =
-            "Unable to load questions.";
-
-          try {
-            const errorData =
-              await response.json();
-
-            if (errorData?.error) {
-              message =
-                errorData.error;
-            }
-          } catch {
-            // Keep default message.
-          }
-
-          throw new Error(message);
-        }
-
-        const data =
-          await response.json();
-
-        const loadedQuestions =
-          Array.isArray(
-            data?.questions
-          )
-            ? data.questions
-            : [];
-
-        if (
-          !loadedQuestions.length
-        ) {
-          throw new Error(
-            "No questions are available for this selection yet."
-          );
-        }
-
-        const shuffledQuestions =
-          shuffleArray(
-            loadedQuestions
-          ).slice(
-            0,
-            parsedQuestionCount
-          );
-
-        if (mounted) {
-          setQuestions(
-            shuffledQuestions
-          );
-
-          setCurrentIndex(0);
-        }
-      } catch (error) {
-        console.error(
-          "QUIZ LOAD ERROR:",
-          error
-        );
-
-        if (mounted) {
-          setLoadingError(
-            error?.message ||
-              "Something went wrong while loading the questions."
-          );
-        }
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadQuestions();
+    sessionTimerRef.current = setInterval(() => {
+      setSessionSeconds((seconds) => seconds + 1);
+    }, 1000);
 
     return () => {
-      mounted = false;
+      if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
     };
-  }, [
-    courseId,
-    subject,
-    topic,
-    parsedQuestionCount,
-  ]);
+  }, [loading, submitted, questions.length]);
 
   useEffect(() => {
-    if (
-      !currentQuestion ||
-      sessionFinished
-    ) {
-      return;
-    }
-
-    setTimeLeft(
-      parsedTimePerQuestion
-    );
-
-    setShowFeedback(false);
-    setFeedbackType("");
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
-  }, [
-    currentIndex,
-    currentQuestion?.id,
-    parsedTimePerQuestion,
-    sessionFinished,
-  ]);
-
-  useEffect(() => {
-    if (
-      !currentQuestion ||
-      sessionFinished ||
-      showFeedback
-    ) {
+    if (loading || submitted || !questions.length || !isExamMode) {
       return undefined;
     }
 
-    const timer =
-      window.setInterval(() => {
-        setTimeLeft(
-          (previousTime) => {
-            if (
-              previousTime <= 1
-            ) {
-              window.clearInterval(
-                timer
-              );
+    setTimeLeft(Number(timePerQuestion) || 30);
 
-              handleTimeout(
-                currentQuestion
-              );
+    timerRef.current = setInterval(() => {
+      setTimeLeft((remaining) => {
+        if (remaining <= 1) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
 
-              return 0;
-            }
+          setCurrentIndex((index) => {
+            if (index < questions.length - 1) return index + 1;
 
-            return (
-              previousTime - 1
-            );
-          }
-        );
-      }, 1000);
+            setSubmitted(true);
+            return index;
+          });
 
-    return () => {
-      window.clearInterval(
-        timer
-      );
-    };
-  }, [
-    currentQuestion?.id,
-    sessionFinished,
-    showFeedback,
-    parsedTimePerQuestion,
-  ]);
-
-  function saveAnswer(
-    questionId,
-    selectedAnswer,
-    secondsUsed
-  ) {
-    const nextAnswers = {
-      ...answersRef.current,
-      [questionId]:
-        selectedAnswer,
-    };
-
-    const nextAnswerTimes = {
-      ...answerTimesRef.current,
-      [questionId]:
-        secondsUsed,
-    };
-
-    answersRef.current =
-      nextAnswers;
-
-    answerTimesRef.current =
-      nextAnswerTimes;
-
-    setAnswers(nextAnswers);
-
-    setAnswerTimes(
-      nextAnswerTimes
-    );
-
-    if (
-      skippedRef.current[
-        questionId
-      ]
-    ) {
-      const nextSkipped = {
-        ...skippedRef.current,
-      };
-
-      delete nextSkipped[
-        questionId
-      ];
-
-      skippedRef.current =
-        nextSkipped;
-
-      setSkippedQuestions(
-        nextSkipped
-      );
-    }
-  }
-
-  function markSkipped(
-    questionId,
-    secondsUsed = 0
-  ) {
-    if (!questionId) return;
-
-    saveAnswer(
-      questionId,
-      SKIPPED_ANSWER,
-      secondsUsed
-    );
-
-    const nextSkipped = {
-      ...skippedRef.current,
-      [questionId]: true,
-    };
-
-    skippedRef.current =
-      nextSkipped;
-
-    setSkippedQuestions(
-      nextSkipped
-    );
-  }
-
-  function handleAnswer(
-    selectedAnswer
-  ) {
-    if (
-      !currentQuestion ||
-      sessionFinished
-    ) {
-      return;
-    }
-
-    if (
-      !isExaminationMode &&
-      answersRef.current[
-        currentQuestion.id
-      ]
-    ) {
-      return;
-    }
-
-    const secondsUsed =
-      Math.max(
-        0,
-        parsedTimePerQuestion -
-          timeLeft
-      );
-
-    saveAnswer(
-      currentQuestion.id,
-      selectedAnswer,
-      secondsUsed
-    );
-
-    if (!isExaminationMode) {
-      const correct =
-        isAnswerCorrect(
-          selectedAnswer,
-          currentQuestion.correction_answer
-        );
-
-      setFeedbackType(
-        correct
-          ? "correct"
-          : "wrong"
-      );
-
-      setShowFeedback(true);
-    }
-  }
-
-  function handleTimeout(
-    question
-  ) {
-    if (
-      !question ||
-      sessionFinished
-    ) {
-      return;
-    }
-
-    if (
-      answersRef.current[
-        question.id
-      ]
-    ) {
-      return;
-    }
-
-    markSkipped(
-      question.id,
-      parsedTimePerQuestion
-    );
-
-    if (isExaminationMode) {
-      if (
-        currentIndex >=
-        questions.length - 1
-      ) {
-        finishSession({
-          ...answersRef.current,
-          [question.id]:
-            SKIPPED_ANSWER,
-        });
-      } else {
-        setCurrentIndex(
-          (index) =>
-            index + 1
-        );
-      }
-
-      return;
-    }
-
-    setFeedbackType(
-      "timeout"
-    );
-
-    setShowFeedback(true);
-  }
-
-  function calculateScore(
-    answerMap
-  ) {
-    return questions.reduce(
-      (score, question) => {
-        const selectedAnswer =
-          answerMap?.[
-            question.id
-          ];
-
-        if (
-          selectedAnswer &&
-          selectedAnswer !==
-            TIMEOUT_ANSWER &&
-          selectedAnswer !==
-            SKIPPED_ANSWER &&
-          isAnswerCorrect(
-            selectedAnswer,
-            question.correction_answer
-          )
-        ) {
-          return score + 1;
+          return 0;
         }
 
-        return score;
-      },
-      0
-    );
-  }
+        return remaining - 1;
+      });
+    }, 1000);
 
-  async function finishSession(
-    finalAnswers =
-      answersRef.current
-  ) {
-    if (
-      sessionFinished ||
-      saving
-    ) {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [currentIndex, loading, submitted, questions.length, isExamMode, timePerQuestion]);
+
+  useEffect(() => {
+    if (submitted) stopTimers();
+  }, [submitted, stopTimers]);
+
+  const chooseAnswer = (letter) => {
+    if (submitted) return;
+
+    setAnswers((previous) => ({ ...previous, [currentIndex]: letter }));
+  };
+
+  const goToQuestion = (index) => {
+    if (index < 0 || index >= questions.length || submitted) return;
+    setCurrentIndex(index);
+  };
+
+  const goNext = () => {
+    if (currentIndex < questions.length - 1) {
+      setCurrentIndex((index) => index + 1);
+    } else if (isExamMode) {
+      setShowSubmitModal(true);
+    } else {
+      setSubmitted(true);
+    }
+  };
+
+  const goPrevious = () => {
+    setCurrentIndex((index) => Math.max(0, index - 1));
+  };
+
+  const skipQuestion = () => {
+    if (currentIndex < questions.length - 1) {
+      setCurrentIndex((index) => index + 1);
+    } else {
+      setShowSubmitModal(true);
+    }
+  };
+
+  const toggleReview = () => {
+    setMarkedForReview((previous) =>
+      previous.includes(currentIndex)
+        ? previous.filter((index) => index !== currentIndex)
+        : [...previous, currentIndex]
+    );
+  };
+
+  const submitQuiz = async () => {
+    setShowSubmitModal(false);
+    setSubmitted(true);
+    stopTimers();
+
+    if (savedRef.current) return;
+    savedRef.current = true;
+
+    if (!userId || !questions.length) {
+      setSaveMessage(
+        "Your result is shown below. Sign in to save quiz attempts to your account."
+      );
       return;
     }
 
     setSaving(true);
 
-    const score =
-      calculateScore(
-        finalAnswers
-      );
-
-    setFinalScore(score);
-    setSessionFinished(true);
-    setShowFeedback(false);
-    setShowCalculator(false);
-
-    if (!isExaminationMode) {
-      setSaving(false);
-      return;
-    }
-
     try {
-      const currentUser =
-        userRef.current || user;
-
-      if (!currentUser) {
-        console.warn(
-          "QUIZ SAVE WARNING: No authenticated session found."
-        );
-
-        return;
-      }
-
-      const {
-        data: appUser,
-        error: appUserError,
-      } = await supabase
-        .from("users")
-        .select("id")
-        .eq(
-          "auth_user_id",
-          currentUser.id
-        )
-        .single();
-
-      if (
-        appUserError ||
-        !appUser
-      ) {
-        console.error(
-          "Unable to find Overmaths user:",
-          appUserError
-        );
-
-        throw new Error(
-          "Unable to identify your Overmaths profile."
-        );
-      }
-
       const attemptPayload = {
-        user_id: appUser.id,
-        score,
-        total_questions:
-          questions.length,
-        mode:
-          "Examination Mode",
+        user_id: userId,
+        course_id: courseId ? Number(courseId) : null,
+        score: correctCount,
+        total_questions: questions.length,
+        mode: mode || "Practice Mode",
       };
 
-      const {
-        data: attempt,
-        error: attemptError,
-      } =
-        await supabase
-          .from("quiz_attempts")
-          .insert(
-            attemptPayload
-          )
-          .select()
-          .single();
+      const { data: attempt, error: attemptError } = await supabase
+        .from("quiz_attempts")
+        .insert(attemptPayload)
+        .select("id")
+        .single();
 
-      if (attemptError) {
-        console.warn(
-          "QUIZ ATTEMPT SAVE WARNING:",
-          attemptError
-        );
+      if (attemptError) throw attemptError;
+
+      const answerRows = questions.map((question, index) => {
+        const selected = answers[index] || null;
+        return {
+          attempt_id: attempt.id,
+          question_id: question.id,
+          selected_answer: selected,
+          is_correct: Boolean(
+            selected && selected === getCorrectAnswer(question)
+          ),
+        };
+      });
+
+      if (answerRows.length) {
+        const { error: answersError } = await supabase
+          .from("quiz_answers")
+          .insert(answerRows);
+
+        if (answersError) throw answersError;
       }
 
-      if (
-        attempt &&
-        !attemptError
-      ) {
-        const answerRows =
-          questions.map(
-            (question) => {
-              const answer =
-                finalAnswers?.[
-                  question.id
-                ];
-
-              return {
-                attempt_id:
-                  attempt.id,
-
-                question_id:
-                  question.id,
-
-                selected_answer:
-                  answer ===
-                    TIMEOUT_ANSWER ||
-                  answer ===
-                    SKIPPED_ANSWER
-                    ? null
-                    : answer ?? null,
-
-                is_correct:
-                  isAnswerCorrect(
-                    answer,
-                    question.correction_answer
-                  ),
-              };
-            }
-          );
-
-        const {
-          error: answersError,
-        } =
-          await supabase
-            .from("quiz_answers")
-            .insert(
-              answerRows
-            );
-
-        if (answersError) {
-          console.warn(
-            "QUIZ ANSWERS SAVE WARNING:",
-            answersError
-          );
-        }
-      }
-    } catch (error) {
-      console.warn(
-        "QUIZ SAVE WARNING:",
-        error
+      setSaveMessage("Your result has been saved successfully.");
+    } catch (err) {
+      console.error("Unable to save quiz attempt:", err);
+      setSaveMessage(
+        "Your result is available, but it couldn't be saved. Please check your connection and try again."
       );
     } finally {
       setSaving(false);
     }
-  }
+  };
 
-  function handleSkip() {
-    if (
-      !isExaminationMode ||
-      !currentQuestion ||
-      sessionFinished
-    ) {
+  const evaluateCalculator = () => {
+    const expression = calculatorValue.trim();
+
+    // Only allow basic arithmetic characters. This is not a full math parser.
+    if (!expression || !/^[0-9+\-*/().%\s]+$/.test(expression)) {
+      setCalculatorResult("Invalid expression");
       return;
     }
 
-    if (
-      answersRef.current[
-        currentQuestion.id
-      ]
-    ) {
-      return;
+    try {
+      // eslint-disable-next-line no-new-func
+      const result = Function(`"use strict"; return (${expression})`)();
+
+      if (!Number.isFinite(result)) throw new Error("Invalid result");
+      setCalculatorResult(String(Number(result.toFixed(8))));
+    } catch {
+      setCalculatorResult("Check expression");
     }
+  };
 
-    const secondsUsed =
-      Math.max(
-        0,
-        parsedTimePerQuestion -
-          timeLeft
-      );
-
-    markSkipped(
-      currentQuestion.id,
-      secondsUsed
-    );
-
-    if (
-      currentIndex >=
-      questions.length - 1
-    ) {
-      finishSession({
-        ...answersRef.current,
-        [currentQuestion.id]:
-          SKIPPED_ANSWER,
-      });
-
-      return;
+  const calculatorPress = (value) => {
+    if (value === "AC") {
+      setCalculatorValue("");
+      setCalculatorResult("");
+    } else if (value === "DEL") {
+      setCalculatorValue((previous) => previous.slice(0, -1));
+    } else if (value === "=") {
+      evaluateCalculator();
+    } else {
+      setCalculatorValue((previous) => previous + value);
     }
+  };
 
-    setCurrentIndex(
-      (index) =>
-        index + 1
-    );
-  }
-
-  function handleNext() {
-    if (
-      !currentQuestion ||
-      sessionFinished
-    ) {
-      return;
-    }
-
-    const currentAnswer =
-      answersRef.current[
-        currentQuestion.id
-      ];
-
-    if (!isExaminationMode) {
-      if (!currentAnswer) {
-        return;
-      }
-
-      if (
-        currentIndex >=
-        questions.length - 1
-      ) {
-        finishSession();
-        return;
-      }
-
-      setCurrentIndex(
-        (index) =>
-          index + 1
-      );
-
-      return;
-    }
-
-    if (!currentAnswer) {
-      markSkipped(
-        currentQuestion.id,
-        Math.max(
-          0,
-          parsedTimePerQuestion -
-            timeLeft
-        )
-      );
-    }
-
-    if (
-      currentIndex >=
-      questions.length - 1
-    ) {
-      finishSession({
-        ...answersRef.current,
-        [currentQuestion.id]:
-          currentAnswer ||
-          SKIPPED_ANSWER,
-      });
-
-      return;
-    }
-
-    setCurrentIndex(
-      (index) =>
-        index + 1
-    );
-  }
-
-  function handlePrevious() {
-    if (
-      currentIndex <= 0 ||
-      sessionFinished
-    ) {
-      return;
-    }
-
-    setCurrentIndex(
-      (index) =>
-        index - 1
-    );
-  }
-
-  function handleQuestionJump(
-    index
-  ) {
-    if (
-      !isExaminationMode ||
-      sessionFinished
-    ) {
-      return;
-    }
-
-    setCurrentIndex(index);
-  }
-
-  function handleQuit() {
-    setShowQuitModal(false);
-    setShowCalculator(false);
-    navigate("/practice");
-  }
-
-  const selectedAnswer =
-    currentQuestion
-      ? answers[
-          currentQuestion.id
-        ]
-      : null;
-
-  const answeredCount =
-    useMemo(() => {
-      return questions.filter(
-        (question) => {
-          const answer =
-            answers[
-              question.id
-            ];
-
-          return (
-            Boolean(answer) &&
-            answer !==
-              TIMEOUT_ANSWER &&
-            answer !==
-              SKIPPED_ANSWER
-          );
-        }
-      ).length;
-    }, [questions, answers]);
-
-  const skippedCount =
-    useMemo(() => {
-      return questions.filter(
-        (question) =>
-          skippedQuestions[
-            question.id
-          ]
-      ).length;
-    }, [
-      questions,
-      skippedQuestions,
-    ]);
-
-  const unansweredCount =
-    Math.max(
-      0,
-      questions.length -
-        answeredCount -
-        skippedCount
-    );
-
-  const correctCount =
-    useMemo(() => {
-      return questions.reduce(
-        (count, question) => {
-          const answer =
-            answers[
-              question.id
-            ];
-
-          if (
-            answer &&
-            answer !==
-              TIMEOUT_ANSWER &&
-            answer !==
-              SKIPPED_ANSWER &&
-            isAnswerCorrect(
-              answer,
-              question.correction_answer
-            )
-          ) {
-            return count + 1;
-          }
-
-          return count;
-        },
-        0
-      );
-    }, [questions, answers]);
-
-  const percentage =
-    questions.length > 0
-      ? Math.round(
-          (finalScore /
-            questions.length) *
-            100
-        )
-      : 0;
-
-  const progressPercentage =
-    questions.length > 0
-      ? ((currentIndex + 1) /
-          questions.length) *
-        100
-      : 0;
+  const backToPractice = () => {
+    stopTimers();
+    navigate(-1);
+  };
 
   if (loading) {
     return (
-      <main className="quiz-page">
-        <div className="quiz-container">
-          <div className="quiz-loading">
-            <div className="quiz-loading-orb" />
-
-            <h2>
-              Preparing your session
-            </h2>
-
-            <p>
-              Loading your questions
-              and building your
-              learning experience...
-            </p>
-          </div>
+      <main className="om-quiz-page om-state-page">
+        <div className="om-state-card">
+          <div className="om-loader" />
+          <p className="om-eyebrow">OVERMATHS QUIZ</p>
+          <h1>Preparing your session</h1>
+          <p>Loading your questions and getting everything ready.</p>
         </div>
       </main>
     );
   }
 
-  if (loadingError) {
+  if (error) {
     return (
-      <main className="quiz-page">
-        <div className="quiz-container">
-          <div className="quiz-error">
-            <div className="quiz-error-icon">
-              !
-            </div>
-
-            <h2>
-              We couldn't load the
-              questions
-            </h2>
-
-            <p>
-              {loadingError}
-            </p>
-
-            <button
-              type="button"
-              className="quiz-action primary"
-              onClick={() =>
-                navigate("/practice")
-              }
-            >
-              Back to Practice
+      <main className="om-quiz-page om-state-page">
+        <div className="om-state-card">
+          <div className="om-state-icon om-error-icon">!</div>
+          <p className="om-eyebrow">QUIZ UNAVAILABLE</p>
+          <h1>We couldn't load your questions</h1>
+          <p>{error}</p>
+          <div className="om-state-actions">
+            <button className="om-btn om-btn-primary" onClick={fetchQuestions}>
+              Try again
+            </button>
+            <button className="om-btn om-btn-secondary" onClick={backToPractice}>
+              Back to practice
             </button>
           </div>
         </div>
@@ -1358,1373 +423,476 @@ export default function Quiz() {
     );
   }
 
-  if (!questions.length) {
+  if (submitted) {
     return (
-      <main className="quiz-page">
-        <div className="quiz-container">
-          <div className="quiz-error">
-            <h2>
-              No questions available
-            </h2>
-
-            <p>
-              There are currently no
-              active questions for
-              this selection.
-            </p>
-
-            <button
-              type="button"
-              className="quiz-action primary"
-              onClick={() =>
-                navigate("/practice")
-              }
-            >
-              Back to Practice
-            </button>
+      <main className="om-quiz-page om-results-page">
+        <header className="om-topbar">
+          <button className="om-brand" onClick={backToPractice}>
+            <span className="om-brand-mark">O</span>
+            <span>Over<span>maths</span></span>
+          </button>
+          <div className="om-topbar-right">
+            <span className="om-session-label">Quiz completed</span>
           </div>
-        </div>
-      </main>
-    );
-  }
+        </header>
 
-  /*
-   * RESULT / REVIEW SCREEN
-   */
-  if (sessionFinished) {
-    return (
-      <main className="quiz-page quiz-review-page">
-        <div className="quiz-container">
-          <header className="quiz-topbar">
-            <div className="quiz-topbar-left">
-              <div className="quiz-brand-mark">
-                O
-              </div>
-
-              <div className="quiz-subject-info">
-                <div className="quiz-subject-name">
-                  {courseName ||
-                    subject ||
-                    "Overmaths"}
-                </div>
-
-                <div className="quiz-topic-name">
-                  {isExaminationMode
-                    ? "Examination completed"
-                    : "Practice completed"}
-                </div>
-              </div>
-            </div>
-
-            <div className="quiz-mode-badge">
-              {isExaminationMode
-                ? "Examination Mode"
-                : "Practice Mode"}
-            </div>
-          </header>
-
-          <section className="quiz-result-hero">
-            <div className="quiz-result-copy">
-              <span className="quiz-result-eyebrow">
-                SESSION COMPLETE
-              </span>
-
-              <h1 className="quiz-result-title">
-                {percentage >= 80
-                  ? "Excellent work."
-                  : percentage >= 60
-                  ? "Good progress."
-                  : percentage >= 40
-                  ? "Keep pushing."
-                  : "Every attempt is progress."}
-              </h1>
-
-              <p className="quiz-result-subtitle">
-                {isExaminationMode
-                  ? "Your examination has been submitted. Review your performance below."
-                  : "You've completed this practice session. Use the review to learn from every question."}
-              </p>
-            </div>
-
-            <div className="quiz-score">
-              <strong className="quiz-score-number">
-                {percentage}%
-              </strong>
-
-              <span className="quiz-score-label">
-                {finalScore} /{" "}
-                {questions.length} correct
-              </span>
-            </div>
-
-            <div className="quiz-result-stats">
-              <div className="quiz-stat-card success">
-                <strong className="quiz-stat-value">
-                  {correctCount}
-                </strong>
-
-                <span className="quiz-stat-label">
-                  Correct
-                </span>
-              </div>
-
-              <div className="quiz-stat-card danger">
-                <strong className="quiz-stat-value">
-                  {questions.length -
-                    finalScore}
-                </strong>
-
-                <span className="quiz-stat-label">
-                  Missed
-                </span>
-              </div>
-
-              <div className="quiz-stat-card">
-                <strong className="quiz-stat-value">
-                  {answeredCount}
-                </strong>
-
-                <span className="quiz-stat-label">
-                  Answered
-                </span>
-              </div>
-
-              <div className="quiz-stat-card warning">
-                <strong className="quiz-stat-value">
-                  {skippedCount}
-                </strong>
-
-                <span className="quiz-stat-label">
-                  Skipped
-                </span>
-              </div>
-            </div>
-          </section>
-
-          <section className="quiz-review-section">
-            <div className="quiz-section-heading">
-              <span>
-                REVIEW
-              </span>
-
-              <h2>
-                Question by question
-              </h2>
-
+        <section className="om-results-wrap">
+          <div className="om-results-hero">
+            <div>
+              <span className="om-status-pill">SESSION COMPLETE</span>
+              <h1>{percentage >= 80 ? "Excellent work!" : percentage >= 50 ? "Good effort!" : "Keep practising!"}</h1>
               <p>
-                See what you selected,
-                the correct answer and
-                the explanation.
+                You scored {correctCount} out of {questions.length} questions correctly.
               </p>
             </div>
+            <div className="om-score-ring" style={{ "--score": `${percentage}%` }}>
+              <div>
+                <strong>{percentage}%</strong>
+                <span>Your score</span>
+              </div>
+            </div>
+          </div>
 
-            <div className="quiz-review-list">
-              {questions.map(
-                (
-                  question,
-                  index
-                ) => {
-                  const answer =
-                    answers[
-                      question.id
-                    ];
+          <div className="om-stat-grid">
+            <div className="om-stat-card">
+              <span className="om-stat-dot om-dot-green" />
+              <strong>{correctCount}</strong>
+              <span>Correct</span>
+            </div>
+            <div className="om-stat-card">
+              <span className="om-stat-dot om-dot-red" />
+              <strong>{incorrectCount}</strong>
+              <span>Incorrect</span>
+            </div>
+            <div className="om-stat-card">
+              <span className="om-stat-dot om-dot-blue" />
+              <strong>{answeredCount}</strong>
+              <span>Answered</span>
+            </div>
+            <div className="om-stat-card">
+              <span className="om-stat-dot om-dot-grey" />
+              <strong>{unansweredCount}</strong>
+              <span>Skipped</span>
+            </div>
+          </div>
 
-                  const correctAnswer =
-                    normalizeAnswer(
-                      question.correction_answer
-                    );
+          {saveMessage && (
+            <p className="om-save-message">
+              {saving ? "Saving your result..." : saveMessage}
+            </p>
+          )}
 
-                  const selected =
-                    normalizeAnswer(
-                      answer
-                    );
+          <section className="om-review-card">
+            <div className="om-section-heading">
+              <div>
+                <h2>Question review</h2>
+                <p>Review your answers and explanations.</p>
+              </div>
+              <span className="om-review-total">{questions.length} questions</span>
+            </div>
 
-                  const correct =
-                    selected &&
-                    selected ===
-                      correctAnswer;
+            <div className="om-review-list">
+              {questions.map((question, index) => {
+                const selected = answers[index];
+                const correct = getCorrectAnswer(question);
+                const isCorrect = selected && selected === correct;
 
-                  const timedOut =
-                    answer ===
-                    TIMEOUT_ANSWER;
-
-                  const skipped =
-                    answer ===
-                      SKIPPED_ANSWER ||
-                    skippedQuestions[
-                      question.id
-                    ];
-
-                  const statusClass =
-                    correct
-                      ? "correct"
-                      : skipped ||
-                        timedOut
-                      ? "unanswered"
-                      : "incorrect";
-
-                  const selectedOption =
-                    buildOptions(
-                      question
-                    ).find(
-                      (option) =>
-                        option.key ===
-                        selected
-                    );
-
-                  const correctOption =
-                    buildOptions(
-                      question
-                    ).find(
-                      (option) =>
-                        option.key ===
-                        correctAnswer
-                    );
-
-                  return (
-                    <article
-                      key={
-                        question.id
-                      }
-                      className={`quiz-review-card ${statusClass}`}
-                    >
-                      <div className="quiz-review-header">
-                        <div className="quiz-review-number">
-                          Q{index + 1}
-                        </div>
-
-                        <div className="quiz-review-status">
-                          {correct
-                            ? "✓ Correct"
-                            : skipped ||
-                              timedOut
-                            ? "• Not answered"
-                            : "× Incorrect"}
-                        </div>
-                      </div>
-
-                      <div className="quiz-review-question">
-                        <MathText>
-                          {
-                            question.question_text
-                          }
-                        </MathText>
-                      </div>
-
-                      {question.image_url && (
-                        <div className="quiz-review-image">
-                          <img
-                            src={
-                              question.image_url
-                            }
-                            alt={`Question ${
-                              index + 1
-                            }`}
-                            onError={(
-                              event
-                            ) => {
-                              event.currentTarget.style.display =
-                                "none";
-                            }}
-                          />
-                        </div>
-                      )}
-
-                      <div className="quiz-review-answer-grid">
+                return (
+                  <details className="om-review-item" key={question.id ?? index}>
+                    <summary>
+                      <span className="om-review-number">Q{index + 1}</span>
+                      <span className="om-review-question">
+                        <MathText text={question.question_text || "Question"} />
+                      </span>
+                      <span
+                        className={`om-review-status ${
+                          !selected ? "is-skipped" : isCorrect ? "is-correct" : "is-wrong"
+                        }`}
+                      >
+                        {!selected ? "Skipped" : isCorrect ? "Correct" : "Incorrect"}
+                      </span>
+                      <span className="om-review-chevron">⌄</span>
+                    </summary>
+                    <div className="om-review-detail">
+                      {getOptions(question).map((option) => (
                         <div
-                          className={`quiz-review-answer-box ${
-                            correct
-                              ? "correct-answer"
-                              : "student-answer"
-                          }`}
+                          key={option.letter}
+                          className={[
+                            "om-review-option",
+                            option.letter === correct ? "is-answer" : "",
+                            option.letter === selected && !isCorrect ? "is-user-wrong" : "",
+                          ].join(" ")}
                         >
-                          <span>
-                            YOUR ANSWER
-                          </span>
-
-                          <strong>
-                            {skipped ||
-                            timedOut
-                              ? "Not answered"
-                              : selected
-                              ? (
-                                <>
-                                  {selected}.{" "}
-                                  <MathText>
-                                    {
-                                      selectedOption?.text ||
-                                      ""
-                                    }
-                                  </MathText>
-                                </>
-                              )
-                              : "Not answered"}
-                          </strong>
+                          <strong>{option.letter}</strong>
+                          <span><MathText text={String(option.text)} /></span>
+                          {option.letter === correct && <span className="om-option-note">Correct answer</span>}
+                          {option.letter === selected && !isCorrect && <span className="om-option-note">Your answer</span>}
                         </div>
-
-                        <div className="quiz-review-answer-box correct-answer">
-                          <span>
-                            CORRECT ANSWER
-                          </span>
-
-                          <strong>
-                            {correctAnswer
-                              ? (
-                                <>
-                                  {correctAnswer}.{" "}
-                                  <MathText>
-                                    {
-                                      correctOption?.text ||
-                                      ""
-                                    }
-                                  </MathText>
-                                </>
-                              )
-                              : "Unavailable"}
-                          </strong>
-                        </div>
-                      </div>
-
-                      <div className="quiz-review-options">
-                        {buildOptions(
-                          question
-                        ).map(
-                          (option) => {
-                            const isCorrectOption =
-                              option.key ===
-                              correctAnswer;
-
-                            const isSelectedOption =
-                              option.key ===
-                              selected;
-
-                            return (
-                              <div
-                                key={
-                                  option.key
-                                }
-                                className={`quiz-review-option ${
-                                  isCorrectOption
-                                    ? "is-correct-option"
-                                    : ""
-                                } ${
-                                  isSelectedOption &&
-                                  !isCorrectOption
-                                    ? "is-selected-wrong"
-                                    : ""
-                                }`}
-                              >
-                                <span className="quiz-option-letter">
-                                  {
-                                    option.key
-                                  }
-                                </span>
-
-                                <span className="quiz-review-option-text">
-                                  <MathText>
-                                    {
-                                      option.text
-                                    }
-                                  </MathText>
-                                </span>
-
-                                {isCorrectOption && (
-                                  <span className="quiz-review-option-mark">
-                                    ✓
-                                  </span>
-                                )}
-
-                                {isSelectedOption &&
-                                  !isCorrectOption && (
-                                    <span className="quiz-review-option-mark wrong-mark">
-                                      ×
-                                    </span>
-                                  )}
-                              </div>
-                            );
-                          }
-                        )}
-                      </div>
-
+                      ))}
                       {question.explanation && (
-                        <div className="quiz-review-explanation">
-                          <div className="quiz-explanation-label">
-                            WHY?
-                          </div>
-
-                          <MathText>
-                            {
-                              question.explanation
-                            }
-                          </MathText>
+                        <div className="om-explanation">
+                          <strong>Explanation</strong>
+                          <p><MathText text={question.explanation} /></p>
                         </div>
                       )}
-                    </article>
-                  );
-                }
-              )}
+                    </div>
+                  </details>
+                );
+              })}
             </div>
           </section>
 
-          <div className="quiz-review-footer">
-            <button
-              type="button"
-              className="quiz-action primary"
-              onClick={() =>
-                navigate("/practice")
-              }
-            >
-              Take Another Quiz
-              <span>→</span>
+          <div className="om-results-actions">
+            <button className="om-btn om-btn-secondary" onClick={backToPractice}>
+              Back to practice
             </button>
-
-            <button
-              type="button"
-              className="quiz-action secondary"
-              onClick={() =>
-                navigate("/dashboard")
-              }
-            >
-              Back to Dashboard
+            <button className="om-btn om-btn-primary" onClick={fetchQuestions}>
+              Try another quiz <span>→</span>
             </button>
           </div>
-        </div>
+        </section>
       </main>
     );
   }
 
   return (
-    <main className="quiz-page">
-      <div className="quiz-container">
-        <header className="quiz-topbar">
-          <div className="quiz-topbar-left">
-            <div className="quiz-brand-mark">
-              O
-            </div>
-
-            <div className="quiz-subject-info">
-              <div className="quiz-subject-name">
-                {courseName ||
-                  subject ||
-                  "Overmaths"}
-              </div>
-
-              <div className="quiz-topic-name">
-                {topic &&
-                topic !== "mixed"
-                  ? topic
-                  : isExaminationMode
-                  ? "Mixed Topics"
-                  : "Mixed Practice"}
-              </div>
-            </div>
-          </div>
-
-          <div className="quiz-topbar-actions">
-            <div className="quiz-mode-badge">
-              {isExaminationMode
-                ? "Examination Mode"
-                : "Practice Mode"}
-            </div>
-          </div>
-        </header>
-
-        <section className="quiz-session-header">
-          <div className="quiz-session-title">
-            <span className="quiz-session-eyebrow">
-              {learningRoute ===
-              "university"
-                ? courseCode ||
-                  courseName
-                : examType ||
-                  "Exam Preparation"}
-            </span>
-
-            <h1>
-              {courseName ||
-                subject ||
-                "Quiz Session"}
-            </h1>
-
-            <p>
-              Question{" "}
-              <strong>
-                {currentIndex + 1}
-              </strong>{" "}
-              of{" "}
-              <strong>
-                {questions.length}
-              </strong>
-            </p>
-          </div>
-
-          <div
-            className={`quiz-timer ${
-              timeLeft <= 5
-                ? "danger"
-                : timeLeft <= 10
-                ? "warning"
-                : ""
-            }`}
-          >
-            <span className="quiz-timer-icon">
-              ⏱
-            </span>
-
-            <span className="quiz-timer-label">
-              TIME REMAINING
-            </span>
-
-            <strong>
-              {String(
-                Math.floor(
-                  timeLeft / 60
-                )
-              ).padStart(2, "0")}
-              :
-              {String(
-                timeLeft % 60
-              ).padStart(2, "0")}
-            </strong>
-          </div>
-        </section>
-
-        <section className="quiz-progress-section">
-          <div className="quiz-progress-header">
-            <span className="quiz-question-label">
-              SESSION PROGRESS
-            </span>
-
-            <span className="quiz-question-number">
-              {answeredCount} of{" "}
-              {questions.length} answered
-            </span>
-          </div>
-
-          <div className="quiz-progress-track">
-            <div
-              className="quiz-progress-fill"
-              style={{
-                width: `${progressPercentage}%`,
-              }}
-            />
-          </div>
-        </section>
-
-        {isExaminationMode && (
-          <section className="quiz-question-navigator">
-            <div className="quiz-question-navigator-header">
-              <div>
-                <span>
-                  QUESTION MAP
-                </span>
-
-                <strong>
-                  {currentIndex + 1} /{" "}
-                  {questions.length}
-                </strong>
-              </div>
-
-              <div className="quiz-question-legend">
-                <span>
-                  <i className="legend-dot answered" />
-                  Answered
-                </span>
-
-                <span>
-                  <i className="legend-dot unanswered" />
-                  Unanswered
-                </span>
-
-                <span>
-                  <i className="legend-dot skipped" />
-                  Skipped
-                </span>
-              </div>
-            </div>
-
-            <div className="quiz-question-numbers">
-              {questions.map(
-                (
-                  question,
-                  index
-                ) => {
-                  const answer =
-                    answers[
-                      question.id
-                    ];
-
-                  const isAnswered =
-                    Boolean(
-                      answer &&
-                        answer !==
-                          TIMEOUT_ANSWER &&
-                        answer !==
-                          SKIPPED_ANSWER
-                    );
-
-                  const isSkipped =
-                    Boolean(
-                      skippedQuestions[
-                        question.id
-                      ]
-                    );
-
-                  return (
-                    <button
-                      type="button"
-                      key={
-                        question.id
-                      }
-                      className={`quiz-question-number ${
-                        index ===
-                        currentIndex
-                          ? "is-current"
-                          : ""
-                      } ${
-                        isAnswered
-                          ? "is-answered"
-                          : ""
-                      } ${
-                        isSkipped
-                          ? "is-skipped"
-                          : ""
-                      }`}
-                      onClick={() =>
-                        handleQuestionJump(
-                          index
-                        )
-                      }
-                    >
-                      {index + 1}
-                    </button>
-                  );
-                }
-              )}
-            </div>
-          </section>
-        )}
-
-        <section className="quiz-question-card">
-          <div className="quiz-question-card-top">
-            <div className="quiz-question-index">
-              {currentIndex + 1}
-            </div>
-
-            <div>
-              <span className="quiz-question-label">
-                QUESTION
-              </span>
-
-              <span className="quiz-question-mini">
-                Choose one answer
-              </span>
-            </div>
-          </div>
-
-          <div className="quiz-question-text">
-            <MathText>
-              {
-                currentQuestion.question_text
-              }
-            </MathText>
-          </div>
-
-          {currentQuestion.image_url && (
-            <div className="quiz-question-image-wrapper">
-              <img
-                className="quiz-question-image"
-                src={
-                  currentQuestion.image_url
-                }
-                alt={`Question ${
-                  currentIndex + 1
-                }`}
-                onError={(
-                  event
-                ) => {
-                  event.currentTarget.style.display =
-                    "none";
-                }}
-              />
-            </div>
-          )}
-
-          <div className="quiz-options-section">
-            <div className="quiz-options-heading">
-              <span>ANSWER OPTIONS</span>
-
-              <small>
-                {selectedAnswer
-                  ? "Answer selected"
-                  : "Select your answer"}
-              </small>
-            </div>
-
-            <div className="quiz-options">
-              {buildOptions(
-                currentQuestion
-              ).map(
-                (option) => {
-                  const isSelected =
-                    selectedAnswer ===
-                    option.key;
-
-                  const isCorrectOption =
-                    normalizeAnswer(
-                      currentQuestion.correction_answer
-                    ) ===
-                    option.key;
-
-                  const showCorrectness =
-                    !isExaminationMode &&
-                    showFeedback;
-
-                  let optionClass =
-                    "quiz-option";
-
-                  if (isSelected) {
-                    optionClass +=
-                      " is-selected";
-                  }
-
-                  if (
-                    showCorrectness &&
-                    isCorrectOption
-                  ) {
-                    optionClass +=
-                      " is-correct";
-                  }
-
-                  if (
-                    showCorrectness &&
-                    isSelected &&
-                    !isCorrectOption
-                  ) {
-                    optionClass +=
-                      " is-wrong";
-                  }
-
-                  return (
-                    <button
-                      type="button"
-                      key={
-                        option.key
-                      }
-                      className={
-                        optionClass
-                      }
-                      onClick={() =>
-                        handleAnswer(
-                          option.key
-                        )
-                      }
-                      disabled={
-                        sessionFinished ||
-                        (!isExaminationMode &&
-                          Boolean(
-                            selectedAnswer
-                          ))
-                      }
-                    >
-                      <span className="quiz-option-letter">
-                        {
-                          option.key
-                        }
-                      </span>
-
-                      <span className="quiz-option-text">
-                        <MathText>
-                          {
-                            option.text
-                          }
-                        </MathText>
-                      </span>
-
-                      {showCorrectness &&
-                        isCorrectOption && (
-                          <span className="quiz-option-indicator">
-                            ✓
-                          </span>
-                        )}
-
-                      {showCorrectness &&
-                        isSelected &&
-                        !isCorrectOption && (
-                          <span className="quiz-option-indicator wrong">
-                            ×
-                          </span>
-                        )}
-                    </button>
-                  );
-                }
-              )}
-            </div>
-          </div>
-
-          {!isExaminationMode &&
-            showFeedback && (
-              <div
-                className={`quiz-feedback ${
-                  feedbackType ===
-                  "correct"
-                    ? "correct"
-                    : feedbackType ===
-                      "wrong"
-                    ? "wrong"
-                    : "timeout"
-                }`}
-              >
-                <div className="quiz-feedback-top">
-                  <div>
-                    <div className="quiz-feedback-heading">
-                      {feedbackType ===
-                      "correct"
-                        ? "✓ Correct!"
-                        : feedbackType ===
-                          "wrong"
-                        ? "× Not quite."
-                        : "⏱ Time's up."}
-                    </div>
-
-                    {feedbackType ===
-                      "correct" && (
-                      <p>
-                        Excellent. You
-                        selected the
-                        correct answer.
-                      </p>
-                    )}
-
-                    {feedbackType ===
-                      "wrong" && (
-                      <p>
-                        The correct answer
-                        is{" "}
-                        <strong>
-                          {normalizeAnswer(
-                            currentQuestion.correction_answer
-                          )}
-                        </strong>
-                        .
-                      </p>
-                    )}
-
-                    {feedbackType ===
-                      "timeout" && (
-                      <p>
-                        This question was
-                        not answered before
-                        the timer expired.
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {currentQuestion.explanation && (
-                  <div className="quiz-feedback-explanation">
-                    <span>
-                      Explanation
-                    </span>
-
-                    <MathText>
-                      {
-                        currentQuestion.explanation
-                      }
-                    </MathText>
-                  </div>
-                )}
-              </div>
-            )}
-        </section>
-
-        <footer className="quiz-navigation">
-          <div className="quiz-navigation-group">
-            <button
-              type="button"
-              className="quiz-nav-button secondary"
-              onClick={
-                handlePrevious
-              }
-              disabled={
-                currentIndex ===
-                  0 ||
-                sessionFinished
-              }
-            >
-              ← Previous
-            </button>
-
-            {isExaminationMode &&
-              !selectedAnswer && (
-                <button
-                  type="button"
-                  className="quiz-nav-button skip"
-                  onClick={
-                    handleSkip
-                  }
-                  disabled={
-                    sessionFinished
-                  }
-                >
-                  Skip
-                </button>
-              )}
-          </div>
-
-          <div className="quiz-navigation-counter">
-            <strong>
-              {answeredCount}
-            </strong>{" "}
-            answered
-
-            <span>•</span>
-
-            <strong>
-              {unansweredCount}
-            </strong>{" "}
-            unanswered
-
-            {isExaminationMode && (
-              <>
-                <span>•</span>
-
-                <strong>
-                  {skippedCount}
-                </strong>{" "}
-                skipped
-              </>
-            )}
-          </div>
-
-          <div className="quiz-navigation-group right">
-            <button
-              type="button"
-              className="quiz-nav-button primary"
-              onClick={
-                handleNext
-              }
-              disabled={
-                sessionFinished ||
-                (!isExaminationMode &&
-                  !selectedAnswer)
-              }
-            >
-              {currentIndex ===
-              questions.length - 1
-                ? isExaminationMode
-                  ? saving
-                    ? "Submitting..."
-                    : "Submit Exam"
-                  : "View Results"
-                : "Next →"}
-            </button>
-          </div>
-        </footer>
-
-        <div className="quiz-quit-row">
-          <button
-            type="button"
-            className="quiz-quit-button"
-            onClick={() =>
-              setShowQuitModal(
-                true
-              )
-            }
-          >
-            Quit Quiz
-          </button>
-        </div>
-
-        {isExaminationMode && (
-          <div className="quiz-exam-notice">
-            <span>●</span>
-
-            <p>
-              Examination Mode does not
-              reveal correct answers until
-              you submit. You can move
-              between questions and change
-              your answers before submission.
-            </p>
-          </div>
-        )}
-
-        {/* =====================================================
-            FLOATING CALCULATOR
-            ===================================================== */}
-
-        <button
-          type="button"
-          className="quiz-calculator-trigger"
-          onClick={() =>
-            setShowCalculator(true)
-          }
-          aria-label="Open calculator"
-        >
-          <span className="quiz-calculator-trigger-icon">
-            ＋
-          </span>
-
-          <span className="quiz-calculator-trigger-text">
-            Calculator
-          </span>
+    <main className="om-quiz-page">
+      <header className="om-topbar">
+        <button className="om-brand" onClick={backToPractice} aria-label="Back">
+          <span className="om-brand-mark">O</span>
+          <span>Over<span>maths</span></span>
         </button>
 
-        {showCalculator && (
-          <div
-            className="quiz-calculator-overlay"
-            onClick={() =>
-              setShowCalculator(false)
-            }
-          >
-            <section
-              className="quiz-calculator"
-              role="dialog"
-              aria-modal="true"
-              aria-label="Quiz calculator"
-              onClick={(event) =>
-                event.stopPropagation()
-              }
-            >
-              <div className="quiz-calculator-header">
-                <div>
-                  <span>
-                    OVERMATHS TOOL
-                  </span>
+        <div className="om-breadcrumb">
+          <span>{subject || courseName || courseCode || "Practice"}</span>
+          {topic && topic.toLowerCase() !== "mixed" && (
+            <>
+              <span className="om-breadcrumb-dot">•</span>
+              <span>{topic}</span>
+            </>
+          )}
+          <span className="om-mode-pill">{mode}</span>
+        </div>
 
-                  <h2>
-                    Calculator
-                  </h2>
+        <div className="om-topbar-right">
+          {isExamMode && (
+            <div className={`om-timer ${timeLeft <= 10 ? "is-urgent" : ""}`}>
+              <span className="om-timer-icon">◷</span>
+              <strong>{formatTime(timeLeft)}</strong>
+            </div>
+          )}
+          <button className="om-exit-btn" onClick={() => setShowQuitModal(true)}>
+            Exit quiz <span>×</span>
+          </button>
+        </div>
+      </header>
+
+      <div className="om-quiz-layout">
+        <section className="om-question-column">
+          <div className="om-question-card">
+            <div className="om-question-meta">
+              <div className="om-subject-chip">
+                <span className="om-chip-dot" />
+                {subject || courseName || "Quiz"}
+              </div>
+              <span className="om-question-count">
+                Question <strong>{currentIndex + 1}</strong> of {questions.length}
+              </span>
+            </div>
+
+            <div className="om-progress-track">
+              <div
+                className="om-progress-fill"
+                style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }}
+              />
+            </div>
+
+            <div className="om-question-body">
+              <p className="om-question-kicker">QUESTION {String(currentIndex + 1).padStart(2, "0")}</p>
+              <h1 className="om-question-title">
+                <MathText text={currentQuestion?.question_text || ""} />
+              </h1>
+
+              {currentQuestion?.image_url && (
+                <div className="om-question-image-wrap">
+                  <img
+                    src={currentQuestion.image_url}
+                    alt="Question illustration"
+                    className="om-question-image"
+                  />
                 </div>
+              )}
 
-                <button
-                  type="button"
-                  className="quiz-calculator-close"
-                  onClick={() =>
-                    setShowCalculator(
-                      false
-                    )
-                  }
-                  aria-label="Close calculator"
+              <div className="om-options-list">
+                {getOptions(currentQuestion).map((option) => {
+                  const selected = answers[currentIndex] === option.letter;
+                  const correct = getCorrectAnswer(currentQuestion);
+                  const showPracticeFeedback = !isExamMode && Boolean(answers[currentIndex]);
+                  const isCorrectOption =
+                    showPracticeFeedback && option.letter === correct;
+                  const isWrongSelection =
+                    showPracticeFeedback && selected && option.letter !== correct;
+
+                  return (
+                    <button
+                      type="button"
+                      key={option.letter}
+                      className={[
+                        "om-option",
+                        selected ? "is-selected" : "",
+                        isCorrectOption ? "is-correct" : "",
+                        isWrongSelection ? "is-wrong" : "",
+                      ].join(" ")}
+                      onClick={() => chooseAnswer(option.letter)}
+                      disabled={!isExamMode && Boolean(answers[currentIndex])}
+                    >
+                      <span className="om-option-letter">{option.letter}</span>
+                      <span className="om-option-text">
+                        <MathText text={String(option.text)} />
+                      </span>
+                      {selected && <span className="om-option-check">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {!isExamMode && answers[currentIndex] && (
+                <div
+                  className={`om-feedback ${
+                    answers[currentIndex] === getCorrectAnswer(currentQuestion)
+                      ? "is-success"
+                      : "is-error"
+                  }`}
                 >
-                  ×
+                  <span className="om-feedback-icon">
+                    {answers[currentIndex] === getCorrectAnswer(currentQuestion) ? "✓" : "!"}
+                  </span>
+                  <div>
+                    <strong>
+                      {answers[currentIndex] === getCorrectAnswer(currentQuestion)
+                        ? "Correct answer!"
+                        : "Not quite. Keep learning!"}
+                    </strong>
+                    {currentQuestion?.explanation && (
+                      <p><MathText text={currentQuestion.explanation} /></p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="om-question-footer">
+              <button
+                className="om-btn om-btn-secondary"
+                onClick={goPrevious}
+                disabled={currentIndex === 0}
+              >
+                <span>←</span> Previous
+              </button>
+
+              <div className="om-footer-middle">
+                <button
+                  className={`om-icon-btn ${markedForReview.includes(currentIndex) ? "is-active" : ""}`}
+                  onClick={toggleReview}
+                  title="Mark for review"
+                >
+                  ⚑ <span>{markedForReview.includes(currentIndex) ? "Marked" : "Review later"}</span>
+                </button>
+                <button
+                  className="om-icon-btn"
+                  onClick={() => setShowCalculator(true)}
+                  title="Open calculator"
+                >
+                  ▦ <span>Calculator</span>
                 </button>
               </div>
 
-              <div className="quiz-calculator-display">
-                <span>
-                  {calculatorDisplay ===
-                  "Error"
-                    ? "Calculation error"
-                    : "CALCULATION"}
-                </span>
-
-                <strong>
-                  {calculatorDisplay}
-                </strong>
-              </div>
-
-              <div className="quiz-calculator-keypad">
-                <button
-                  type="button"
-                  className="calculator-function"
-                  onClick={
-                    clearCalculator
-                  }
-                >
-                  AC
-                </button>
-
-                <button
-                  type="button"
-                  className="calculator-function"
-                  onClick={
-                    backspaceCalculator
-                  }
-                >
-                  ⌫
-                </button>
-
-                <button
-                  type="button"
-                  className="calculator-function"
-                  onClick={() =>
-                    calculatorInput(
-                      "%"
-                    )
-                  }
-                >
-                  %
-                </button>
-
-                <button
-                  type="button"
-                  className="calculator-operator"
-                  onClick={() =>
-                    calculatorInput(
-                      "/"
-                    )
-                  }
-                >
-                  ÷
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    calculatorInput(
-                      "7"
-                    )
-                  }
-                >
-                  7
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    calculatorInput(
-                      "8"
-                    )
-                  }
-                >
-                  8
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    calculatorInput(
-                      "9"
-                    )
-                  }
-                >
-                  9
-                </button>
-
-                <button
-                  type="button"
-                  className="calculator-operator"
-                  onClick={() =>
-                    calculatorInput(
-                      "*"
-                    )
-                  }
-                >
-                  ×
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    calculatorInput(
-                      "4"
-                    )
-                  }
-                >
-                  4
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    calculatorInput(
-                      "5"
-                    )
-                  }
-                >
-                  5
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    calculatorInput(
-                      "6"
-                    )
-                  }
-                >
-                  6
-                </button>
-
-                <button
-                  type="button"
-                  className="calculator-operator"
-                  onClick={() =>
-                    calculatorInput(
-                      "-"
-                    )
-                  }
-                >
-                  −
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    calculatorInput(
-                      "1"
-                    )
-                  }
-                >
-                  1
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    calculatorInput(
-                      "2"
-                    )
-                  }
-                >
-                  2
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    calculatorInput(
-                      "3"
-                    )
-                  }
-                >
-                  3
-                </button>
-
-                <button
-                  type="button"
-                  className="calculator-operator"
-                  onClick={() =>
-                    calculatorInput(
-                      "+"
-                    )
-                  }
-                >
-                  +
-                </button>
-
-                <button
-                  type="button"
-                  className="calculator-function"
-                  onClick={
-                    calculatorSquareRoot
-                  }
-                >
-                  √
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    calculatorInput(
-                      "0"
-                    )
-                  }
-                >
-                  0
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    calculatorInput(
-                      "."
-                    )
-                  }
-                >
-                  .
-                </button>
-
-                <button
-                  type="button"
-                  className="calculator-equals"
-                  onClick={
-                    calculateCalculator
-                  }
-                >
-                  =
-                </button>
-              </div>
-
-              <div className="quiz-calculator-footer">
-                <span>
-                  Calculator does not pause
-                  your quiz timer.
-                </span>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setShowCalculator(
-                      false
-                    )
-                  }
-                >
-                  Close Calculator
-                </button>
-              </div>
-            </section>
-          </div>
-        )}
-
-        {showQuitModal && (
-          <div
-            className="quiz-modal-backdrop"
-            onClick={() =>
-              setShowQuitModal(
-                false
-              )
-            }
-          >
-            <div
-              className="quiz-quit-modal"
-              onClick={(event) =>
-                event.stopPropagation()
-              }
-            >
-              <div className="quiz-modal-icon">
-                !
-              </div>
-
-              <h2>
-                Leave this quiz?
-              </h2>
-
-              <p>
-                Your current progress will
-                be lost. This attempt will
-                not be submitted or saved.
-              </p>
-
-              <div className="quiz-modal-actions">
-                <button
-                  type="button"
-                  className="quiz-nav-button secondary"
-                  onClick={() =>
-                    setShowQuitModal(
-                      false
-                    )
-                  }
-                >
-                  Continue Quiz
-                </button>
-
-                <button
-                  type="button"
-                  className="quiz-nav-button danger"
-                  onClick={
-                    handleQuit
-                  }
-                >
-                  Quit Quiz
+              <div className="om-footer-actions">
+                {isExamMode && (
+                  <button className="om-btn om-btn-quiet" onClick={skipQuestion}>
+                    Skip
+                  </button>
+                )}
+                <button className="om-btn om-btn-primary" onClick={goNext}>
+                  {currentIndex === questions.length - 1
+                    ? isExamMode
+                      ? "Submit quiz"
+                      : "View results"
+                    : "Next question"}
+                  <span>→</span>
                 </button>
               </div>
             </div>
           </div>
-        )}
+
+          <div className="om-bottom-note">
+            <span className="om-note-icon">✦</span>
+            <span>Small steps every day lead to big results.</span>
+            <span className="om-note-progress">{progress}% answered</span>
+          </div>
+        </section>
+
+        <aside className="om-navigator-column">
+          <section className="om-navigator-card">
+            <div className="om-section-heading">
+              <div>
+                <h2>Question navigator</h2>
+                <p>Move between questions anytime.</p>
+              </div>
+              <span className="om-navigator-count">
+                {currentIndex + 1}/{questions.length}
+              </span>
+            </div>
+
+            <div className="om-legend">
+              <span><i className="legend-current" />Current</span>
+              <span><i className="legend-answered" />Answered</span>
+              <span><i className="legend-review" />Review</span>
+              <span><i className="legend-empty" />Unanswered</span>
+            </div>
+
+            <div className="om-question-grid">
+              {questions.map((question, index) => {
+                const isCurrent = index === currentIndex;
+                const isAnswered = Boolean(answers[index]);
+                const isReview = markedForReview.includes(index);
+
+                return (
+                  <button
+                    key={question.id ?? index}
+                    className={[
+                      "om-question-number",
+                      isCurrent ? "is-current" : "",
+                      !isCurrent && isAnswered ? "is-answered" : "",
+                      isReview ? "is-review" : "",
+                    ].join(" ")}
+                    onClick={() => goToQuestion(index)}
+                    aria-label={`Go to question ${index + 1}`}
+                    aria-current={isCurrent ? "step" : undefined}
+                  >
+                    {index + 1}
+                    {isAnswered && !isCurrent && <span className="om-number-check">✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="om-navigator-divider" />
+
+            <div className="om-section-heading om-summary-heading">
+              <h3>Session summary</h3>
+              <span>{questions.length} total</span>
+            </div>
+
+            <div className="om-summary-list">
+              <div>
+                <span><i className="legend-answered" />Answered</span>
+                <strong>{answeredCount}</strong>
+              </div>
+              <div>
+                <span><i className="legend-review" />Marked for review</span>
+                <strong>{reviewCount}</strong>
+              </div>
+              <div>
+                <span><i className="legend-empty" />Unanswered</span>
+                <strong>{unansweredCount}</strong>
+              </div>
+            </div>
+
+            <div className="om-sidebar-progress">
+              <div className="om-sidebar-progress-label">
+                <span>Completion</span>
+                <strong>{progress}%</strong>
+              </div>
+              <div className="om-progress-track">
+                <div className="om-progress-fill" style={{ width: `${progress}%` }} />
+              </div>
+            </div>
+
+            {isExamMode && (
+              <button
+                className="om-btn om-btn-submit"
+                onClick={() => setShowSubmitModal(true)}
+              >
+                Finish and submit <span>→</span>
+              </button>
+            )}
+          </section>
+        </aside>
       </div>
+
+      {showQuitModal && (
+        <div className="om-modal-backdrop" role="presentation">
+          <section className="om-modal" role="dialog" aria-modal="true" aria-labelledby="om-quit-title">
+            <button className="om-modal-close" onClick={() => setShowQuitModal(false)} aria-label="Close">×</button>
+            <div className="om-modal-icon">↩</div>
+            <h2 id="om-quit-title">Leave this quiz?</h2>
+            <p>Your current progress may be lost if you leave before finishing.</p>
+            <div className="om-modal-actions">
+              <button className="om-btn om-btn-secondary" onClick={() => setShowQuitModal(false)}>
+                Stay here
+              </button>
+              <button className="om-btn om-btn-primary" onClick={backToPractice}>
+                Leave quiz
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {showSubmitModal && (
+        <div className="om-modal-backdrop" role="presentation">
+          <section className="om-modal" role="dialog" aria-modal="true" aria-labelledby="om-submit-title">
+            <button className="om-modal-close" onClick={() => setShowSubmitModal(false)} aria-label="Close">×</button>
+            <div className="om-modal-icon">✓</div>
+            <h2 id="om-submit-title">Submit your quiz?</h2>
+            <p>
+              You've answered {answeredCount} of {questions.length} questions.
+              {unansweredCount > 0 ? ` ${unansweredCount} question(s) remain unanswered.` : ""}
+            </p>
+            <div className="om-modal-actions">
+              <button className="om-btn om-btn-secondary" onClick={() => setShowSubmitModal(false)}>
+                Keep checking
+              </button>
+              <button className="om-btn om-btn-primary" onClick={submitQuiz}>
+                Submit quiz
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {showCalculator && (
+        <div className="om-modal-backdrop om-calculator-backdrop" role="presentation" onClick={() => setShowCalculator(false)}>
+          <section className="om-calculator" role="dialog" aria-modal="true" aria-label="Calculator" onClick={(event) => event.stopPropagation()}>
+            <div className="om-calculator-header">
+              <div>
+                <span className="om-calculator-symbol">▦</span>
+                <h2>Calculator</h2>
+              </div>
+              <button onClick={() => setShowCalculator(false)} aria-label="Close calculator">×</button>
+            </div>
+
+            <div className="om-calculator-screen">
+              <div className="om-calculator-expression">{calculatorValue || "Enter a calculation"}</div>
+              <strong>{calculatorResult || " "}</strong>
+            </div>
+
+            <div className="om-calculator-keys">
+              {["AC", "DEL", "%", "/", "7", "8", "9", "*", "4", "5", "6", "-", "1", "2", "3", "+", "(", "0", ")", ".", "="].map((key) => (
+                <button
+                  key={key}
+                  className={["/", "*", "-", "+", "="].includes(key) ? "is-operator" : key === "AC" ? "is-clear" : ""}
+                  onClick={() => calculatorPress(key === "DEL" ? "DEL" : key)}
+                >
+                  {key === "DEL" ? "⌫" : key === "*" ? "×" : key === "/" ? "÷" : key}
+                </button>
+              ))}
+            </div>
+            <p className="om-calculator-footnote">Use the calculator to check your working.</p>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
