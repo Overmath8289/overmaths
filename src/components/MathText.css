@@ -104,3 +104,16 @@
     scroll-behavior: auto;
   }
 }
+
+
+
+
+
+/* Keep unrecognized formulas readable instead of hiding them. */
+.math-text-error {
+  color: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: inherit;
+  font-size: inherit;
+}
