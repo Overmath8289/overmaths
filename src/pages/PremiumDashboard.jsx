@@ -27,8 +27,11 @@ import {
 } from 'lucide-react';
 import './PremiumDashboard.css';
 import { supabase } from '../supabaseClient';
-
+import {
   CalendarDays,
+  // Keep your other existing icons here
+} from 'lucide-react';
+
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
 const NAV_ITEMS = [
