@@ -974,6 +974,32 @@ def clean_basic_text(value):
 
 
 # ============================================================
+# TOPIC NORMALIZATION
+# ============================================================
+
+TOPIC_ALIASES = {
+    "factorization": "factorisation",
+    "vector": "vectors",
+    "number base": "number bases",
+}
+
+
+def normalize_topic(value):
+    """
+    Normalize topic names for comparison without
+    merging genuinely different subtopics.
+    """
+
+    topic = clean_basic_text(value).casefold()
+
+    # Normalize common spacing and punctuation differences.
+    topic = re.sub(r"\s+", " ", topic)
+    topic = re.sub(r"\s*([/&])\s*", r" \1 ", topic)
+    topic = re.sub(r"\s+", " ", topic).strip()
+
+    return TOPIC_ALIASES.get(topic, topic)
+
+# ============================================================
 # LATEX NORMALIZATION
 # ============================================================
 
@@ -1428,121 +1454,98 @@ def get_practice_courses():
     "/api/practice/topics",
     methods=["GET"]
 )
+
+# ============================================================
+# PRACTICE TOPICS
+# ============================================================
+
+@app.route(
+    "/api/practice/topics",
+    methods=["GET"]
+)
 def get_practice_topics():
 
-    subject = request.args.get(
-        "subject"
-    )
-
-    course_id = request.args.get(
-        "course_id"
-    )
+    subject = request.args.get("subject")
+    course_id = request.args.get("course_id")
 
     if not subject and not course_id:
-
         return jsonify({
-
-            "error":
-                "Subject or course_id is required"
-
+            "error": "Subject or course_id is required"
         }), 400
 
     params = {
-
-        "select":
-            "topic",
-
-        "is_active":
-            "eq.true",
-
-        "topic":
-            "not.is.null",
-
-        "limit":
-            1000,
+        "select": "topic",
+        "is_active": "eq.true",
+        "topic": "not.is.null",
+        "limit": 1000,
     }
 
     if subject:
-
         if course_id:
-
             return jsonify({
-
-                "error":
-                    "Use either subject or course_id, not both"
-
+                "error": "Use either subject or course_id, not both"
             }), 400
 
-        subject = clean_basic_text(
-            subject
-        )
-
-        params["subject"] = (
-            f"eq.{subject}"
-        )
-
-        params["course_id"] = (
-            "is.null"
-        )
+        subject = clean_basic_text(subject)
+        params["subject"] = f"eq.{subject}"
+        params["course_id"] = "is.null"
 
     if course_id:
-
         try:
-
-            course_id = int(
-                course_id
-            )
-
-        except (
-            ValueError,
-            TypeError
-        ):
-
+            course_id = int(course_id)
+        except (ValueError, TypeError):
             return jsonify({
-
-                "error":
-                    "Invalid course_id"
-
+                "error": "Invalid course_id"
             }), 400
 
-        params["course_id"] = (
-            f"eq.{course_id}"
-        )
+        params["course_id"] = f"eq.{course_id}"
 
-    rows, error, status = supabase_get(
-        "questions",
-        params
-    )
+    rows, error, status = supabase_get("questions", params)
 
     if error:
-
         return jsonify(error), status
 
+    # Keep one display name for each normalized topic.
+    unique_topics = {}
+
+    for row in rows:
+        original_topic = clean_basic_text(row.get("topic"))
+
+        if not original_topic:
+            continue
+
+        key = normalize_topic(original_topic)
+
+        if key not in unique_topics:
+            unique_topics[key] = original_topic
+
     topics = sorted(
-
-        {
-            clean_basic_text(
-                row.get("topic")
-            )
-
-            for row in rows
-
-            if row.get("topic")
-        },
-
-        key=lambda value:
-            value.lower()
+        unique_topics.values(),
+        key=lambda value: value.casefold()
     )
 
+    # Also provide the original database names for matching.
+    topic_groups = {}
+
+    for row in rows:
+        original_topic = clean_basic_text(row.get("topic"))
+
+        if not original_topic:
+            continue
+
+        key = normalize_topic(original_topic)
+
+        topic_groups.setdefault(key, [])
+
+        if original_topic not in topic_groups[key]:
+            topic_groups[key].append(original_topic)
+
     return jsonify({
-
-        "topics":
-            topics,
-
-        "count":
-            len(topics)
-
+        "topics": topics,
+        "topic_groups": topic_groups,
+        "count": len(topics)
     })
+
 
 
 # ============================================================
@@ -1685,26 +1688,17 @@ def get_questions():
 
         return jsonify(error), status
 
-    if (
-        clean_topic
-        and clean_topic.casefold() != "mixed"
-    ):
+    
+    if clean_topic and clean_topic.casefold() != "mixed":
 
-        normalized_topic = (
-            clean_topic.casefold()
-        )
+       selected_topic = normalize_topic(clean_topic)
 
-        rows = [
+       rows = [
+        row
+        for row in rows
+        if normalize_topic(row.get("topic")) == selected_topic
+      ]
 
-            row
-
-            for row in rows
-
-            if clean_basic_text(
-                row.get("topic")
-            ).casefold()
-            == normalized_topic
-        ]
 
     questions = [
 
