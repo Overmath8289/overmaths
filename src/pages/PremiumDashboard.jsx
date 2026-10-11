@@ -1,603 +1,1039 @@
-import React from 'react'
-import { useNavigate } from 'react-router-dom'
-import './PremiumDashboard.css'
+
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  LayoutDashboard,
+  Target,
+  BookOpen,
+  Brain,
+  Zap,
+  ChartNoAxesCombined,
+  Trophy,
+  Clock3,
+  PencilLine,
+  Flame,
+  CheckCircle2,
+  ChevronRight,
+  ArrowRight,
+  Menu,
+  X,
+  GraduationCap,
+  Sparkles,
+  TrendingUp,
+  CalendarDays,
+  RefreshCw,
+  AlertCircle,
+  LogOut,
+  CircleUserRound,
+} from 'lucide-react';
+import './PremiumDashboard.css';
+
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+
+const NAV_ITEMS = [
+  { label: 'Command Center', icon: LayoutDashboard, path: '/dashboard' },
+  { label: 'My Exam', icon: Target, path: '/dashboard' },
+  { label: 'Practice', icon: BookOpen, path: '/dashboard' },
+  { label: 'Smart Revision', icon: Brain, path: '/dashboard' },
+  { label: 'Challenges', icon: Zap, path: '/dashboard' },
+  { label: 'Performance', icon: ChartNoAxesCombined, path: '/dashboard' },
+  { label: 'Achievements', icon: Trophy, path: '/dashboard' },
+];
+
+function readAccessToken() {
+  const directKeys = ['access_token', 'sb-access-token'];
+
+  for (const key of directKeys) {
+    const value = localStorage.getItem(key);
+    if (value && value !== 'undefined' && value !== 'null') {
+      try {
+        const parsed = JSON.parse(value);
+        if (parsed?.access_token) return parsed.access_token;
+      } catch {
+        return value;
+      }
+    }
+  }
+
+  // Supabase may store its session under a project-specific key.
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+
+    if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
+      try {
+        const session = JSON.parse(localStorage.getItem(key) || '{}');
+        if (session?.access_token) return session.access_token;
+      } catch {
+        // Ignore unrelated or malformed local-storage entries.
+      }
+    }
+  }
+
+  return null;
+}
+
+async function apiRequest(path, token) {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const body = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(
+      body?.error || body?.message || `Request failed (${response.status})`,
+    );
+  }
+
+  return body;
+}
+
+function getGreeting() {
+  const hour = new Date().getHours();
+
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function getDisplayName(profile) {
+  const name =
+    profile?.nickname ||
+    profile?.full_name ||
+    profile?.profile?.full_name ||
+    profile?.name ||
+    profile?.email?.split('@')[0];
+
+  return name ? String(name).trim().split(/\s+/)[0] : 'Student';
+}
+
+function formatNumber(value, fallback = '—') {
+  if (value === null || value === undefined || value === '') return fallback;
+
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toLocaleString() : fallback;
+}
+
+function formatPercent(value) {
+  if (value === null || value === undefined || value === '') return '—';
+
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '—';
+
+  return `${Math.round(Math.max(0, Math.min(100, number)))}%`;
+}
+
+function getAccuracy(overview) {
+  return (
+    overview?.accuracy ??
+    overview?.overall_accuracy ??
+    overview?.average_accuracy ??
+    null
+  );
+}
+
+function getAttempts(overview) {
+  return (
+    overview?.total_attempts ??
+    overview?.exams_taken ??
+    overview?.total_exams ??
+    0
+  );
+}
+
+function getQuestionsAnswered(overview) {
+  return (
+    overview?.questions_answered ??
+    overview?.total_questions_answered ??
+    overview?.answered_questions ??
+    0
+  );
+}
+
+function getStreak(overview, summary) {
+  return (
+    overview?.streak ??
+    overview?.current_streak ??
+    summary?.streak ??
+    0
+  );
+}
+
+function normalizeHistory(history) {
+  if (!Array.isArray(history)) return [];
+
+  return history
+    .map((item, index) => {
+      const score = Number(
+        item?.accuracy ??
+          item?.score_percentage ??
+          item?.percentage ??
+          item?.score ??
+          0,
+      );
+
+      return {
+        id: item?.id ?? `${item?.date ?? item?.created_at ?? 'attempt'}-${index}`,
+        label: item?.label || item?.date_label || item?.date || item?.created_at || `Test ${index + 1}`,
+        score: Number.isFinite(score)
+          ? Math.max(0, Math.min(100, score))
+          : 0,
+      };
+    })
+    .slice(-7);
+}
+
+function normalizeSubjects(subjects) {
+  if (!Array.isArray(subjects)) return [];
+
+  return subjects
+    .map((subject, index) => {
+      const accuracy = Number(
+        subject?.accuracy ??
+          subject?.accuracy_percentage ??
+          subject?.percentage ??
+          0,
+      );
+
+      return {
+        id: subject?.id ?? `${subject?.subject ?? subject?.name ?? 'subject'}-${index}`,
+        name: subject?.subject ?? subject?.name ?? subject?.subject_name ?? 'Subject',
+        accuracy: Number.isFinite(accuracy)
+          ? Math.max(0, Math.min(100, accuracy))
+          : 0,
+        answered: subject?.questions_answered ?? subject?.answered ?? null,
+      };
+    })
+    .sort((a, b) => a.accuracy - b.accuracy);
+}
+
+function normalizeActivities(activities) {
+  if (!Array.isArray(activities)) return [];
+
+  return activities.slice(0, 5).map((activity, index) => ({
+    id: activity?.id ?? `${activity?.title ?? 'activity'}-${index}`,
+    title:
+      activity?.title ||
+      activity?.activity ||
+      activity?.exam_name ||
+      activity?.subject ||
+      'Practice activity',
+    detail:
+      activity?.detail ||
+      activity?.description ||
+      activity?.subject ||
+      activity?.mode ||
+      'Keep building your progress',
+    date: activity?.date || activity?.created_at || activity?.completed_at || '',
+    score:
+      activity?.accuracy ??
+      activity?.score_percentage ??
+      activity?.percentage ??
+      null,
+  }));
+}
+
+function formatDate(value) {
+  if (!value) return '';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+
+  return date.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+  });
+}
+
+function StatCard({ icon: Icon, label, value, helper }) {
+  return (
+    <article className="premium-stat-card">
+      <div className="premium-stat-top">
+        <span className="stat-icon">
+          <Icon size={20} strokeWidth={1.8} aria-hidden="true" />
+        </span>
+      </div>
+
+      <p className="premium-stat-label">{label}</p>
+      <h3 className="premium-stat-value">{value}</h3>
+      <p className="premium-stat-helper">{helper}</p>
+    </article>
+  );
+}
+
+function PanelHeading({ eyebrow, title, action, onAction }) {
+  return (
+    <div className="premium-panel-heading">
+      <div>
+        {eyebrow && <p className="premium-eyebrow">{eyebrow}</p>}
+        <h2>{title}</h2>
+      </div>
+
+      {action && (
+        <button
+          className="premium-text-button"
+          type="button"
+          onClick={onAction}
+        >
+          {action}
+          <ArrowRight size={15} strokeWidth={1.8} aria-hidden="true" />
+        </button>
+      )}
+    </div>
+  );
+}
 
 function PremiumDashboard() {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
-  return (
-    <div className="premium-page">
+  const [profile, setProfile] = useState(null);
+  const [summary, setSummary] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeNav, setActiveNav] = useState('Command Center');
 
-      {/* Background atmosphere */}
-      <div className="premium-bg-glow premium-glow-one"></div>
-      <div className="premium-bg-glow premium-glow-two"></div>
+  const loadDashboard = useCallback(async () => {
+    setLoading(true);
+    setError('');
 
-      {/* Sidebar */}
-      <aside className="premium-sidebar">
+    try {
+      const token = readAccessToken();
 
-        <div className="premium-brand">
-          <div className="premium-brand-mark">
-            O
-          </div>
+      if (!token) {
+        throw new Error('Your session could not be found. Please sign in again.');
+      }
 
-          <div>
-            <strong>OVERMATHS</strong>
-            <span>PREMIUM</span>
+      const meResponse = await apiRequest('/api/auth/me', token);
+      const currentProfile =
+        meResponse?.user ??
+        meResponse?.profile ??
+        meResponse?.data?.user ??
+        meResponse?.data ??
+        meResponse;
+
+      setProfile(currentProfile);
+
+      // The backend identifies the user from the verified bearer token.
+      // Do not add a browser-supplied user_id to this request.
+      const dashboardResponse = await apiRequest('/api/dashboard/summary', token);
+
+      setSummary(
+        dashboardResponse?.data ??
+          dashboardResponse?.summary ??
+          dashboardResponse,
+      );
+    } catch (requestError) {
+      setError(
+        requestError?.message ||
+          'We could not load your dashboard. Please try again.',
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
+
+  const overview = summary?.overview ?? summary?.stats ?? {};
+  const history = useMemo(
+    () =>
+      normalizeHistory(
+        summary?.performance_history ??
+          summary?.performance ??
+          summary?.trend ??
+          [],
+      ),
+    [summary],
+  );
+
+  const subjects = useMemo(
+    () =>
+      normalizeSubjects(
+        summary?.subject_accuracy ??
+          summary?.subjects ??
+          summary?.subject_performance ??
+          [],
+      ),
+    [summary],
+  );
+
+  const activities = useMemo(
+    () =>
+      normalizeActivities(
+        summary?.recent_activity ??
+          summary?.recent_activities ??
+          summary?.activities ??
+          [],
+      ),
+    [summary],
+  );
+
+  const weaknesses = useMemo(() => {
+    const values =
+      summary?.weaknesses ??
+      summary?.weak_areas ??
+      summary?.areas_to_improve ??
+      [];
+
+    if (!Array.isArray(values)) return [];
+
+    return values.slice(0, 3).map((item, index) => ({
+      id: item?.id ?? `${item?.topic ?? item?.subject ?? 'weakness'}-${index}`,
+      name:
+        typeof item === 'string'
+          ? item
+          : item?.topic ?? item?.subject ?? item?.name ?? 'Revision topic',
+      accuracy:
+        typeof item === 'object'
+          ? item?.accuracy ?? item?.accuracy_percentage ?? null
+          : null,
+    }));
+  }, [summary]);
+
+  const name = getDisplayName(profile);
+  const accuracy = getAccuracy(overview);
+  const attempts = getAttempts(overview);
+  const questionsAnswered = getQuestionsAnswered(overview);
+  const streak = getStreak(overview, summary);
+
+  const encouragement =
+    summary?.encouragement ||
+    summary?.message ||
+    'Every question you practise is a step towards exam confidence.';
+
+  const examName =
+    profile?.exam_type ||
+    profile?.exam_name ||
+    profile?.learning_route ||
+    'Your exam journey';
+
+  const readiness = Number(
+    overview?.readiness ??
+      overview?.readiness_percentage ??
+      summary?.readiness ??
+      0,
+  );
+
+  const examDate =
+    profile?.exam_date ||
+    profile?.target_exam_date ||
+    profile?.exam?.exam_date ||
+    null;
+
+  const daysRemaining = examDate
+    ? Math.max(
+        0,
+        Math.ceil(
+          (new Date(examDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+        ),
+      )
+    : null;
+
+  const handleNavigate = (item) => {
+    setActiveNav(item.label);
+    setSidebarOpen(false);
+    navigate(item.path);
+  };
+
+  const handleSetExamDate = () => {
+    navigate('/student-profile');
+  };
+
+  const handleSignOut = () => {
+    navigate('/login');
+  };
+
+  if (loading) {
+    return (
+      <main className="premium-page premium-page-state">
+        <div className="premium-state-card">
+          <span className="premium-loading-icon">
+            <RefreshCw size={23} strokeWidth={1.8} />
+          </span>
+          <h2>Preparing your dashboard</h2>
+          <p>Loading your latest learning progress...</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (error) {
+    return (
+      <main className="premium-page premium-page-state">
+        <div className="premium-state-card">
+          <span className="premium-error-icon">
+            <AlertCircle size={24} strokeWidth={1.8} />
+          </span>
+          <h2>We couldn't load your dashboard</h2>
+          <p>{error}</p>
+          <div className="premium-state-actions">
+            <button
+              className="premium-primary-button"
+              type="button"
+              onClick={loadDashboard}
+            >
+              <RefreshCw size={16} />
+              Try again
+            </button>
+            <button
+              className="premium-secondary-button"
+              type="button"
+              onClick={handleSignOut}
+            >
+              Back to login
+            </button>
           </div>
         </div>
+      </main>
+    );
+  }
 
-        <nav className="premium-nav">
+  return (
+    <main className="premium-page">
+      {sidebarOpen && (
+        <button
+          className="premium-sidebar-overlay"
+          type="button"
+          aria-label="Close navigation menu"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
-          <button className="premium-nav-item active">
-            <span>⌂</span>
-            Command Center
+      <aside
+        className={`premium-sidebar ${sidebarOpen ? 'premium-sidebar-open' : ''}`}
+      >
+        <div className="premium-brand">
+          <div className="premium-brand-mark">
+            <GraduationCap size={23} strokeWidth={1.8} aria-hidden="true" />
+          </div>
+          <div className="premium-brand-copy">
+            <span className="premium-brand-name">
+              Over<span>maths</span>
+            </span>
+            <span className="premium-brand-caption">PREMIUM LEARNING</span>
+          </div>
+          <button
+            type="button"
+            className="premium-sidebar-close"
+            aria-label="Close sidebar"
+            onClick={() => setSidebarOpen(false)}
+          >
+            <X size={21} />
           </button>
+        </div>
 
-          <button className="premium-nav-item">
-            <span>🎯</span>
-            My Exam
-          </button>
+        <div className="premium-sidebar-section">
+          <p className="premium-sidebar-label">WORKSPACE</p>
 
-          <button className="premium-nav-item">
-            <span>◈</span>
-            Practice
-          </button>
+          <nav className="premium-navigation" aria-label="Main navigation">
+            {NAV_ITEMS.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeNav === item.label;
 
-          <button className="premium-nav-item">
-            <span>◷</span>
-            Smart Revision
-          </button>
-
-          <button className="premium-nav-item">
-            <span>⚡</span>
-            Challenges
-          </button>
-
-          <button className="premium-nav-item">
-            <span>▥</span>
-            Performance
-          </button>
-
-          <button className="premium-nav-item">
-            <span>🏆</span>
-            Achievements
-          </button>
-
-        </nav>
+              return (
+                <button
+                  type="button"
+                  key={item.label}
+                  className={`premium-nav-item ${isActive ? 'active' : ''}`}
+                  onClick={() => handleNavigate(item)}
+                >
+                  <Icon size={19} strokeWidth={1.8} aria-hidden="true" />
+                  <span>{item.label}</span>
+                  {isActive && (
+                    <span className="premium-nav-indicator" aria-hidden="true" />
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
 
         <div className="premium-sidebar-bottom">
-
-          <div className="premium-upgrade-card">
-            <span className="upgrade-label">
-              PREMIUM
+          <div className="premium-sidebar-support">
+            <span className="premium-support-icon">
+              <Sparkles size={18} strokeWidth={1.8} aria-hidden="true" />
             </span>
-
-            <strong>
-              Your preparation,
-              <br />
-              upgraded.
-            </strong>
-
-            <small>
-              Keep building your exam journey.
-            </small>
+            <div>
+              <strong>Keep going</strong>
+              <p>Small steps. Big results.</p>
+            </div>
           </div>
 
           <button
-            className="premium-back-button"
-            onClick={() => navigate('/dashboard')}
+            type="button"
+            className="premium-profile-button"
+            onClick={() => navigate('/student-profile')}
           >
-            ← Back to Dashboard
+            <span className="premium-avatar">
+              <CircleUserRound size={25} strokeWidth={1.6} />
+            </span>
+            <span className="premium-profile-copy">
+              <strong>{name}</strong>
+              <small>Premium student</small>
+            </span>
+            <ChevronRight size={17} />
           </button>
 
+          <button
+            type="button"
+            className="premium-logout-button"
+            onClick={handleSignOut}
+          >
+            <LogOut size={17} strokeWidth={1.8} />
+            <span>Sign out</span>
+          </button>
         </div>
-
       </aside>
 
-      {/* Main */}
-      <main className="premium-main">
+      <section className="premium-main">
+        <header className="premium-topbar">
+          <button
+            type="button"
+            className="premium-menu-toggle"
+            aria-label="Open navigation menu"
+            onClick={() => setSidebarOpen(true)}
+          >
+            <Menu size={23} strokeWidth={1.8} />
+          </button>
 
-        {/* Header */}
-        <header className="premium-header">
-
-          <div>
-            <p className="premium-eyebrow">
-              OVERMATHS PREMIUM
-            </p>
-
-            <h1>
-              Good morning, Student.
-            </h1>
-
-            <p className="premium-header-description">
-              Your preparation is moving forward. Here's what deserves
-              your attention today.
-            </p>
+          <div className="premium-breadcrumb">
+            <span>Workspace</span>
+            <ChevronRight size={14} />
+            <strong>Command Center</strong>
           </div>
 
-          <div className="premium-profile">
-
-            <div className="premium-profile-avatar">
-              S
-            </div>
-
-            <div>
-              <strong>
-                Premium Student
-              </strong>
-
-              <span>
-                Level 12 · 2,840 XP
-              </span>
-            </div>
-
+          <div className="premium-topbar-right">
+            <span className="premium-status-dot" />
+            <span className="premium-status-text">Learning space active</span>
+            <span className="premium-topbar-avatar">
+              <CircleUserRound size={23} strokeWidth={1.6} />
+            </span>
           </div>
-
         </header>
 
-
-        {/* Main stats */}
-        <section className="premium-stat-grid">
-
-          <div className="premium-stat-card featured">
-
-            <div className="stat-card-top">
-              <span>
-                EXAM COUNTDOWN
-              </span>
-
-              <span className="stat-icon">
-                ◷
-              </span>
-            </div>
-
-            <strong className="countdown-number">
-              247
-            </strong>
-
-            <span className="countdown-label">
-              DAYS TO EXAM
-            </span>
-
-            <div className="stat-card-footer">
-              <span>
-                JAMB · 2027
-              </span>
-
-              <button>
-                View plan →
-              </button>
-            </div>
-
-          </div>
-
-
-          <div className="premium-stat-card">
-
-            <div className="stat-card-top">
-              <span>
-                TARGET SCORE
-              </span>
-
-              <span className="stat-icon">
-                🎯
-              </span>
-            </div>
-
-            <strong>
-              280
-            </strong>
-
-            <span className="stat-description">
-              Your current target
-            </span>
-
-            <div className="mini-progress">
-              <div style={{ width: '73%' }}></div>
-            </div>
-
-            <small>
-              73% preparation progress
-            </small>
-
-          </div>
-
-
-          <div className="premium-stat-card">
-
-            <div className="stat-card-top">
-              <span>
-                READINESS
-              </span>
-
-              <span className="stat-icon">
-                ◉
-              </span>
-            </div>
-
-            <strong>
-              68%
-            </strong>
-
-            <span className="stat-description">
-              Overall preparation
-            </span>
-
-            <div className="readiness-status">
-              <span></span>
-              On track
-            </div>
-
-          </div>
-
-
-          <div className="premium-stat-card">
-
-            <div className="stat-card-top">
-              <span>
-                STUDY STREAK
-              </span>
-
-              <span className="stat-icon">
-                🔥
-              </span>
-            </div>
-
-            <strong>
-              12
-            </strong>
-
-            <span className="stat-description">
-              Consecutive study days
-            </span>
-
-            <small className="positive-text">
-              +4 days this month
-            </small>
-
-          </div>
-
-        </section>
-
-
-        {/* Today's mission */}
-        <section className="premium-mission">
-
-          <div className="mission-content">
-
-            <div className="mission-label">
-              <span className="mission-dot"></span>
-              TODAY'S MISSION
-            </div>
-
-            <h2>
-              Strengthen your Waves
-              <br />
-              foundation.
-            </h2>
-
-            <p>
-              Your recent performance shows that Waves needs
-              attention. Complete today's targeted session to
-              improve your mastery.
-            </p>
-
-            <div className="mission-meta">
-
-              <span>
-                ◈ Physics
-              </span>
-
-              <span>
-                15 Questions
-              </span>
-
-              <span>
-                20 Minutes
-              </span>
-
-            </div>
-
-            <button className="premium-primary-button">
-              Start Mission
-              <span>→</span>
-            </button>
-
-          </div>
-
-
-          <div className="mission-visual">
-
-            <div className="mission-orbit orbit-one"></div>
-            <div className="mission-orbit orbit-two"></div>
-
-            <div className="mission-core">
-              <span>58%</span>
-              <small>MASTERY</small>
-            </div>
-
-          </div>
-
-        </section>
-
-
-        {/* Two-column area */}
-        <section className="premium-content-grid">
-
-
-          {/* Performance */}
-          <div className="premium-panel performance-panel">
-
-            <div className="panel-header">
-
-              <div>
-                <span className="panel-label">
-                  PERFORMANCE
-                </span>
-
-                <h3>
-                  Your progress
-                </h3>
-              </div>
-
-              <button className="panel-action">
-                Last 30 days ▾
-              </button>
-
-            </div>
-
-            <div className="performance-score">
-
-              <strong>
-                76%
-              </strong>
-
-              <span>
-                +11.4%
-              </span>
-
-              <small>
-                Average accuracy
-              </small>
-
-            </div>
-
-            <div className="fake-chart">
-
-              <div className="chart-grid-line line-one"></div>
-              <div className="chart-grid-line line-two"></div>
-              <div className="chart-grid-line line-three"></div>
-
-              <div className="chart-line">
-
-                <span className="chart-point point-one"></span>
-                <span className="chart-point point-two"></span>
-                <span className="chart-point point-three"></span>
-                <span className="chart-point point-four"></span>
-                <span className="chart-point point-five"></span>
-                <span className="chart-point point-six"></span>
-                <span className="chart-point point-seven"></span>
-
-              </div>
-
-              <div className="chart-labels">
-                <span>Sep 1</span>
-                <span>Sep 8</span>
-                <span>Sep 15</span>
-                <span>Sep 22</span>
-                <span>Oct 1</span>
-              </div>
-
-            </div>
-
-          </div>
-
-
-          {/* Weak areas */}
-          <div className="premium-panel">
-
-            <div className="panel-header">
-
-              <div>
-                <span className="panel-label">
-                  INTELLIGENCE
-                </span>
-
-                <h3>
-                  Areas to improve
-                </h3>
-              </div>
-
-              <button className="text-button">
-                View all →
-              </button>
-
-            </div>
-
-
-            <div className="weak-area">
-
-              <div className="weak-area-info">
-
-                <strong>
-                  Waves
-                </strong>
-
-                <span>
-                  Physics
-                </span>
-
-              </div>
-
-              <div className="weak-area-score">
-                58%
-              </div>
-
-              <div className="weak-progress">
-                <div style={{ width: '58%' }}></div>
-              </div>
-
-            </div>
-
-
-            <div className="weak-area">
-
-              <div className="weak-area-info">
-
-                <strong>
-                  Trigonometry
-                </strong>
-
-                <span>
-                  Mathematics
-                </span>
-
-              </div>
-
-              <div className="weak-area-score">
-                64%
-              </div>
-
-              <div className="weak-progress">
-                <div style={{ width: '64%' }}></div>
-              </div>
-
-            </div>
-
-
-            <div className="weak-area">
-
-              <div className="weak-area-info">
-
-                <strong>
-                  Organic Chemistry
-                </strong>
-
-                <span>
-                  Chemistry
-                </span>
-
-              </div>
-
-              <div className="weak-area-score">
-                71%
-              </div>
-
-              <div className="weak-progress">
-                <div style={{ width: '71%' }}></div>
-              </div>
-
-            </div>
-
-          </div>
-
-        </section>
-
-
-        {/* Bottom cards */}
-        <section className="premium-bottom-grid">
-
-
-          {/* Journey */}
-          <div className="premium-panel journey-panel">
-
-            <div className="panel-header">
-
-              <div>
-                <span className="panel-label">
-                  YOUR JOURNEY
-                </span>
-
-                <h3>
-                  Keep climbing.
-                </h3>
-              </div>
-
-              <span className="level-badge">
-                LEVEL 12
-              </span>
-
-            </div>
-
-            <div className="journey-progress">
-
-              <div className="journey-progress-header">
-                <span>
-                  2,840 XP
-                </span>
-
-                <span>
-                  3,000 XP
-                </span>
-              </div>
-
-              <div className="journey-bar">
-                <div></div>
-              </div>
-
-            </div>
-
-            <div className="achievement-row">
-
-              <div>
-                <span>🔥</span>
-                <strong>12</strong>
-                <small>Day streak</small>
-              </div>
-
-              <div>
-                <span>🏆</span>
-                <strong>8</strong>
-                <small>Achievements</small>
-              </div>
-
-              <div>
-                <span>⚡</span>
-                <strong>143</strong>
-                <small>Best day</small>
-              </div>
-
-            </div>
-
-          </div>
-
-
-          {/* Coach */}
-          <div className="premium-panel coach-panel">
-
-            <div className="coach-icon">
-              ✦
-            </div>
-
-            <div className="coach-content">
-
-              <span className="panel-label">
-                OVERMATHS COACH
-              </span>
-
-              <h3>
-                You're making progress.
-              </h3>
-
-              <p>
-                Your Physics accuracy has improved by 11%
-                this month. Your next priority should be Waves.
+        <div className="premium-dashboard-content">
+          <section className="premium-welcome">
+            <div>
+              <p className="premium-eyebrow">
+                <Sparkles size={14} strokeWidth={1.8} />
+                YOUR LEARNING COMMAND CENTER
               </p>
-
-              <button className="text-button">
-                View full analysis →
-              </button>
-
+              <h1>
+                {getGreeting()}, {name}
+                <span className="premium-title-period">.</span>
+              </h1>
+              <p className="premium-welcome-description">
+                Here's your progress so far. Let's make today count.
+              </p>
             </div>
 
-          </div>
+            <button
+              type="button"
+              className="premium-date-chip"
+              onClick={handleSetExamDate}
+            >
+              <CalendarDays size={17} strokeWidth={1.8} />
+              <span>
+                {daysRemaining === null
+                  ? 'Set your exam date'
+                  : `${daysRemaining} days to exam`}
+              </span>
+              <ChevronRight size={15} />
+            </button>
+          </section>
 
-        </section>
+          <section className="premium-exam-banner">
+            <div className="premium-exam-banner-content">
+              <span className="premium-banner-icon">
+                <GraduationCap size={23} strokeWidth={1.7} />
+              </span>
+              <div>
+                <p className="premium-banner-label">YOUR CURRENT GOAL</p>
+                <h2>{examName}</h2>
+                <p>
+                  {examDate
+                    ? `Exam date: ${formatDate(examDate)}`
+                    : 'Set your exam date to personalise your countdown.'}
+                </p>
+              </div>
+            </div>
 
-      </main>
+            <button
+              type="button"
+              className="premium-banner-button"
+              onClick={handleSetExamDate}
+            >
+              {examDate ? 'Update goal' : 'Set exam date'}
+              <ArrowRight size={16} />
+            </button>
+          </section>
 
-    </div>
-  )
+          <section className="premium-stats-grid" aria-label="Learning overview">
+            <StatCard
+              icon={Clock3}
+              label="Days to exam"
+              value={daysRemaining === null ? '—' : daysRemaining}
+              helper={daysRemaining === null ? 'Exam date not set' : 'Keep your revision consistent'}
+            />
+            <StatCard
+              icon={PencilLine}
+              label="Questions answered"
+              value={formatNumber(questionsAnswered, '0')}
+              helper="Across your recorded practice"
+            />
+            <StatCard
+              icon={Target}
+              label="Exam readiness"
+              value={Number.isFinite(readiness) && readiness > 0 ? formatPercent(readiness) : '—'}
+              helper="Based on available progress data"
+            />
+            <StatCard
+              icon={Flame}
+              label="Practice streak"
+              value={`${formatNumber(streak, '0')} ${Number(streak) === 1 ? 'day' : 'days'}`}
+              helper="Build a consistent habit"
+            />
+          </section>
+
+          <section className="premium-content-grid">
+            <article className="premium-panel premium-mission-panel">
+              <PanelHeading
+                eyebrow="YOUR NEXT MOVE"
+                title="Today's mission"
+              />
+
+              <div className="premium-mission">
+                <div className="premium-mission-art" aria-hidden="true">
+                  <div className="premium-orbit premium-orbit-one" />
+                  <div className="premium-orbit premium-orbit-two" />
+                  <div className="premium-mission-core">
+                    <Target size={34} strokeWidth={1.5} />
+                  </div>
+                  <span className="premium-orbit-dot premium-orbit-dot-one" />
+                  <span className="premium-orbit-dot premium-orbit-dot-two" />
+                </div>
+
+                <div className="premium-mission-copy">
+                  <span className="premium-mission-tag">RECOMMENDED</span>
+                  <h3>Strengthen your weakest areas</h3>
+                  <p>
+                    Focus on the topics that need more attention and build
+                    confidence one question at a time.
+                  </p>
+
+                  <div className="premium-mission-meta">
+                    <span>
+                      <BookOpen size={15} />
+                      Targeted practice
+                    </span>
+                    <span>
+                      <Clock3 size={15} />
+                      Self-paced
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="premium-primary-button"
+                    onClick={() => navigate('/dashboard')}
+                  >
+                    Start practising
+                    <ArrowRight size={16} />
+                  </button>
+                </div>
+              </div>
+            </article>
+
+            <article className="premium-panel premium-accuracy-panel">
+              <PanelHeading
+                eyebrow="YOUR OVERVIEW"
+                title="Performance snapshot"
+              />
+
+              <div className="premium-accuracy-display">
+                <div className="premium-accuracy-ring">
+                  <svg viewBox="0 0 120 120" role="img" aria-label={`Overall accuracy ${formatPercent(accuracy)}`}>
+                    <circle
+                      className="premium-ring-track"
+                      cx="60"
+                      cy="60"
+                      r="48"
+                      fill="none"
+                      strokeWidth="9"
+                    />
+                    <circle
+                      className="premium-ring-progress"
+                      cx="60"
+                      cy="60"
+                      r="48"
+                      fill="none"
+                      strokeWidth="9"
+                      strokeLinecap="round"
+                      strokeDasharray={`${(Math.max(0, Math.min(100, Number(accuracy) || 0)) / 100) * 301.59} 301.59`}
+                      transform="rotate(-90 60 60)"
+                    />
+                  </svg>
+                  <div className="premium-ring-center">
+                    <strong>{formatPercent(accuracy)}</strong>
+                    <span>Accuracy</span>
+                  </div>
+                </div>
+
+                <div className="premium-accuracy-details">
+                  <div className="premium-accuracy-detail">
+                    <span className="premium-detail-icon">
+                      <PencilLine size={17} />
+                    </span>
+                    <div>
+                      <strong>{formatNumber(questionsAnswered, '0')}</strong>
+                      <span>Questions answered</span>
+                    </div>
+                  </div>
+
+                  <div className="premium-accuracy-detail">
+                    <span className="premium-detail-icon">
+                      <GraduationCap size={18} />
+                    </span>
+                    <div>
+                      <strong>{formatNumber(attempts, '0')}</strong>
+                      <span>Exam attempts</span>
+                    </div>
+                  </div>
+
+                  <div className="premium-accuracy-detail">
+                    <span className="premium-detail-icon">
+                      <TrendingUp size={17} />
+                    </span>
+                    <div>
+                      <strong>
+                        {history.length > 1
+                          ? `${history[history.length - 1].score >= history[history.length - 2].score ? '+' : ''}${Math.round(history[history.length - 1].score - history[history.length - 2].score)}%`
+                          : '—'}
+                      </strong>
+                      <span>Latest score change</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <p className="premium-data-note">
+                Figures reflect the information currently recorded in your account.
+              </p>
+            </article>
+          </section>
+
+          <section className="premium-content-grid premium-content-grid-lower">
+            <article className="premium-panel premium-history-panel">
+              <PanelHeading
+                eyebrow="YOUR PROGRESS"
+                title="Performance history"
+              />
+
+              {history.length > 0 ? (
+                <div className="premium-history-chart">
+                  <div className="premium-chart-y-labels" aria-hidden="true">
+                    <span>100%</span>
+                    <span>75%</span>
+                    <span>50%</span>
+                    <span>25%</span>
+                    <span>0%</span>
+                  </div>
+
+                  <div className="premium-chart-main">
+                    <div className="premium-chart-grid-lines" aria-hidden="true">
+                      <span />
+                      <span />
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+
+                    <div className="premium-chart-bars">
+                      {history.map((item) => (
+                        <div className="premium-chart-column" key={item.id}>
+                          <span className="premium-chart-value">
+                            {Math.round(item.score)}%
+                          </span>
+                          <div className="premium-chart-bar-track">
+                            <div
+                              className="premium-chart-bar"
+                              style={{ height: `${item.score}%` }}
+                              title={`${item.label}: ${Math.round(item.score)}%`}
+                            />
+                          </div>
+                          <span className="premium-chart-label">
+                            {formatDate(item.label) || item.label}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="premium-empty-state">
+                  <ChartNoAxesCombined size={27} strokeWidth={1.6} />
+                  <h3>Your progress chart will appear here</h3>
+                  <p>Complete a practice session to start building your history.</p>
+                </div>
+              )}
+            </article>
+
+            <article className="premium-panel premium-weakness-panel">
+              <PanelHeading
+                eyebrow="FOCUS AREAS"
+                title="Needs more practice"
+                action="Practise"
+                onAction={() => navigate('/dashboard')}
+              />
+
+              {weaknesses.length > 0 ? (
+                <div className="premium-weakness-list">
+                  {weaknesses.map((item) => (
+                    <div className="premium-weakness-item" key={item.id}>
+                      <span className="premium-weakness-icon">
+                        <Target size={17} strokeWidth={1.8} />
+                      </span>
+                      <div className="premium-weakness-copy">
+                        <strong>{item.name}</strong>
+                        <span>
+                          {item.accuracy === null
+                            ? 'Focus topic'
+                            : `${formatPercent(item.accuracy)} accuracy`}
+                        </span>
+                      </div>
+                      <ChevronRight size={17} />
+                    </div>
+                  ))}
+                </div>
+              ) : subjects.length > 0 ? (
+                <div className="premium-weakness-list">
+                  {subjects.slice(0, 3).map((subject) => (
+                    <div className="premium-weakness-item" key={subject.id}>
+                      <span className="premium-weakness-icon">
+                        <BookOpen size={17} strokeWidth={1.8} />
+                      </span>
+                      <div className="premium-weakness-copy">
+                        <strong>{subject.name}</strong>
+                        <span>{formatPercent(subject.accuracy)} accuracy</span>
+                      </div>
+                      <ChevronRight size={17} />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="premium-empty-state premium-empty-compact">
+                  <Target size={25} strokeWidth={1.6} />
+                  <h3>No focus areas yet</h3>
+                  <p>Complete more questions to identify topics to work on.</p>
+                </div>
+              )}
+
+              <div className="premium-coach-note">
+                <Sparkles size={18} strokeWidth={1.8} />
+                <p>{encouragement}</p>
+              </div>
+            </article>
+          </section>
+
+          <section className="premium-content-grid premium-content-grid-lower">
+            <article className="premium-panel premium-subject-panel">
+              <PanelHeading
+                eyebrow="SUBJECT BREAKDOWN"
+                title="Your subjects"
+              />
+
+              {subjects.length > 0 ? (
+                <div className="premium-subject-list">
+                  {subjects.slice(0, 6).map((subject) => (
+                    <div className="premium-subject-row" key={subject.id}>
+                      <div className="premium-subject-row-heading">
+                        <span>{subject.name}</span>
+                        <strong>{formatPercent(subject.accuracy)}</strong>
+                      </div>
+                      <div
+                        className="premium-subject-track"
+                        role="progressbar"
+                        aria-label={`${subject.name} accuracy`}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={subject.accuracy}
+                      >
+                        <span
+                          className="premium-subject-fill"
+                          style={{ width: `${subject.accuracy}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="premium-empty-state premium-empty-compact">
+                  <BookOpen size={25} strokeWidth={1.6} />
+                  <h3>Subject data will appear here</h3>
+                  <p>Your subject breakdown will update as results are recorded.</p>
+                </div>
+              )}
+            </article>
+
+            <article className="premium-panel premium-activity-panel">
+              <PanelHeading
+                eyebrow="RECENT LEARNING"
+                title="Recent activity"
+                action="View all"
+                onAction={() => navigate('/dashboard')}
+              />
+
+              {activities.length > 0 ? (
+                <div className="premium-activity-list">
+                  {activities.map((activity) => (
+                    <div className="premium-activity-item" key={activity.id}>
+                      <span className="premium-activity-icon">
+                        <CheckCircle2 size={18} strokeWidth={1.8} />
+                      </span>
+                      <div className="premium-activity-copy">
+                        <strong>{activity.title}</strong>
+                        <span>{activity.detail}</span>
+                      </div>
+                      <div className="premium-activity-result">
+                        {activity.score !== null && activity.score !== undefined
+                          ? formatPercent(activity.score)
+                          : ''}
+                        <small>{formatDate(activity.date)}</small>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="premium-empty-state premium-empty-compact">
+                  <Clock3 size={25} strokeWidth={1.6} />
+                  <h3>No recent activity</h3>
+                  <p>Your completed practice sessions will show up here.</p>
+                </div>
+              )}
+            </article>
+          </section>
+
+          <footer className="premium-footer">
+            <span>Overmaths Premium</span>
+            <span className="premium-footer-separator" />
+            <span>Built for better learning</span>
+            <span className="premium-footer-spacer" />
+            <button type="button" onClick={loadDashboard}>
+              <RefreshCw size={14} />
+              Refresh data
+            </button>
+          </footer>
+        </div>
+      </section>
+    </main>
+  );
 }
 
-export default PremiumDashboard
+export default PremiumDashboard;
