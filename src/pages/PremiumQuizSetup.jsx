@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -13,25 +13,209 @@ import {
 } from "lucide-react";
 import "./PremiumQuizSetup.css";
 
+const API_URL = (
+  import.meta.env.VITE_API_BASE_URL ||
+  "https://overmaths.onrender.com"
+).replace(/\/$/, "");
+
+function normalizeTopic(value) {
+  const topic = String(value || "")
+    .normalize("NFKC")
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/\s*([/&])\s*/g, " $1 ");
+
+  const aliases = {
+    factorization: "factorisation",
+    vector: "vectors",
+    "number base": "number bases",
+  };
+
+  return aliases[topic] || topic;
+}
+
+async function fetchJson(path) {
+  const response = await fetch(`${API_URL}${path}`);
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.error || "Unable to load data.");
+  }
+
+  return data;
+}
+
 export default function PremiumQuizSetup() {
   const navigate = useNavigate();
 
   const [learningRoute, setLearningRoute] = useState("secondary");
   const [subject, setSubject] = useState("");
+  const [courseId, setCourseId] = useState("");
+  const [subjects, setSubjects] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [topics, setTopics] = useState([]);
   const [topic, setTopic] = useState("mixed");
   const [mode, setMode] = useState("practice");
   const [questionCount, setQuestionCount] = useState(10);
   const [timePerQuestion, setTimePerQuestion] = useState(30);
 
+  const [loadingOptions, setLoadingOptions] = useState(true);
+  const [loadingTopics, setLoadingTopics] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState("");
+
+  // Load subjects and university courses from the backend.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadOptions() {
+      setLoadingOptions(true);
+      setError("");
+
+      try {
+        const [subjectData, courseData] = await Promise.all([
+          fetchJson("/api/practice/subjects"),
+          fetchJson("/api/practice/courses"),
+        ]);
+
+        if (cancelled) return;
+
+        setSubjects(subjectData.subjects || []);
+        setCourses(
+          (courseData.courses || []).filter(
+            (course) => course.is_active !== false
+          )
+        );
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message || "Unable to load subjects and courses.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingOptions(false);
+        }
+      }
+    }
+
+    loadOptions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Load topics whenever the selected subject or course changes.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTopics() {
+      setTopics([]);
+      setTopic("mixed");
+      setError("");
+
+      const query =
+        learningRoute === "secondary"
+          ? subject
+            ? `?subject=${encodeURIComponent(subject)}`
+            : ""
+          : courseId
+            ? `?course_id=${encodeURIComponent(courseId)}`
+            : "";
+
+      if (!query) {
+        setLoadingTopics(false);
+        return;
+      }
+
+      setLoadingTopics(true);
+
+      try {
+        const data = await fetchJson(`/api/practice/topics${query}`);
+
+        if (cancelled) return;
+
+        // Deduplicate topic names even if the API returns variants.
+        const uniqueTopics = new Map();
+
+        for (const item of data.topics || []) {
+          const displayName = String(item || "").trim();
+          if (!displayName) continue;
+
+          const key = normalizeTopic(displayName);
+
+          if (!uniqueTopics.has(key)) {
+            uniqueTopics.set(key, displayName);
+          }
+        }
+
+        setTopics(
+          [...uniqueTopics.values()].sort((a, b) =>
+            a.localeCompare(b, undefined, { sensitivity: "base" })
+          )
+        );
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message || "Unable to load topics.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingTopics(false);
+        }
+      }
+    }
+
+    loadTopics();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [learningRoute, subject, courseId]);
+
+  function handleRouteChange(route) {
+    setLearningRoute(route);
+    setSubject("");
+    setCourseId("");
+    setTopic("mixed");
+    setTopics([]);
+    setError("");
+  }
+
   function handleStartQuiz() {
-    if (!subject.trim()) {
-      alert("Please enter or select a subject or course.");
+    if (starting) return;
+
+    if (learningRoute === "secondary" && !subject) {
+      alert("Please select a subject.");
       return;
     }
 
-    // The next step will connect this button to the
-    // Premium Quiz backend before navigating.
-    alert("Your setup is ready. Backend connection is next.");
+    if (learningRoute === "university" && !courseId) {
+      alert("Please select a university course.");
+      return;
+    }
+
+    setStarting(true);
+
+    const selectedCourse = courses.find(
+      (course) => String(course.id) === String(courseId)
+    );
+
+    navigate("/premium-quiz", {
+      state: {
+        subject: learningRoute === "secondary" ? subject : "All Subjects",
+        courseId: learningRoute === "university" ? Number(courseId) : null,
+        courseCode: selectedCourse?.code || "",
+        courseName: selectedCourse?.name || "",
+        topic,
+        questionCount,
+        mode:
+          mode === "examination"
+            ? "Examination Mode"
+            : "Practice Mode",
+        timePerQuestion,
+        learningRoute,
+      },
+    });
   }
 
   return (
@@ -79,11 +263,7 @@ export default function PremiumQuizSetup() {
                 className={`setup-choice ${
                   learningRoute === "secondary" ? "selected" : ""
                 }`}
-                onClick={() => {
-                  setLearningRoute("secondary");
-                  setSubject("");
-                  setTopic("mixed");
-                }}
+                onClick={() => handleRouteChange("secondary")}
               >
                 <GraduationCap size={22} />
                 <span>Secondary School</span>
@@ -95,11 +275,7 @@ export default function PremiumQuizSetup() {
                 className={`setup-choice ${
                   learningRoute === "university" ? "selected" : ""
                 }`}
-                onClick={() => {
-                  setLearningRoute("university");
-                  setSubject("");
-                  setTopic("mixed");
-                }}
+                onClick={() => handleRouteChange("university")}
               >
                 <BookOpen size={22} />
                 <span>University</span>
@@ -118,23 +294,50 @@ export default function PremiumQuizSetup() {
               {learningRoute === "secondary" ? "Subject" : "Course"}
             </label>
 
-            <input
-              id="premium-subject"
-              className="setup-input"
-              value={subject}
-              onChange={(event) => {
-                setSubject(event.target.value);
-                setTopic("mixed");
-              }}
-              placeholder={
-                learningRoute === "secondary"
-                  ? "e.g. Mathematics"
-                  : "Enter your course name or code"
-              }
-            />
+            {learningRoute === "secondary" ? (
+              <select
+                id="premium-subject"
+                className="setup-input"
+                value={subject}
+                onChange={(event) => setSubject(event.target.value)}
+                disabled={loadingOptions}
+              >
+                <option value="">
+                  {loadingOptions ? "Loading subjects..." : "Select a subject"}
+                </option>
+
+                {subjects.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <select
+                id="premium-subject"
+                className="setup-input"
+                value={courseId}
+                onChange={(event) => setCourseId(event.target.value)}
+                disabled={loadingOptions}
+              >
+                <option value="">
+                  {loadingOptions ? "Loading courses..." : "Select a course"}
+                </option>
+
+                {courses.map((course) => (
+                  <option key={course.id} value={course.id}>
+                    {course.code
+                      ? `${course.code} — ${course.name}`
+                      : course.name}
+                  </option>
+                ))}
+              </select>
+            )}
 
             <p className="setup-help">
-              We’ll connect this field to your available subjects and courses.
+              {learningRoute === "secondary"
+                ? "Subjects are loaded from your available question bank."
+                : "Choose a course to load its available topics."}
             </p>
           </section>
 
@@ -151,10 +354,33 @@ export default function PremiumQuizSetup() {
               className="setup-input"
               value={topic}
               onChange={(event) => setTopic(event.target.value)}
+              disabled={
+                loadingTopics ||
+                (learningRoute === "secondary" ? !subject : !courseId)
+              }
             >
               <option value="mixed">Mixed topics</option>
-              <option value="specific">Specific topic (coming next)</option>
+
+              {loadingTopics && (
+                <option value="" disabled>
+                  Loading topics...
+                </option>
+              )}
+
+              {topics.map((item) => (
+                <option key={normalizeTopic(item)} value={item}>
+                  {item}
+                </option>
+              ))}
             </select>
+
+            <p className="setup-help">
+              {loadingTopics
+                ? "Loading available topics..."
+                : topics.length
+                  ? `${topics.length} topics available.`
+                  : "Select a subject or course to load its topics."}
+            </p>
           </section>
 
           <section className="setup-section">
@@ -244,19 +470,28 @@ export default function PremiumQuizSetup() {
             </p>
           </section>
 
+          {error && (
+            <p role="alert" className="setup-help">
+              {error}
+            </p>
+          )}
+
           <button
             className="setup-start-button"
             onClick={handleStartQuiz}
             type="button"
+            disabled={
+              starting ||
+              loadingOptions ||
+              loadingTopics ||
+              (learningRoute === "secondary" ? !subject : !courseId)
+            }
           >
             <Play size={18} />
-            Start Quiz
+            {starting ? "Opening quiz..." : "Start Quiz"}
           </button>
         </div>
-
-
-
-            </section>
+      </section>
 
       <div className="setup-benefits">
         <div className="setup-benefit">
