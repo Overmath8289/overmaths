@@ -4,182 +4,381 @@ import { InlineMath, BlockMath } from "react-katex";
 import "katex/dist/katex.min.css";
 import "./MathText.css";
 
+/**
+ * Overmaths MathText
+ *
+ * Supports:
+ * - \( inline math \), \[ display math \]
+ * - $ inline math $, $$ display math $$
+ * - Multiline display equations
+ * - Backtick-wrapped formulas
+ * - Common Unicode mathematical symbols and powers
+ * - Safe fallback when KaTeX cannot parse a formula
+ */
+
+const ENTITY_MAP = {
+  "&nbsp;": " ",
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+  "&apos;": "'",
+  "&times;": "×",
+  "&divide;": "÷",
+  "&minus;": "−",
+  "&le;": "≤",
+  "&ge;": "≥",
+  "&ne;": "≠",
+};
+
+const SUPER_MAP = {
+  "⁰": "0",
+  "¹": "1",
+  "²": "2",
+  "³": "3",
+  "⁴": "4",
+  "⁵": "5",
+  "⁶": "6",
+  "⁷": "7",
+  "⁸": "8",
+  "⁹": "9",
+  "⁺": "+",
+  "⁻": "-",
+  "⁽": "(",
+  "⁾": ")",
+  "ⁿ": "n",
+  "ⁱ": "i",
+};
+
+const SUB_MAP = {
+  "₀": "0",
+  "₁": "1",
+  "₂": "2",
+  "₃": "3",
+  "₄": "4",
+  "₅": "5",
+  "₆": "6",
+  "₇": "7",
+  "₈": "8",
+  "₉": "9",
+  "₊": "+",
+  "₋": "-",
+  "₌": "=",
+  "₍": "(",
+  "₎": ")",
+  "ₐ": "a",
+  "ₑ": "e",
+  "ₕ": "h",
+  "ₖ": "k",
+  "ₘ": "m",
+  "ₙ": "n",
+  "ₚ": "p",
+  "ₛ": "s",
+  "ₜ": "t",
+  "ₓ": "x",
+};
+
+/**
+ * Decode common HTML entities sometimes stored by forms or spreadsheets.
+ */
 function decodeEntities(value) {
-  const entities = {
-    "&nbsp;": " ",
-    "&amp;": "&",
-    "&lt;": "<",
-    "&gt;": ">",
-    "&times;": "×",
-    "&divide;": "÷",
-    "&minus;": "−",
-  };
+  let result = String(value ?? "");
 
-  return value.replace(
-    /&(?:#x[0-9a-f]+|#\d+|[a-z]+);/gi,
-    (entity) => {
-      if (entities[entity]) return entities[entity];
+  Object.entries(ENTITY_MAP).forEach(([entity, replacement]) => {
+    result = result.replace(
+      new RegExp(entity.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"),
+      replacement
+    );
+  });
 
-      const match = entity.match(/^&#(?:x([0-9a-f]+)|(\d+));$/i);
-      if (!match) return entity;
+  // Decode numeric HTML entities, e.g. &#215; or &#xD7;.
+  result = result.replace(/&#(x[0-9a-f]+|\d+);?/gi, (match, code) => {
+    const isHex = code[0].toLowerCase() === "x";
+    const number = Number.parseInt(isHex ? code.slice(1) : code, isHex ? 16 : 10);
 
-      const code = match[1]
-        ? parseInt(match[1], 16)
-        : parseInt(match[2], 10);
-
-      try {
-        return String.fromCodePoint(code);
-      } catch {
-        return entity;
-      }
+    if (!Number.isFinite(number) || number < 0 || number > 0x10ffff) {
+      return match;
     }
-  );
+
+    try {
+      return String.fromCodePoint(number);
+    } catch {
+      return match;
+    }
+  });
+
+  return result;
 }
 
+/**
+ * Normalize source text without splitting equations into separate lines.
+ */
 function normalizeSource(value) {
-  return decodeEntities(String(value ?? ""))
+  return decodeEntities(value)
     .replace(/\r\n?/g, "\n")
-    .replace(/\u00a0/g, " ")
-    // Repair double-escaped math delimiters from stored text.
-    .replace(/\\\\\(/g, "\\(")
-    .replace(/\\\\\)/g, "\\)")
-    .replace(/\\\\\[/g, "\\[")
-    .replace(/\\\\\]/g, "\\]");
+    // Repair escaped delimiters such as \\( ... \\) and \\[ ... \\].
+    .replace(/\\\\([()[\]])/g, "\\$1")
+    // Convert common HTML line breaks into real line breaks.
+    .replace(/<br\s*\/?>/gi, "\n")
+    .trim();
 }
 
+/**
+ * Convert common Unicode notation into LaTeX-compatible notation.
+ * This is applied to mathematical expressions, not ordinary prose.
+ */
 function normalizeLatex(value) {
-  return value
-    .trim()
-    .replace(/\\{2,}(?=[A-Za-z])/g, "\\")
+  let math = String(value ?? "")
+    .replace(/`/g, "")
+    .trim();
+
+  // Repair double-escaped LaTeX commands such as \\times and \\frac.
+  math = math.replace(/\\\\(?=[a-zA-Z()[\]])/g, "\\");
+
+  // Unicode symbols commonly found in imported questions.
+  math = math
     .replace(/×/g, "\\times ")
     .replace(/÷/g, "\\div ")
-    .replace(/≤/g, "\\le ")
-    .replace(/≥/g, "\\ge ")
-    .replace(/≠/g, "\\ne ")
-    .replace(/−/g, "-")
+    .replace(/[−–]/g, "-")
+    .replace(/≤/g, "\\leq ")
+    .replace(/≥/g, "\\geq ")
+    .replace(/≠/g, "\\neq ")
+    .replace(/≈/g, "\\approx ")
+    .replace(/±/g, "\\pm ")
     .replace(/π/g, "\\pi ")
     .replace(/θ/g, "\\theta ")
     .replace(/α/g, "\\alpha ")
-    .replace(/β/g, "\\beta ");
-}
+    .replace(/β/g, "\\beta ")
+    .replace(/μ/g, "\\mu ")
+    .replace(/ρ/g, "\\rho ")
+    .replace(/λ/g, "\\lambda ")
+    .replace(/°/g, "^{\\circ}");
 
-const superscriptMap = {
-  "⁰": "0", "¹": "1", "²": "2", "³": "3",
-  "⁴": "4", "⁵": "5", "⁶": "6", "⁷": "7",
-  "⁸": "8", "⁹": "9", "⁺": "+", "⁻": "-"
-};
+  // Repair copied logarithms such as log⁡2(8) or log₂(8).
+  math = math
+    .replace(/log\s*[⁡]\s*([0-9]+)/gi, "\\log_{$1}")
+    .replace(/log([₀₁₂₃₄₅₆₇₈₉]+)/gi, (_, digits) => {
+      const base = [...digits]
+        .map((character) => SUB_MAP[character] ?? character)
+        .join("");
+      return `\\log_{${base}}`;
+    });
 
-function normalizeUnicodePowers(value) {
-  return value.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻]+/g, (match) => {
-    const power = [...match].map((character) => superscriptMap[character]).join("");
+  // Convert Unicode superscripts into grouped powers, e.g. x⁻² -> x^{-2}.
+  math = math.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁽⁾ⁿⁱ]+/g, (group) => {
+    const power = [...group]
+      .map((character) => SUPER_MAP[character] ?? character)
+      .join("");
     return `^{${power}}`;
   });
+
+  // Convert Unicode subscripts into grouped subscripts, e.g. H₂O -> H_{2}O.
+  math = math.replace(/[₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎ₐₑₕₖₘₙₚₛₜₓ]+/g, (group) => {
+    const subscript = [...group]
+      .map((character) => SUB_MAP[character] ?? character)
+      .join("");
+    return `_{${subscript}}`;
+  });
+
+  return math;
 }
 
-function renderFormula(expression, display, key) {
-  const math = normalizeLatex(normalizeUnicodePowers(expression));
+/**
+ * Avoid treating ordinary prose inside backticks as an equation.
+ */
+function looksMathematical(value) {
+  const text = String(value ?? "").trim();
 
-  const fallback = (
-    <span className="math-text-error" title="Formula could not be rendered">
-      {expression}
-    </span>
-  );
+  if (!text) return false;
 
-  return display ? (
-    <div className="math-text-block" key={key}>
-      <BlockMath math={math} renderError={() => fallback} />
-    </div>
-  ) : (
-    <InlineMath
-      key={key}
-      math={math}
-      renderError={() => fallback}
-    />
+  return (
+    /[=<>±×÷≤≥≠≈]/.test(text) ||
+    /\\(?:frac|sqrt|log|sin|cos|tan|pi|theta|alpha|beta|angle|times|div|cdot|boxed|therefore|sum|int|mathrm|text|circ)\b/.test(
+      text
+    ) ||
+    /[A-Za-z0-9][_^]\{?[-+A-Za-z0-9]/.test(text) ||
+    /[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻₀₁₂₃₄₅₆₇₈₉]/.test(text)
   );
 }
 
-function looksLikeWholeFormula(line) {
-  const value = line.trim();
+/**
+ * Catch common complete equations that were imported without delimiters.
+ * Do not wrap full English question sentences just because they contain
+ * a mathematical symbol.
+ */
+function looksLikeWholeFormula(value) {
+  const text = String(value ?? "").trim();
 
-  if (!value || value.length > 300) return false;
+  if (!text || text.length > 180) return false;
+  if (!/[=<>]/.test(text)) return false;
 
-  // Avoid treating normal sentences as equations.
-  if (/[.!?]\s+[A-Za-z]/.test(value)) return false;
-
-  const words = value.match(/[A-Za-z]{2,}/g) || [];
+  const words = text.match(/[A-Za-z]{2,}/g) ?? [];
   const ordinaryWords = words.filter(
     (word) =>
       ![
-        "log", "sin", "cos", "tan", "cot", "sec",
-        "sqrt", "frac", "times", "cdot", "div",
-        "text", "mathrm", "pi", "theta", "alpha",
-        "beta", "left", "right", "infty", "lim"
+        "frac",
+        "sqrt",
+        "times",
+        "theta",
+        "alpha",
+        "beta",
+        "pi",
+        "log",
+        "sin",
+        "cos",
+        "tan",
+        "mathrm",
+        "text",
+        "circ",
+        "boxed",
+        "therefore",
       ].includes(word.toLowerCase())
   );
 
-  const hasMathMarker =
-    /\\(?:frac|sqrt|times|cdot|div|pi|log|text|angle)\b|[\^_=<>≤≥≠±×÷]/.test(value);
-
-  return hasMathMarker && ordinaryWords.length === 0;
+  return ordinaryWords.length <= 2;
 }
 
-function renderTextWithLineBreaks(value, key) {
-  return value.split("\n").map((line, index) => (
-    <React.Fragment key={`${key}-${index}`}>
-      {line}
-      {index < value.split("\n").length - 1 && <br />}
-    </React.Fragment>
-  ));
-}
+function SafeMath({ math, display = false }) {
+  const normalized = normalizeLatex(math);
 
-function renderMixedLine(line, lineKey) {
-  // Render explicit delimiters, and common unwrapped LaTeX commands
-  // inside prose, without converting the entire sentence to math.
-  const tokenPattern =
-    /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$[^$\n]+?\$|\\(?:frac|sqrt|text|mathrm)\s*\{[^{}]*\}(?:\s*\{[^{}]*\})?|\\(?:times|cdot|div|pi|theta|alpha|beta|angle|degree|log|sin|cos|tan|le|ge|ne|pm)\b|[A-Za-z0-9]+(?:\^\{[^{}]*\}|_\{[^{}]*\}|\^[0-9]+|_[0-9]+)|[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻]+)/g;
-
-  const parts = line.split(tokenPattern);
-
-  return parts.map((part, index) => {
-    if (!part) return null;
-
-    try {
-      if (part.startsWith("$$") && part.endsWith("$$")) {
-        return renderFormula(part.slice(2, -2), true, `${lineKey}-${index}`);
-      }
-
-      if (part.startsWith("\\[") && part.endsWith("\\]")) {
-        return renderFormula(part.slice(2, -2), true, `${lineKey}-${index}`);
-      }
-
-      if (part.startsWith("\\(") && part.endsWith("\\)")) {
-        return renderFormula(part.slice(2, -2), false, `${lineKey}-${index}`);
-      }
-
-      if (part.startsWith("$") && part.endsWith("$")) {
-        return renderFormula(part.slice(1, -1), false, `${lineKey}-${index}`);
-      }
-
-      if (
-        /^\\(?:frac|sqrt|text|mathrm|times|cdot|div|pi|theta|alpha|beta|angle|degree|log|sin|cos|tan|le|ge|ne|pm)\b/.test(part) ||
-        /^[A-Za-z0-9]+(?:\^\{[^{}]*\}|_\{[^{}]*\}|\^[0-9]+|_[0-9]+)$/.test(part) ||
-        /^[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻]+$/.test(part)
-      ) {
-        return renderFormula(part, false, `${lineKey}-${index}`);
-      }
-
+  try {
+    if (display) {
       return (
-        <React.Fragment key={`${lineKey}-${index}`}>
-          {renderTextWithLineBreaks(part, `${lineKey}-${index}`)}
-        </React.Fragment>
-      );
-    } catch {
-      return (
-        <React.Fragment key={`${lineKey}-${index}`}>
-          {part}
-        </React.Fragment>
+        <div className="math-text-block">
+          <BlockMath math={normalized} />
+        </div>
       );
     }
+
+    return <InlineMath math={normalized} />;
+  } catch {
+    return (
+      <span className="math-text-error">
+        {String(math ?? "").replace(/`/g, "")}
+      </span>
+    );
+  }
+}
+
+/**
+ * Render plain-text portions. Backtick-wrapped mathematical expressions
+ * become inline equations; ordinary backtick text remains readable.
+ */
+function renderPlainText(text, keyPrefix) {
+  const pieces = String(text ?? "").split(/(`[^`\n]+`)/g);
+
+  return pieces.map((piece, index) => {
+    const key = `${keyPrefix}-${index}`;
+
+    if (piece.startsWith("`") && piece.endsWith("`")) {
+      const inside = piece.slice(1, -1);
+
+      if (looksMathematical(inside)) {
+        return <SafeMath key={key} math={inside} />;
+      }
+
+      return <code key={key}>{inside}</code>;
+    }
+
+    // Preserve simple Markdown bold text in question content.
+    const boldPieces = piece.split(/(\*\*[^*\n]+\*\*)/g);
+
+    return (
+      <React.Fragment key={key}>
+        {boldPieces.map((boldPiece, boldIndex) => {
+          if (
+            boldPiece.startsWith("**") &&
+            boldPiece.endsWith("**")
+          ) {
+            return (
+              <strong key={`${key}-bold-${boldIndex}`}>
+                {boldPiece.slice(2, -2)}
+              </strong>
+            );
+          }
+
+          return (
+            <React.Fragment key={`${key}-text-${boldIndex}`}>
+              {boldPiece}
+            </React.Fragment>
+          );
+        })}
+      </React.Fragment>
+    );
+  });
+}
+
+/**
+ * Parse the entire source before rendering any lines.
+ * This is important: display math can span multiple lines.
+ */
+function renderContent(source) {
+  const delimiterPattern =
+    /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\]|\$[^$\n]+\$)/g;
+
+  const pieces = source.split(delimiterPattern);
+
+  return pieces.map((piece, index) => {
+    const key = `math-piece-${index}`;
+
+    if (!piece) return null;
+
+    if (piece.startsWith("$$") && piece.endsWith("$$")) {
+      return (
+        <SafeMath
+          key={key}
+          math={piece.slice(2, -2)}
+          display
+        />
+      );
+    }
+
+    if (piece.startsWith("\\[") && piece.endsWith("\\]")) {
+      return (
+        <SafeMath
+          key={key}
+          math={piece.slice(2, -2)}
+          display
+        />
+      );
+    }
+
+    if (piece.startsWith("\\(") && piece.endsWith("\\)")) {
+      return (
+        <SafeMath
+          key={key}
+          math={piece.slice(2, -2)}
+        />
+      );
+    }
+
+    if (piece.startsWith("$") && piece.endsWith("$")) {
+      return (
+        <SafeMath
+          key={key}
+          math={piece.slice(1, -1)}
+        />
+      );
+    }
+
+    // Render ordinary text and preserve its line breaks.
+    const lines = piece.split("\n");
+
+    return (
+      <React.Fragment key={key}>
+        {lines.map((line, lineIndex) => (
+          <React.Fragment key={`${key}-line-${lineIndex}`}>
+            {looksLikeWholeFormula(line) ? (
+              <SafeMath math={line} />
+            ) : (
+              renderPlainText(line, `${key}-text-${lineIndex}`)
+            )}
+            {lineIndex < lines.length - 1 && <br />}
+          </React.Fragment>
+        ))}
+      </React.Fragment>
+    );
   });
 }
 
@@ -189,22 +388,11 @@ export default function MathText({
   className = "",
   as: Component = "div",
 }) {
-  const content = text ?? children;
-
-  if (content === null || content === undefined) return null;
-
-  const source = normalizeSource(content);
+  const source = normalizeSource(text ?? children ?? "");
 
   return (
     <Component className={`math-text ${className}`.trim()}>
-      {source.split("\n").map((line, index) => (
-        <React.Fragment key={index}>
-          {looksLikeWholeFormula(line)
-            ? renderFormula(line, false, `formula-${index}`)
-            : renderMixedLine(line, `line-${index}`)}
-          {index < source.split("\n").length - 1 && <br />}
-        </React.Fragment>
-      ))}
+      {renderContent(source)}
     </Component>
   );
 }
