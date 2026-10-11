@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from dashboard_api import dashboard_api
 from admin_api import admin_api
 from question_api import question_api
-
+from premium_quiz_api import premium_quiz_api
 
 # ============================================================
 # ENVIRONMENT
@@ -1780,7 +1780,9 @@ app.register_blueprint(
     question_api
 )
 
-
+app.register_blueprint(
+    premium_quiz_api
+)
 # ============================================================
 # START SERVER
 # ============================================================

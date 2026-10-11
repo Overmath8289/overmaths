@@ -45,7 +45,8 @@ import PremiumRoute from './pages/PremiumRoute'
 import AdminDashboard from './pages/AdminDashboard'
 import AdminQuestions from './pages/AdminQuestions'
 import FreeRoute from './routes/FreeRoute'
-
+import PremiumQuiz from "./pages/PremiumQuiz";
+import PremiumQuizSetup from "./pages/PremiumQuizSetup";
 
 // ============================================================
 // PROTECTED ROUTE
@@ -499,6 +500,33 @@ function App() {
             </PremiumRoute>
           }
         />
+
+
+
+
+        
+{/* ==================================================
+    PREMIUM QUIZ
+================================================== */}
+
+<Route
+  path="/premium-quiz-setup"
+  element={
+    <PremiumRoute user={user} loading={authLoading}>
+      <PremiumQuizSetup />
+    </PremiumRoute>
+  }
+/>
+
+<Route
+  path="/premium-quiz"
+  element={
+    <PremiumRoute user={user} loading={authLoading}>
+      <PremiumQuiz />
+    </PremiumRoute>
+  }
+/>
+
 
 
         {/* ==================================================

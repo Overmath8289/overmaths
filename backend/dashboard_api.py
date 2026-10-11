@@ -1,3 +1,4 @@
+
 import os
 import requests
 
@@ -32,7 +33,6 @@ def supabase_headers():
 
 
 def supabase_get(table, params=None):
-
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
         raise RuntimeError(
             "Supabase environment variables are missing."
@@ -51,7 +51,6 @@ def supabase_get(table, params=None):
     )
 
     if not response.ok:
-
         raise RuntimeError(
             f"Supabase request failed for {table}: "
             f"{response.status_code} "
@@ -62,11 +61,154 @@ def supabase_get(table, params=None):
 
 
 # ============================================================
+# AUTHENTICATION
+# ============================================================
+
+def authenticate_request():
+    """
+    Authenticate the current request using the Supabase
+    access token supplied in the Authorization header.
+
+    Returns:
+        (public_user, None) on success
+        (None, (error_body, status_code)) on failure
+    """
+
+    authorization = request.headers.get(
+        "Authorization",
+        ""
+    )
+
+    if not authorization.startswith("Bearer "):
+        return None, (
+            {
+                "success": False,
+                "error": "Authentication required."
+            },
+            401
+        )
+
+    access_token = authorization[
+        len("Bearer "):
+    ].strip()
+
+    if not access_token:
+        return None, (
+            {
+                "success": False,
+                "error": "Authentication token is missing."
+            },
+            401
+        )
+
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        return None, (
+            {
+                "success": False,
+                "error": "Authentication service is not configured."
+            },
+            500
+        )
+
+    try:
+        # Ask Supabase Auth to validate the user's access token.
+        response = requests.get(
+            f"{SUPABASE_URL.rstrip('/')}/auth/v1/user",
+            headers={
+                "apikey": SUPABASE_SERVICE_KEY,
+                "Authorization": f"Bearer {access_token}",
+            },
+            timeout=15,
+        )
+
+        if response.status_code in (401, 403):
+            return None, (
+                {
+                    "success": False,
+                    "error": (
+                        "Your session is invalid or has expired. "
+                        "Please sign in again."
+                    )
+                },
+                401
+            )
+
+        if not response.ok:
+            print(
+                "SUPABASE AUTH ERROR:",
+                response.status_code,
+                response.text
+            )
+
+            return None, (
+                {
+                    "success": False,
+                    "error": "Unable to verify your session."
+                },
+                503
+            )
+
+        auth_user = response.json()
+        auth_user_id = auth_user.get("id")
+
+        if not auth_user_id:
+            return None, (
+                {
+                    "success": False,
+                    "error": (
+                        "Unable to identify the authenticated user."
+                    )
+                },
+                401
+            )
+
+        # Resolve the verified Supabase identity to public.users.
+        public_user = get_public_user(auth_user_id)
+
+        if not public_user:
+            return None, (
+                {
+                    "success": False,
+                    "error": (
+                        "Overmaths user profile was not found."
+                    )
+                },
+                404
+            )
+
+        return public_user, None
+
+    except requests.RequestException as error:
+        print("AUTHENTICATION REQUEST ERROR:", error)
+
+        return None, (
+            {
+                "success": False,
+                "error": (
+                    "Unable to verify your session. "
+                    "Please try again."
+                )
+            },
+            503
+        )
+
+    except Exception as error:
+        print("AUTHENTICATION ERROR:", error)
+
+        return None, (
+            {
+                "success": False,
+                "error": "Unable to authenticate this request."
+            },
+            500
+        )
+
+
+# ============================================================
 # HELPERS
 # ============================================================
 
 def percentage(correct, total):
-
     if not total:
         return 0
 
@@ -76,12 +218,10 @@ def percentage(correct, total):
 
 
 def parse_datetime(value):
-
     if not value:
         return None
 
     try:
-
         value = str(value)
 
         if value.endswith("Z"):
@@ -96,8 +236,7 @@ def parse_datetime(value):
 
         return parsed
 
-    except Exception:
-
+    except (ValueError, TypeError):
         return None
 
 
@@ -106,7 +245,6 @@ def parse_datetime(value):
 # ============================================================
 
 def get_public_user(auth_user_id):
-
     users = supabase_get(
         "users",
         {
@@ -123,19 +261,15 @@ def get_public_user(auth_user_id):
 
 
 def get_premium_access(public_user):
-
     """
-    Determines whether the Overmaths user currently has
+    Determine whether the Overmaths user currently has
     Premium access.
 
-    Subscription is the primary Premium mechanism.
-
-    An active subscription with a valid future expiry date
-    grants Premium access.
+    A recognized Premium plan, an accepted active status,
+    a reached start date, and a valid expiry date are required.
     """
 
     if not public_user:
-
         return {
             "is_premium": False,
             "plan": "free",
@@ -145,10 +279,6 @@ def get_premium_access(public_user):
         }
 
     public_user_id = public_user.get("id")
-
-    # --------------------------------------------------------
-    # Find latest subscription
-    # --------------------------------------------------------
 
     subscriptions = supabase_get(
         "subscriptions",
@@ -168,7 +298,6 @@ def get_premium_access(public_user):
     )
 
     if not subscriptions:
-
         return {
             "is_premium": False,
             "plan": "free",
@@ -197,10 +326,6 @@ def get_premium_access(public_user):
 
     now = datetime.now(timezone.utc)
 
-    # --------------------------------------------------------
-    # Accepted Premium plan names
-    # --------------------------------------------------------
-
     premium_plans = {
         "premium",
         "premium monthly",
@@ -210,30 +335,16 @@ def get_premium_access(public_user):
 
     premium_plan = plan in premium_plans
 
-    # --------------------------------------------------------
-    # Subscription status
-    # --------------------------------------------------------
-
     active_status = status in {
         "active",
         "paid",
         "current",
     }
 
-    # --------------------------------------------------------
-    # Started?
-    # --------------------------------------------------------
-
     started = (
         started_at is None
         or started_at <= now
     )
-
-    # --------------------------------------------------------
-    # Expiry
-    #
-    # If expires_at exists, it must be in the future.
-    # --------------------------------------------------------
 
     not_expired = (
         expires_at is None
@@ -249,31 +360,11 @@ def get_premium_access(public_user):
 
     return {
         "is_premium": is_premium,
-
-        "plan": (
-            plan
-            if plan
-            else "free"
-        ),
-
-        "status": (
-            status
-            if status
-            else "inactive"
-        ),
-
-        "expires_at": (
-            subscription.get("expires_at")
-        ),
-
-        "started_at": (
-            subscription.get("started_at")
-        ),
-
-        "subscription_id": (
-            subscription.get("id")
-        ),
-
+        "plan": plan if plan else "free",
+        "status": status if status else "inactive",
+        "expires_at": subscription.get("expires_at"),
+        "started_at": subscription.get("started_at"),
+        "subscription_id": subscription.get("id"),
         "source": "subscription",
     }
 
@@ -283,9 +374,7 @@ def get_premium_access(public_user):
 # ============================================================
 
 def get_encouragement(score, attempts):
-
     if attempts == 0:
-
         return {
             "title": "Your journey starts here.",
             "message": (
@@ -296,7 +385,6 @@ def get_encouragement(score, attempts):
         }
 
     if score >= 90:
-
         return {
             "title": "Excellent work.",
             "message": (
@@ -306,7 +394,6 @@ def get_encouragement(score, attempts):
         }
 
     if score >= 80:
-
         return {
             "title": "You're doing very well.",
             "message": (
@@ -316,7 +403,6 @@ def get_encouragement(score, attempts):
         }
 
     if score >= 70:
-
         return {
             "title": "Good progress.",
             "message": (
@@ -326,7 +412,6 @@ def get_encouragement(score, attempts):
         }
 
     if score >= 50:
-
         return {
             "title": "You're making progress.",
             "message": (
@@ -349,22 +434,19 @@ def get_encouragement(score, attempts):
 # ============================================================
 
 def calculate_streak(attempts):
-
     if not attempts:
         return 0
 
     dates = set()
 
     for attempt in attempts:
-
         created_at = attempt.get("created_at")
 
         if not created_at:
             continue
 
         try:
-
-            date_text = created_at[:10]
+            date_text = str(created_at)[:10]
 
             dates.add(
                 datetime.strptime(
@@ -373,7 +455,7 @@ def calculate_streak(attempts):
                 ).date()
             )
 
-        except Exception:
+        except (ValueError, TypeError):
             continue
 
     if not dates:
@@ -384,29 +466,42 @@ def calculate_streak(attempts):
     ).date()
 
     if today in dates:
-
         current = today
 
     elif today - timedelta(days=1) in dates:
-
-        current = (
-            today -
-            timedelta(days=1)
-        )
+        current = today - timedelta(days=1)
 
     else:
-
         return 0
 
     streak = 0
 
     while current in dates:
-
         streak += 1
-
         current -= timedelta(days=1)
 
     return streak
+
+
+# ============================================================
+# SHARED ACCESS RESPONSE
+# ============================================================
+
+def build_access_response(premium):
+    return {
+        "is_premium": premium["is_premium"],
+        "mode": (
+            "premium"
+            if premium["is_premium"]
+            else "free"
+        ),
+        "plan": premium["plan"],
+        "status": premium["status"],
+        "expires_at": premium.get("expires_at"),
+        "started_at": premium.get("started_at"),
+        "subscription_id": premium.get("subscription_id"),
+        "source": premium.get("source"),
+    }
 
 
 # ============================================================
@@ -418,48 +513,16 @@ def calculate_streak(attempts):
     methods=["GET"]
 )
 def dashboard_access():
+    public_user, auth_error = authenticate_request()
 
-    auth_user_id = request.args.get(
-        "user_id"
-    )
-
-    if not auth_user_id:
-
-        return jsonify({
-            "success": False,
-            "error": "user_id is required"
-        }), 400
+    if auth_error:
+        body, status_code = auth_error
+        return jsonify(body), status_code
 
     try:
-
-        # ----------------------------------------------------
-        # Find public user
-        # ----------------------------------------------------
-
-        public_user = get_public_user(
-            auth_user_id
-        )
-
-        if not public_user:
-
-            return jsonify({
-                "success": False,
-                "error": (
-                    "Overmaths user profile "
-                    "was not found."
-                )
-            }), 404
-
-        # ----------------------------------------------------
-        # Premium check
-        # ----------------------------------------------------
-
-        premium = get_premium_access(
-            public_user
-        )
+        premium = get_premium_access(public_user)
 
         return jsonify({
-
             "success": True,
 
             "user": {
@@ -467,49 +530,15 @@ def dashboard_access():
                 "role": public_user.get("role"),
             },
 
-            "access": {
-
-                "is_premium":
-                    premium["is_premium"],
-
-                "mode": (
-                    "premium"
-                    if premium["is_premium"]
-                    else "free"
-                ),
-
-                "plan":
-                    premium["plan"],
-
-                "status":
-                    premium["status"],
-
-                "expires_at":
-                    premium.get("expires_at"),
-
-                "started_at":
-                    premium.get("started_at"),
-
-                "subscription_id":
-                    premium.get(
-                        "subscription_id"
-                    ),
-
-                "source":
-                    premium.get("source"),
-            }
+            "access": build_access_response(premium),
         })
 
     except Exception as error:
-
-        print(
-            "DASHBOARD ACCESS ERROR:",
-            error
-        )
+        print("DASHBOARD ACCESS ERROR:", error)
 
         return jsonify({
             "success": False,
-            "error": str(error)
+            "error": "Unable to load dashboard access.",
         }), 500
 
 
@@ -522,50 +551,30 @@ def dashboard_access():
     methods=["GET"]
 )
 def dashboard_summary():
+    public_user, auth_error = authenticate_request()
 
-    auth_user_id = request.args.get(
-        "user_id"
-    )
-
-    if not auth_user_id:
-
-        return jsonify({
-            "success": False,
-            "error": "user_id is required"
-        }), 400
+    if auth_error:
+        body, status_code = auth_error
+        return jsonify(body), status_code
 
     try:
-
         # ====================================================
-        # 1. FIND PUBLIC USER
+        # 1. FIND AUTHENTICATED PUBLIC USER
         # ====================================================
 
-        public_user = get_public_user(
-            auth_user_id
-        )
+        public_user_id = public_user.get("id")
 
-        if not public_user:
-
+        if not public_user_id:
             return jsonify({
                 "success": False,
-                "error": (
-                    "Overmaths user profile "
-                    "was not found for this "
-                    "authenticated user."
-                ),
+                "error": "User profile has no public ID.",
             }), 404
-
-        public_user_id = public_user.get(
-            "id"
-        )
 
         # ====================================================
         # 2. PREMIUM ACCESS
         # ====================================================
 
-        premium = get_premium_access(
-            public_user
-        )
+        premium = get_premium_access(public_user)
 
         # ====================================================
         # 3. GET EXAMINATION ATTEMPTS
@@ -574,14 +583,13 @@ def dashboard_summary():
         attempts = supabase_get(
             "quiz_attempts",
             {
-                "user_id":
-                    f"eq.{public_user_id}",
-
-                "mode":
-                    f"eq.{EXAM_MODE}",
-
-                "order":
-                    "created_at.desc",
+                "user_id": f"eq.{public_user_id}",
+                "mode": f"eq.{EXAM_MODE}",
+                "select": (
+                    "id,user_id,course_id,score,"
+                    "total_questions,mode,subject,topic,created_at"
+                ),
+                "order": "created_at.desc",
             },
         )
 
@@ -590,88 +598,34 @@ def dashboard_summary():
         # ====================================================
 
         if not attempts:
-
             return jsonify({
-
                 "success": True,
 
-                # --------------------------------------------
-                # ACCESS
-                # --------------------------------------------
-
-                "access": {
-
-                    "is_premium":
-                        premium["is_premium"],
-
-                    "mode": (
-                        "premium"
-                        if premium["is_premium"]
-                        else "free"
-                    ),
-
-                    "plan":
-                        premium["plan"],
-
-                    "status":
-                        premium["status"],
-
-                    "expires_at":
-                        premium.get(
-                            "expires_at"
-                        ),
-
-                    "started_at":
-                        premium.get(
-                            "started_at"
-                        ),
-                },
-
-                # --------------------------------------------
-                # OVERVIEW
-                # --------------------------------------------
+                "access": build_access_response(premium),
 
                 "overview": {
-
                     "questions_answered": 0,
-
                     "correct_answers": 0,
-
                     "accuracy": 0,
-
                     "study_streak": 0,
-
                     "exam_readiness": 0,
-
                     "attempts": 0,
                 },
 
                 "performance": {
-
                     "current": 0,
-
                     "previous": 0,
-
                     "trend": 0,
-
                     "history": [],
                 },
 
                 "weaknesses": [],
-
                 "strengths": [],
-
                 "subjects": [],
-
                 "topics": [],
-
                 "recent_activity": [],
 
-                "encouragement":
-                    get_encouragement(
-                        0,
-                        0
-                    ),
+                "encouragement": get_encouragement(0, 0),
             })
 
         # ====================================================
@@ -679,18 +633,14 @@ def dashboard_summary():
         # ====================================================
 
         attempt_ids = [
-
             attempt.get("id")
-
             for attempt in attempts
-
             if attempt.get("id") is not None
         ]
 
         answers = []
 
         if attempt_ids:
-
             ids_string = ",".join(
                 str(value)
                 for value in attempt_ids
@@ -699,8 +649,11 @@ def dashboard_summary():
             answers = supabase_get(
                 "quiz_answers",
                 {
-                    "attempt_id":
-                        f"in.({ids_string})",
+                    "attempt_id": f"in.({ids_string})",
+                    "select": (
+                        "id,attempt_id,question_id,"
+                        "selected_answer,is_correct"
+                    ),
                 },
             )
 
@@ -709,20 +662,14 @@ def dashboard_summary():
         # ====================================================
 
         question_ids = list({
-
             answer.get("question_id")
-
             for answer in answers
-
-            if answer.get(
-                "question_id"
-            ) is not None
+            if answer.get("question_id") is not None
         })
 
         questions = []
 
         if question_ids:
-
             ids_string = ",".join(
                 str(value)
                 for value in question_ids
@@ -731,19 +678,15 @@ def dashboard_summary():
             questions = supabase_get(
                 "questions",
                 {
-                    "id":
-                        f"in.({ids_string})",
-
-                    "select":
-                        "id,subject,topic,course_id",
+                    "id": f"in.({ids_string})",
+                    "select": "id,subject,topic,course_id",
                 },
             )
 
         question_map = {
-
-            question["id"]: question
-
+            str(question["id"]): question
             for question in questions
+            if question.get("id") is not None
         }
 
         # ====================================================
@@ -751,26 +694,15 @@ def dashboard_summary():
         # ====================================================
 
         total_questions_answered = 0
-
         total_correct = 0
 
         for answer in answers:
-
-            if (
-                answer.get(
-                    "selected_answer"
-                ) is None
-            ):
+            if answer.get("selected_answer") is None:
                 continue
 
             total_questions_answered += 1
 
-            if (
-                answer.get(
-                    "is_correct"
-                ) is True
-            ):
-
+            if answer.get("is_correct") is True:
                 total_correct += 1
 
         overall_accuracy = percentage(
@@ -784,70 +716,36 @@ def dashboard_summary():
 
         performance_history = []
 
-        for attempt in reversed(
-            attempts
-        ):
-
-            score = (
-                attempt.get("score")
-                or 0
-            )
+        for attempt in reversed(attempts):
+            score = attempt.get("score") or 0
 
             try:
-
                 score = float(score)
-
-            except Exception:
-
+            except (TypeError, ValueError):
                 score = 0
 
             performance_history.append({
-
-                "id":
-                    attempt.get("id"),
-
-                "score":
-                    round(score),
-
-                "subject":
-                    attempt.get("subject"),
-
-                "topic":
-                    attempt.get("topic"),
-
-                "mode":
-                    attempt.get("mode"),
-
-                "created_at":
-                    attempt.get(
-                        "created_at"
-                    ),
+                "id": attempt.get("id"),
+                "score": round(score),
+                "subject": attempt.get("subject"),
+                "topic": attempt.get("topic"),
+                "mode": attempt.get("mode"),
+                "created_at": attempt.get("created_at"),
             })
 
         current_score = (
-
             performance_history[-1]["score"]
-
             if performance_history
-
             else 0
         )
 
         previous_score = (
-
             performance_history[-2]["score"]
-
-            if len(
-                performance_history
-            ) > 1
-
+            if len(performance_history) > 1
             else current_score
         )
 
-        trend = (
-            current_score -
-            previous_score
-        )
+        trend = current_score - previous_score
 
         # ====================================================
         # 9. SUBJECT PERFORMANCE
@@ -856,84 +754,47 @@ def dashboard_summary():
         subject_stats = {}
 
         for answer in answers:
-
-            if (
-                answer.get(
-                    "selected_answer"
-                ) is None
-            ):
+            if answer.get("selected_answer") is None:
                 continue
 
+            question_id = answer.get("question_id")
+
             question = question_map.get(
-                answer.get(
-                    "question_id"
-                )
+                str(question_id)
             )
 
             if not question:
                 continue
 
-            subject = (
-                question.get("subject")
-                or "General"
-            )
+            subject = question.get("subject") or "General"
 
             if subject not in subject_stats:
-
                 subject_stats[subject] = {
-
-                    "subject":
-                        subject,
-
-                    "answered":
-                        0,
-
-                    "correct":
-                        0,
+                    "subject": subject,
+                    "answered": 0,
+                    "correct": 0,
                 }
 
-            subject_stats[
-                subject
-            ]["answered"] += 1
+            subject_stats[subject]["answered"] += 1
 
-            if (
-                answer.get(
-                    "is_correct"
-                ) is True
-            ):
-
-                subject_stats[
-                    subject
-                ]["correct"] += 1
+            if answer.get("is_correct") is True:
+                subject_stats[subject]["correct"] += 1
 
         subjects = []
 
-        for subject_data in (
-            subject_stats.values()
-        ):
+        for subject_data in subject_stats.values():
+            answered = subject_data["answered"]
+            correct = subject_data["correct"]
 
-            answered = (
-                subject_data["answered"]
+            subject_data["accuracy"] = percentage(
+                correct,
+                answered
             )
 
-            correct = (
-                subject_data["correct"]
-            )
-
-            subject_data["accuracy"] = (
-                percentage(
-                    correct,
-                    answered
-                )
-            )
-
-            subjects.append(
-                subject_data
-            )
+            subjects.append(subject_data)
 
         subjects.sort(
-            key=lambda item:
-                item["accuracy"]
+            key=lambda item: item["accuracy"]
         )
 
         # ====================================================
@@ -943,26 +804,15 @@ def dashboard_summary():
         weaknesses = []
 
         for subject in subjects:
-
             if (
                 subject["answered"] >= 2
-                and
-                subject["accuracy"] < 70
+                and subject["accuracy"] < 70
             ):
-
                 weaknesses.append({
-
-                    "topic":
-                        subject["subject"],
-
-                    "subject":
-                        subject["subject"],
-
-                    "accuracy":
-                        subject["accuracy"],
-
-                    "questions":
-                        subject["answered"],
+                    "topic": subject["subject"],
+                    "subject": subject["subject"],
+                    "accuracy": subject["accuracy"],
+                    "questions": subject["answered"],
                 })
 
         weaknesses = weaknesses[:5]
@@ -974,34 +824,19 @@ def dashboard_summary():
         strengths = []
 
         for subject in sorted(
-
             subjects,
-
-            key=lambda item:
-                item["accuracy"],
-
+            key=lambda item: item["accuracy"],
             reverse=True
         ):
-
             if (
                 subject["answered"] >= 2
-                and
-                subject["accuracy"] >= 80
+                and subject["accuracy"] >= 80
             ):
-
                 strengths.append({
-
-                    "topic":
-                        subject["subject"],
-
-                    "subject":
-                        subject["subject"],
-
-                    "accuracy":
-                        subject["accuracy"],
-
-                    "questions":
-                        subject["answered"],
+                    "topic": subject["subject"],
+                    "subject": subject["subject"],
+                    "accuracy": subject["accuracy"],
+                    "questions": subject["answered"],
                 })
 
         strengths = strengths[:5]
@@ -1010,17 +845,13 @@ def dashboard_summary():
         # 12. STUDY STREAK
         # ====================================================
 
-        study_streak = calculate_streak(
-            attempts
-        )
+        study_streak = calculate_streak(attempts)
 
         # ====================================================
         # 13. EXAM READINESS
         # ====================================================
 
-        attempt_count = len(
-            attempts
-        )
+        attempt_count = len(attempts)
 
         consistency_score = min(
             attempt_count * 10,
@@ -1028,12 +859,8 @@ def dashboard_summary():
         )
 
         exam_readiness = round(
-
             (overall_accuracy * 0.7)
-
-            +
-            
-            (consistency_score * 0.3)
+            + (consistency_score * 0.3)
         )
 
         # ====================================================
@@ -1043,41 +870,16 @@ def dashboard_summary():
         recent_activity = []
 
         for attempt in attempts[:5]:
-
             recent_activity.append({
-
-                "id":
-                    attempt.get("id"),
-
-                "score":
-                    attempt.get(
-                        "score"
-                    ) or 0,
-
-                "total_questions":
-                    attempt.get(
-                        "total_questions"
-                    ) or 0,
-
-                "subject":
-                    attempt.get(
-                        "subject"
-                    ),
-
-                "topic":
-                    attempt.get(
-                        "topic"
-                    ),
-
-                "mode":
-                    attempt.get(
-                        "mode"
-                    ),
-
-                "created_at":
-                    attempt.get(
-                        "created_at"
-                    ),
+                "id": attempt.get("id"),
+                "score": attempt.get("score") or 0,
+                "total_questions": (
+                    attempt.get("total_questions") or 0
+                ),
+                "subject": attempt.get("subject"),
+                "topic": attempt.get("topic"),
+                "mode": attempt.get("mode"),
+                "created_at": attempt.get("created_at"),
             })
 
         # ====================================================
@@ -1085,9 +887,7 @@ def dashboard_summary():
         # ====================================================
 
         encouragement = get_encouragement(
-
             overall_accuracy,
-
             attempt_count
         )
 
@@ -1096,119 +896,40 @@ def dashboard_summary():
         # ====================================================
 
         return jsonify({
-
             "success": True,
 
-            # =================================================
-            # ACCESS
-            # =================================================
-
-            "access": {
-
-                "is_premium":
-                    premium["is_premium"],
-
-                "mode": (
-
-                    "premium"
-
-                    if premium["is_premium"]
-
-                    else "free"
-                ),
-
-                "plan":
-                    premium["plan"],
-
-                "status":
-                    premium["status"],
-
-                "expires_at":
-                    premium.get(
-                        "expires_at"
-                    ),
-
-                "started_at":
-                    premium.get(
-                        "started_at"
-                    ),
-
-                "subscription_id":
-                    premium.get(
-                        "subscription_id"
-                    ),
-            },
-
-            # =================================================
-            # OVERVIEW
-            # =================================================
+            "access": build_access_response(premium),
 
             "overview": {
-
-                "questions_answered":
-                    total_questions_answered,
-
-                "correct_answers":
-                    total_correct,
-
-                "accuracy":
-                    overall_accuracy,
-
-                "study_streak":
-                    study_streak,
-
-                "exam_readiness":
-                    exam_readiness,
-
-                "attempts":
-                    attempt_count,
+                "questions_answered": total_questions_answered,
+                "correct_answers": total_correct,
+                "accuracy": overall_accuracy,
+                "study_streak": study_streak,
+                "exam_readiness": exam_readiness,
+                "attempts": attempt_count,
             },
 
             "performance": {
-
-                "current":
-                    current_score,
-
-                "previous":
-                    previous_score,
-
-                "trend":
-                    trend,
-
-                "history":
-                    performance_history[-10:],
+                "current": current_score,
+                "previous": previous_score,
+                "trend": trend,
+                "history": performance_history[-10:],
             },
 
-            "weaknesses":
-                weaknesses,
-
-            "strengths":
-                strengths,
-
-            "subjects":
-                subjects,
-
-            "topics":
-                [],
-
-            "recent_activity":
-                recent_activity,
-
-            "encouragement":
-                encouragement,
+            "weaknesses": weaknesses,
+            "strengths": strengths,
+            "subjects": subjects,
+            "topics": [],
+            "recent_activity": recent_activity,
+            "encouragement": encouragement,
         })
 
     except Exception as error:
-
-        print(
-            "DASHBOARD API ERROR:",
-            error
-        )
+        # Log the technical error on the server, without
+        # exposing database details to the browser.
+        print("DASHBOARD API ERROR:", error)
 
         return jsonify({
-
             "success": False,
-
-            "error":
-                str(error),
+            "error": "Unable to load your dashboard summary.",
         }), 500
