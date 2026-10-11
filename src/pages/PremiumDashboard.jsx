@@ -20,14 +20,15 @@ import {
   GraduationCap,
   Sparkles,
   TrendingUp,
-  CalendarDays,
   RefreshCw,
   AlertCircle,
   LogOut,
   CircleUserRound,
 } from 'lucide-react';
 import './PremiumDashboard.css';
+import { supabase } from '../supabaseClient';
 
+  CalendarDays,
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
 const NAV_ITEMS = [
@@ -297,45 +298,60 @@ function PremiumDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeNav, setActiveNav] = useState('Command Center');
 
-  const loadDashboard = useCallback(async () => {
-    setLoading(true);
-    setError('');
+ 
+const loadDashboard = useCallback(async () => {
+  setLoading(true);
+  setError('');
 
-    try {
-      const token = readAccessToken();
+  try {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
 
-      if (!token) {
-        throw new Error('Your session could not be found. Please sign in again.');
-      }
-
-      const meResponse = await apiRequest('/api/auth/me', token);
-      const currentProfile =
-        meResponse?.user ??
-        meResponse?.profile ??
-        meResponse?.data?.user ??
-        meResponse?.data ??
-        meResponse;
-
-      setProfile(currentProfile);
-
-      // The backend identifies the user from the verified bearer token.
-      // Do not add a browser-supplied user_id to this request.
-      const dashboardResponse = await apiRequest('/api/dashboard/summary', token);
-
-      setSummary(
-        dashboardResponse?.data ??
-          dashboardResponse?.summary ??
-          dashboardResponse,
-      );
-    } catch (requestError) {
-      setError(
-        requestError?.message ||
-          'We could not load your dashboard. Please try again.',
-      );
-    } finally {
-      setLoading(false);
+    if (sessionError) {
+      throw sessionError;
     }
-  }, []);
+
+    if (!session?.access_token) {
+      throw new Error(
+        'Your session could not be found. Please sign in again.'
+      );
+    }
+
+    const token = session.access_token;
+
+    const meResponse = await apiRequest('/api/auth/me', token);
+
+    const currentProfile =
+      meResponse?.user ??
+      meResponse?.profile ??
+      meResponse?.data?.user ??
+      meResponse?.data ??
+      meResponse;
+
+    setProfile(currentProfile);
+
+    const dashboardResponse = await apiRequest(
+      '/api/dashboard/summary',
+      token
+    );
+
+    setSummary(
+      dashboardResponse?.data ??
+        dashboardResponse?.summary ??
+        dashboardResponse
+    );
+  } catch (requestError) {
+    setError(
+      requestError?.message ||
+        'We could not load your dashboard. Please try again.'
+    );
+  } finally {
+    setLoading(false);
+  }
+}, []);
+
 
   useEffect(() => {
     loadDashboard();
@@ -742,7 +758,7 @@ function PremiumDashboard() {
                   <button
                     type="button"
                     className="premium-primary-button"
-                    onClick={() => navigate('/dashboard')}
+                    onClick={() => navigate("/premium-quiz-setup")}
                   >
                     Start practising
                     <ArrowRight size={16} />
