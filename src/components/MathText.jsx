@@ -33,26 +33,31 @@ const SUB_MAP = {
   "₈": "8", "₉": "9", "₊": "+", "₋": "-",
   "₌": "=", "₍": "(", "₎": ")", "ₐ": "a",
   "ₑ": "e", "ₕ": "h", "ₖ": "k", "ₘ": "m",
-  "ₙ": "n", "ₚ": "p", "ₛ": "s", "ₜ": "t", "ₓ": "x",
+  "ₙ": "n", "ₚ": "p", "ₛ": "s", "ₜ": "t",
+  "ₓ": "x",
 };
 
 function decodeEntities(value) {
   let result = String(value ?? "");
 
-  Object.entries(ENTITY_MAP).forEach(([entity, replacement]) => {
-    result = result.replace(
-      new RegExp(entity.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"),
-      replacement
-    );
-  });
+  for (const [entity, replacement] of Object.entries(ENTITY_MAP)) {
+    result = result.split(entity).join(replacement);
+  }
 
-  return result.replace(
+  result = result.replace(
     /&#(x[0-9a-f]+|\d+);?/gi,
     (match, code) => {
-      const hex = code[0].toLowerCase() === "x";
-      const number = Number.parseInt(hex ? code.slice(1) : code, hex ? 16 : 10);
+      const isHex = code[0].toLowerCase() === "x";
+      const number = Number.parseInt(
+        isHex ? code.slice(1) : code,
+        isHex ? 16 : 10
+      );
 
-      if (!Number.isFinite(number) || number < 0 || number > 0x10ffff) {
+      if (
+        !Number.isFinite(number) ||
+        number < 0 ||
+        number > 0x10ffff
+      ) {
         return match;
       }
 
@@ -63,12 +68,13 @@ function decodeEntities(value) {
       }
     }
   );
+
+  return result;
 }
 
 function normalizeSource(value) {
   return decodeEntities(value)
     .replace(/\r\n?/g, "\n")
-    .replace(/\\\\([()[\]])/g, "\\$1")
     .replace(/<br\s*\/?>/gi, "\n")
     .trim();
 }
@@ -76,7 +82,6 @@ function normalizeSource(value) {
 function normalizeLatex(value) {
   let math = String(value ?? "").trim();
 
-  // Convert common Unicode math symbols to LaTeX.
   math = math
     .replace(/×/g, "\\times ")
     .replace(/÷/g, "\\div ")
@@ -95,57 +100,62 @@ function normalizeLatex(value) {
     .replace(/λ/g, "\\lambda ")
     .replace(/°/g, "^{\\circ}");
 
-  math = math.replace(/log([₀₁₂₃₄₅₆₇₈₉]+)/gi, (_, digits) => {
+  math = math.replace(/log([₀₁₂₃₄₅₆₇₈₉]+)/g, (_, digits) => {
     const base = [...digits]
-      .map((character) => SUB_MAP[character] ?? character)
+      .map((char) => SUB_MAP[char] ?? char)
       .join("");
+
     return `\\log_{${base}}`;
   });
 
   math = math.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁽⁾ⁿⁱ]+/g, (group) => {
     const power = [...group]
-      .map((character) => SUPER_MAP[character] ?? character)
+      .map((char) => SUPER_MAP[char] ?? char)
       .join("");
+
     return `^{${power}}`;
   });
 
   math = math.replace(/[₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎ₐₑₕₖₘₙₚₛₜₓ]+/g, (group) => {
     const subscript = [...group]
-      .map((character) => SUB_MAP[character] ?? character)
+      .map((char) => SUB_MAP[char] ?? char)
       .join("");
+
     return `_{${subscript}}`;
   });
 
   return math;
 }
 
-function SafeMath({ math, display = false }) {
-  const normalized = normalizeLatex(math);
-
-  if (display) {
-    return (
-      <div className="math-text-block">
-        <BlockMath math={normalized} />
-      </div>
-    );
-  }
-
-  return <InlineMath math={normalized} />;
-}
-
 function looksMathematical(value) {
   const text = String(value ?? "").trim();
 
   return (
-    /[=<>±×÷≤≥≠≈]/.test(text) ||
-    /\\(?:frac|sqrt|log|sin|cos|tan|pi|theta|alpha|beta|angle|times|div|cdot|boxed|therefore|sum|int|mathrm|text|circ)\b/.test(text) ||
+    /[=<>±×÷≤≥≠≈√∫∑]/.test(text) ||
+    /\\(?:frac|sqrt|log|sin|cos|tan|pi|theta|alpha|beta|angle|times|div|cdot|boxed|therefore|sum|int|mathrm|text|circ|left|right)\b/.test(text) ||
     /[A-Za-z0-9][_^]\{?[-+A-Za-z0-9]/.test(text) ||
     /[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻₀₁₂₃₄₅₆₇₈₉]/.test(text)
   );
 }
 
+function SafeMath({ math, display = false }) {
+  const normalized = normalizeLatex(math);
+
+  try {
+    return display ? (
+      <div className="math-text-block">
+        <BlockMath math={normalized} />
+      </div>
+    ) : (
+      <InlineMath math={normalized} />
+    );
+  } catch {
+    return <span className="math-text-error">{math}</span>;
+  }
+}
+
 function renderPlainText(text, keyPrefix) {
-  const pieces = String(text ?? "").split(/(`[^`\n]+`)/g);
+  const pieces = String(text ?? "").split(/(`[^`\n]+`|\*\*[^*\n]+\*\*)/g);
 
   return pieces.map((piece, index) => {
     const key = `${keyPrefix}-${index}`;
@@ -160,27 +170,15 @@ function renderPlainText(text, keyPrefix) {
       );
     }
 
-    const boldPieces = piece.split(/(\*\*[^\*\n]+\*\*)/g);
+    if (piece.startsWith("**") && piece.endsWith("**")) {
+      return (
+        <strong key={key}>
+          {piece.slice(2, -2)}
+        </strong>
+      );
+    }
 
-    return (
-      <React.Fragment key={key}>
-        {boldPieces.map((boldPiece, boldIndex) => {
-          if (boldPiece.startsWith("**") && boldPiece.endsWith("**")) {
-            return (
-              <strong key={`${key}-bold-${boldIndex}`}>
-                {boldPiece.slice(2, -2)}
-              </strong>
-            );
-          }
-
-          return (
-            <React.Fragment key={`${key}-text-${boldIndex}`}>
-              {boldPiece}
-            </React.Fragment>
-          );
-        })}
-      </React.Fragment>
-    );
+    return <React.Fragment key={key}>{piece}</React.Fragment>;
   });
 }
 
@@ -194,25 +192,49 @@ function renderContent(source) {
     if (!piece) return null;
 
     if (piece.startsWith("$$") && piece.endsWith("$$")) {
-      return <SafeMath key={key} math={piece.slice(2, -2)} display />;
+      return (
+        <SafeMath
+          key={key}
+          math={piece.slice(2, -2)}
+          display
+        />
+      );
     }
 
     if (piece.startsWith("\\[") && piece.endsWith("\\]")) {
-      return <SafeMath key={key} math={piece.slice(2, -2)} display />;
+      return (
+        <SafeMath
+          key={key}
+          math={piece.slice(2, -2)}
+          display
+        />
+      );
     }
 
     if (piece.startsWith("\\(") && piece.endsWith("\\)")) {
-      return <SafeMath key={key} math={piece.slice(2, -2)} />;
+      return (
+        <SafeMath
+          key={key}
+          math={piece.slice(2, -2)}
+        />
+      );
     }
 
     if (piece.startsWith("$") && piece.endsWith("$")) {
-      return <SafeMath key={key} math={piece.slice(1, -1)} />;
+      return (
+        <SafeMath
+          key={key}
+          math={piece.slice(1, -1)}
+        />
+      );
     }
 
-    return piece.split("\n").map((line, lineIndex) => (
+    const lines = piece.split("\n");
+
+    return lines.map((line, lineIndex) => (
       <React.Fragment key={`${key}-line-${lineIndex}`}>
         {renderPlainText(line, `${key}-text-${lineIndex}`)}
-        {lineIndex < piece.split("\n").length - 1 && <br />}
+        {lineIndex < lines.length - 1 && <br />}
       </React.Fragment>
     ));
   });
@@ -224,7 +246,12 @@ export default function MathText({
   className = "",
   as: Component = "div",
 }) {
-  const source = normalizeSource(text ?? children ?? "");
+  const value = text ?? children ?? "";
+  const source = normalizeSource(
+    typeof value === "string" || typeof value === "number"
+      ? value
+      : ""
+  );
 
   return (
     <Component className={`math-text ${className}`.trim()}>
