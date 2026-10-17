@@ -21,9 +21,11 @@
 }
 
 /* Display equations can scroll horizontally when very long. */
+
 .math-text-block {
   display: block;
   width: 100%;
+  min-width: 0;
   max-width: 100%;
   margin: 0.75rem 0;
   overflow-x: auto;
@@ -32,13 +34,18 @@
   -webkit-overflow-scrolling: touch;
 }
 
+
+
 .math-text-block .katex-display {
   width: max-content;
   min-width: 100%;
+  max-width: 100%;
   margin: 0;
   padding: 0.25rem 0.5rem;
   text-align: center;
+  box-sizing: border-box;
 }
+
 
 /* Inline equations should remain aligned with sentence text. */
 .math-text .katex,

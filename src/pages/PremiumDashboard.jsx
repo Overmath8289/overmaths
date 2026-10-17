@@ -35,13 +35,13 @@ import {
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
 const NAV_ITEMS = [
-  { label: 'Command Center', icon: LayoutDashboard, path: '/dashboard' },
-  { label: 'My Exam', icon: Target, path: '/dashboard' },
-  { label: 'Practice', icon: BookOpen, path: '/dashboard' },
-  { label: 'Smart Revision', icon: Brain, path: '/dashboard' },
-  { label: 'Challenges', icon: Zap, path: '/dashboard' },
-  { label: 'Performance', icon: ChartNoAxesCombined, path: '/dashboard' },
-  { label: 'Achievements', icon: Trophy, path: '/dashboard' },
+  { label: 'Command Center', icon: LayoutDashboard, path: '/premium' },
+  { label: 'My Exam', icon: Target, path: '/my-exam' },
+  { label: 'Practice', icon: BookOpen, path: '/premium-practice' },
+  { label: 'Smart Revision', icon: Brain, path: '/smart-revision' },
+  { label: 'Challenges', icon: Zap, path: '/challenges' },
+  { label: 'Performance', icon: ChartNoAxesCombined, path: '/performance' },
+  { label: 'Achievements', icon: Trophy, path: '/achievements' },
 ];
 
 function readAccessToken() {

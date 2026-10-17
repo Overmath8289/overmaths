@@ -47,7 +47,7 @@ import AdminQuestions from './pages/AdminQuestions'
 import FreeRoute from './routes/FreeRoute'
 import PremiumQuiz from "./pages/PremiumQuiz";
 import PremiumQuizSetup from "./pages/PremiumQuizSetup";
-
+import PremiumSectionPage from './pages/PremiumSectionPage';
 // ============================================================
 // PROTECTED ROUTE
 // ============================================================
@@ -561,6 +561,76 @@ function App() {
             </AdminRoute>
           }
         />
+
+
+
+
+
+
+        <Route
+  path="/my-exam"
+  element={
+    <PremiumRoute>
+      <PremiumSectionPage section="My Exam" />
+    </PremiumRoute>
+  }
+/>
+
+<Route
+  path="/premium-practice"
+  element={
+    <PremiumRoute>
+      <PremiumSectionPage section="Practice" />
+    </PremiumRoute>
+  }
+/>
+
+<Route
+  path="/smart-revision"
+  element={
+    <PremiumRoute>
+      <PremiumSectionPage section="Smart Revision" />
+    </PremiumRoute>
+  }
+/>
+
+<Route
+  path="/challenges"
+  element={
+    <PremiumRoute>
+      <PremiumSectionPage section="Challenges" />
+    </PremiumRoute>
+  }
+/>
+
+<Route
+  path="/performance"
+  element={
+    <PremiumRoute>
+      <PremiumSectionPage section="Performance" />
+    </PremiumRoute>
+  }
+/>
+
+<Route
+  path="/achievements"
+  element={
+    <PremiumRoute>
+      <PremiumSectionPage section="Achievements" />
+    </PremiumRoute>
+  }
+/>
+
+
+
+
+
+
+
+
+
+
+
 
 
         {/* ==================================================
