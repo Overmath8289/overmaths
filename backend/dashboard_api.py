@@ -111,7 +111,6 @@ def authenticate_request():
         )
 
     try:
-        # Ask Supabase Auth to validate the user's access token.
         response = requests.get(
             f"{SUPABASE_URL.rstrip('/')}/auth/v1/user",
             headers={
@@ -162,7 +161,6 @@ def authenticate_request():
                 401
             )
 
-        # Resolve the verified Supabase identity to public.users.
         public_user = get_public_user(auth_user_id)
 
         if not public_user:
@@ -212,9 +210,7 @@ def percentage(correct, total):
     if not total:
         return 0
 
-    return round(
-        (correct / total) * 100
-    )
+    return round((correct / total) * 100)
 
 
 def parse_datetime(value):
@@ -238,6 +234,22 @@ def parse_datetime(value):
 
     except (ValueError, TypeError):
         return None
+
+
+def format_attempt_subjects(value):
+    """
+    Convert the quiz_attempts.subjects value into a
+    readable string for dashboard responses.
+    """
+    if isinstance(value, list):
+        return ", ".join(
+            str(item) for item in value if item
+        ) or None
+
+    if isinstance(value, str):
+        return value.strip() or None
+
+    return None
 
 
 # ============================================================
@@ -264,9 +276,6 @@ def get_premium_access(public_user):
     """
     Determine whether the Overmaths user currently has
     Premium access.
-
-    A recognized Premium plan, an accepted active status,
-    a reached start date, and a valid expiry date are required.
     """
 
     if not public_user:
@@ -461,16 +470,12 @@ def calculate_streak(attempts):
     if not dates:
         return 0
 
-    today = datetime.now(
-        timezone.utc
-    ).date()
+    today = datetime.now(timezone.utc).date()
 
     if today in dates:
         current = today
-
     elif today - timedelta(days=1) in dates:
         current = today - timedelta(days=1)
-
     else:
         return 0
 
@@ -508,10 +513,7 @@ def build_access_response(premium):
 # DASHBOARD ACCESS
 # ============================================================
 
-@dashboard_api.route(
-    "/access",
-    methods=["GET"]
-)
+@dashboard_api.route("/access", methods=["GET"])
 def dashboard_access():
     public_user, auth_error = authenticate_request()
 
@@ -524,12 +526,10 @@ def dashboard_access():
 
         return jsonify({
             "success": True,
-
             "user": {
                 "id": public_user.get("id"),
                 "role": public_user.get("role"),
             },
-
             "access": build_access_response(premium),
         })
 
@@ -546,10 +546,7 @@ def dashboard_access():
 # DASHBOARD SUMMARY
 # ============================================================
 
-@dashboard_api.route(
-    "/summary",
-    methods=["GET"]
-)
+@dashboard_api.route("/summary", methods=["GET"])
 def dashboard_summary():
     public_user, auth_error = authenticate_request()
 
@@ -558,10 +555,6 @@ def dashboard_summary():
         return jsonify(body), status_code
 
     try:
-        # ====================================================
-        # 1. FIND AUTHENTICATED PUBLIC USER
-        # ====================================================
-
         public_user_id = public_user.get("id")
 
         if not public_user_id:
@@ -570,16 +563,9 @@ def dashboard_summary():
                 "error": "User profile has no public ID.",
             }), 404
 
-        # ====================================================
-        # 2. PREMIUM ACCESS
-        # ====================================================
-
         premium = get_premium_access(public_user)
 
-        # ====================================================
-        # 3. GET EXAMINATION ATTEMPTS
-        # ====================================================
-
+        # Get examination attempts using the actual table columns.
         attempts = supabase_get(
             "quiz_attempts",
             {
@@ -587,22 +573,17 @@ def dashboard_summary():
                 "mode": f"eq.{EXAM_MODE}",
                 "select": (
                     "id,user_id,course_id,score,"
-                    "total_questions,mode,subject,topic,created_at"
+                    "total_questions,mode,subjects,"
+                    "selected_topic,created_at"
                 ),
                 "order": "created_at.desc",
             },
         )
 
-        # ====================================================
-        # 4. NO ATTEMPTS
-        # ====================================================
-
         if not attempts:
             return jsonify({
                 "success": True,
-
                 "access": build_access_response(premium),
-
                 "overview": {
                     "questions_answered": 0,
                     "correct_answers": 0,
@@ -611,27 +592,21 @@ def dashboard_summary():
                     "exam_readiness": 0,
                     "attempts": 0,
                 },
-
                 "performance": {
                     "current": 0,
                     "previous": 0,
                     "trend": 0,
                     "history": [],
                 },
-
                 "weaknesses": [],
                 "strengths": [],
                 "subjects": [],
                 "topics": [],
                 "recent_activity": [],
-
                 "encouragement": get_encouragement(0, 0),
             })
 
-        # ====================================================
-        # 5. GET ANSWERS
-        # ====================================================
-
+        # Get answers belonging to these attempts.
         attempt_ids = [
             attempt.get("id")
             for attempt in attempts
@@ -642,8 +617,7 @@ def dashboard_summary():
 
         if attempt_ids:
             ids_string = ",".join(
-                str(value)
-                for value in attempt_ids
+                str(value) for value in attempt_ids
             )
 
             answers = supabase_get(
@@ -657,10 +631,7 @@ def dashboard_summary():
                 },
             )
 
-        # ====================================================
-        # 6. GET QUESTIONS
-        # ====================================================
-
+        # Get question details for the answers.
         question_ids = list({
             answer.get("question_id")
             for answer in answers
@@ -671,8 +642,7 @@ def dashboard_summary():
 
         if question_ids:
             ids_string = ",".join(
-                str(value)
-                for value in question_ids
+                str(value) for value in question_ids
             )
 
             questions = supabase_get(
@@ -689,10 +659,7 @@ def dashboard_summary():
             if question.get("id") is not None
         }
 
-        # ====================================================
-        # 7. OVERALL STATISTICS
-        # ====================================================
-
+        # Overall answer statistics.
         total_questions_answered = 0
         total_correct = 0
 
@@ -710,10 +677,7 @@ def dashboard_summary():
             total_questions_answered
         )
 
-        # ====================================================
-        # 8. PERFORMANCE HISTORY
-        # ====================================================
-
+        # Performance history.
         performance_history = []
 
         for attempt in reversed(attempts):
@@ -727,8 +691,10 @@ def dashboard_summary():
             performance_history.append({
                 "id": attempt.get("id"),
                 "score": round(score),
-                "subject": attempt.get("subject"),
-                "topic": attempt.get("topic"),
+                "subject": format_attempt_subjects(
+                    attempt.get("subjects")
+                ),
+                "topic": attempt.get("selected_topic"),
                 "mode": attempt.get("mode"),
                 "created_at": attempt.get("created_at"),
             })
@@ -747,10 +713,7 @@ def dashboard_summary():
 
         trend = current_score - previous_score
 
-        # ====================================================
-        # 9. SUBJECT PERFORMANCE
-        # ====================================================
-
+        # Subject performance based on the question records.
         subject_stats = {}
 
         for answer in answers:
@@ -758,10 +721,7 @@ def dashboard_summary():
                 continue
 
             question_id = answer.get("question_id")
-
-            question = question_map.get(
-                str(question_id)
-            )
+            question = question_map.get(str(question_id))
 
             if not question:
                 continue
@@ -797,10 +757,7 @@ def dashboard_summary():
             key=lambda item: item["accuracy"]
         )
 
-        # ====================================================
-        # 10. WEAKNESSES
-        # ====================================================
-
+        # Weaknesses.
         weaknesses = []
 
         for subject in subjects:
@@ -817,10 +774,7 @@ def dashboard_summary():
 
         weaknesses = weaknesses[:5]
 
-        # ====================================================
-        # 11. STRENGTHS
-        # ====================================================
-
+        # Strengths.
         strengths = []
 
         for subject in sorted(
@@ -841,16 +795,10 @@ def dashboard_summary():
 
         strengths = strengths[:5]
 
-        # ====================================================
-        # 12. STUDY STREAK
-        # ====================================================
-
+        # Study streak.
         study_streak = calculate_streak(attempts)
 
-        # ====================================================
-        # 13. EXAM READINESS
-        # ====================================================
-
+        # Exam readiness.
         attempt_count = len(attempts)
 
         consistency_score = min(
@@ -863,10 +811,7 @@ def dashboard_summary():
             + (consistency_score * 0.3)
         )
 
-        # ====================================================
-        # 14. RECENT ACTIVITY
-        # ====================================================
-
+        # Recent activity.
         recent_activity = []
 
         for attempt in attempts[:5]:
@@ -876,30 +821,22 @@ def dashboard_summary():
                 "total_questions": (
                     attempt.get("total_questions") or 0
                 ),
-                "subject": attempt.get("subject"),
-                "topic": attempt.get("topic"),
+                "subject": format_attempt_subjects(
+                    attempt.get("subjects")
+                ),
+                "topic": attempt.get("selected_topic"),
                 "mode": attempt.get("mode"),
                 "created_at": attempt.get("created_at"),
             })
-
-        # ====================================================
-        # 15. ENCOURAGEMENT
-        # ====================================================
 
         encouragement = get_encouragement(
             overall_accuracy,
             attempt_count
         )
 
-        # ====================================================
-        # 16. FINAL RESPONSE
-        # ====================================================
-
         return jsonify({
             "success": True,
-
             "access": build_access_response(premium),
-
             "overview": {
                 "questions_answered": total_questions_answered,
                 "correct_answers": total_correct,
@@ -908,14 +845,12 @@ def dashboard_summary():
                 "exam_readiness": exam_readiness,
                 "attempts": attempt_count,
             },
-
             "performance": {
                 "current": current_score,
                 "previous": previous_score,
                 "trend": trend,
                 "history": performance_history[-10:],
             },
-
             "weaknesses": weaknesses,
             "strengths": strengths,
             "subjects": subjects,
@@ -925,8 +860,6 @@ def dashboard_summary():
         })
 
     except Exception as error:
-        # Log the technical error on the server, without
-        # exposing database details to the browser.
         print("DASHBOARD API ERROR:", error)
 
         return jsonify({
