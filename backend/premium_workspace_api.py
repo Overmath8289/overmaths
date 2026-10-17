@@ -161,3 +161,38 @@ def premium_workspace_status():
             "success": False,
             "error": "Unable to load workspace status.",
         }), 500
+@premium_workspace_api.route("/my-exams", methods=["GET"])
+def get_my_exams():
+    user, auth_error = authenticate_request()
+
+    if auth_error:
+        body, status_code = auth_error
+        return jsonify(body), status_code
+
+    try:
+        exams = supabase_get(
+            "quiz_attempts",
+            {
+                "user_id": f"eq.{user['id']}",
+                "exam_purpose": "eq.my_exam",
+                "select": (
+                    "id,exam_title,subjects,selected_topic,"
+                    "exam_date,score,total_questions,mode,"
+                    "started_at,completed_at,created_at"
+                ),
+                "order": "created_at.desc",
+            },
+        )
+
+        return jsonify({
+            "success": True,
+            "exams": exams,
+        }), 200
+
+    except Exception as error:
+        print("MY EXAMS ERROR:", error)
+
+        return jsonify({
+            "success": False,
+            "error": "Unable to load your exams right now.",
+        }), 500
