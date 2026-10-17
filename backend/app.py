@@ -11,7 +11,7 @@ from dashboard_api import dashboard_api
 from admin_api import admin_api
 from question_api import question_api
 from premium_quiz_api import premium_quiz_api
-
+from premium_workspace_api import premium_workspace_api
 # ============================================================
 # ENVIRONMENT
 # ============================================================
@@ -1761,7 +1761,7 @@ def home():
 # ============================================================
 # BLUEPRINTS
 # ============================================================
-
+app.register_blueprint(premium_workspace_api)
 app.register_blueprint(
     dashboard_api
 )
