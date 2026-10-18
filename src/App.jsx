@@ -30,6 +30,7 @@ import ExamDates from './pages/ExamDates'
 import Dashboard from './pages/Dashboard'
 import Practice from './pages/Practice'
 import Quiz from './pages/Quiz'
+import MyExam from './pages/MyExam'
 
 // ============================================================
 // PREMIUM
@@ -571,8 +572,11 @@ function App() {
         <Route
   path="/my-exam"
   element={
-    <PremiumRoute>
-      <PremiumSectionPage section="My Exam" />
+    <PremiumRoute
+      user={user}
+      loading={authLoading}
+    >
+      <MyExam />
     </PremiumRoute>
   }
 />

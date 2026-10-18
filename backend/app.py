@@ -1766,7 +1766,7 @@ app.register_blueprint(
     dashboard_api
 )
 
-app.register_blueprint(
+  pp.register_blueprint(
     admin_api
 )
 
