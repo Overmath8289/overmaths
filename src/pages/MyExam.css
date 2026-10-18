@@ -295,3 +295,92 @@
     transform: none;
   }
 }
+
+
+
+/* Add Study Task Form */
+.my-exam-add-task {
+  margin: 24px 0;
+  padding: 24px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+}
+
+.my-exam-add-task h3 {
+  margin: 0 0 18px;
+  color: #1f2937;
+  font-size: 1.2rem;
+}
+
+.my-exam-add-task form {
+  display: grid;
+  gap: 10px;
+  max-width: 600px;
+}
+
+.my-exam-add-task label {
+  margin-top: 8px;
+  color: #374151;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.my-exam-add-task input,
+.my-exam-add-task textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  font: inherit;
+}
+
+.my-exam-add-task input:focus,
+.my-exam-add-task textarea:focus {
+  outline: 2px solid #93c5fd;
+  outline-offset: 1px;
+  border-color: #2563eb;
+}
+
+.my-exam-add-task textarea {
+  resize: vertical;
+}
+
+.my-exam-add-task button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: fit-content;
+  margin-top: 12px;
+  padding: 11px 18px;
+  border: none;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #ffffff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.my-exam-add-task button:hover {
+  background: #1d4ed8;
+}
+
+.my-exam-add-task button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 600px) {
+  .my-exam-add-task {
+    padding: 16px;
+  }
+
+  .my-exam-add-task button {
+    width: 100%;
+  }
+}
