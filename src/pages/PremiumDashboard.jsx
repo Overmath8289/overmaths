@@ -422,10 +422,18 @@ const loadDashboard = useCallback(async () => {
   const questionsAnswered = getQuestionsAnswered(overview);
   const streak = getStreak(overview, summary);
 
+
+  const encouragementValue =
+  summary?.encouragement ?? summary?.message;
+
   const encouragement =
-    summary?.encouragement ||
-    summary?.message ||
-    'Every question you practise is a step towards exam confidence.';
+  typeof encouragementValue === 'string'
+    ? encouragementValue
+    : typeof encouragementValue?.message === 'string'
+      ? encouragementValue.message
+      : 'Every question you practise is a step towards exam confidence.';
+
+ 
 
   const examName =
     profile?.exam_type ||
