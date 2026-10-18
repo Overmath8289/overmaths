@@ -168,8 +168,10 @@ function getQuestionsAnswered(overview) {
 
 function getStreak(overview, summary) {
   return (
+    overview?.study_streak ??
     overview?.streak ??
     overview?.current_streak ??
+    summary?.study_streak ??
     summary?.streak ??
     0
   );
