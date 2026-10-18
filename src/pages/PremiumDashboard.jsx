@@ -525,12 +525,14 @@ const loadDashboard = useCallback(async () => {
     profile?.learning_route ||
     'Your exam journey';
 
-  const readiness = Number(
+ const readiness = Number(
+  overview?.exam_readiness ??
     overview?.readiness ??
-      overview?.readiness_percentage ??
-      summary?.readiness ??
-      0,
-  );
+    overview?.readiness_percentage ??
+    summary?.exam_readiness ??
+    summary?.readiness ??
+    0,
+);
 
   const examDate =
     profile?.exam_date ||
