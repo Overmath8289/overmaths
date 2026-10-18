@@ -254,53 +254,78 @@ function formatDate(value) {
 
 
 
+
+
 function normalizeActivities(activities) {
   if (!Array.isArray(activities)) return [];
 
-  return activities.slice(0, 5).map((activity, index) => ({
-    id: activity?.id ?? `activity-${index}`,
+  return activities.slice(0, 5).map((activity, index) => {
+    const subject =
+      typeof activity?.subject === 'string'
+        ? activity.subject.trim()
+        : '';
 
-    title: toDisplayText(
-      activity?.title,
-      toDisplayText(
-        activity?.activity,
-        toDisplayText(activity?.exam_name, 'Practice activity')
-      )
-    ),
+    const topic =
+      typeof activity?.topic === 'string'
+        ? activity.topic.trim()
+        : '';
 
-    detail: toDisplayText(
-      activity?.detail,
-      toDisplayText(
-        activity?.description,
-        toDisplayText(
-          activity?.subject,
-          toDisplayText(activity?.mode, 'Keep building your progress')
-        )
-      )
-    ),
+    const mode =
+      typeof activity?.mode === 'string'
+        ? activity.mode.trim()
+        : '';
 
-    date:
-      typeof activity?.date === 'string'
-        ? activity.date
-        : typeof activity?.created_at === 'string'
-          ? activity.created_at
-          : typeof activity?.completed_at === 'string'
-            ? activity.completed_at
-            : '',
+    const score = Number(activity?.score);
+    const totalQuestions = Number(activity?.total_questions);
 
-    score:
-      typeof activity?.accuracy === 'number' ||
-      typeof activity?.accuracy === 'string'
-        ? activity.accuracy
-        : typeof activity?.score_percentage === 'number' ||
-          typeof activity?.score_percentage === 'string'
-          ? activity.score_percentage
-          : typeof activity?.percentage === 'number' ||
-            typeof activity?.percentage === 'string'
-            ? activity.percentage
-            : null,
-  }));
+    const hasScore =
+      activity?.score !== null &&
+      activity?.score !== undefined &&
+      activity?.score !== '' &&
+      Number.isFinite(score);
+
+    const hasTotalQuestions =
+      Number.isFinite(totalQuestions) &&
+      totalQuestions > 0;
+
+    const title =
+      subject ||
+      topic ||
+      (mode ? mode : 'Quiz attempt');
+
+    const detailParts = [];
+
+    if (topic && subject && topic !== subject) {
+      detailParts.push(topic);
+    }
+
+    if (hasScore && hasTotalQuestions) {
+      detailParts.push(
+        `${score}/${totalQuestions} questions recorded`
+      );
+    }
+
+    if (mode) {
+      detailParts.push(mode);
+    }
+
+    return {
+      id: activity?.id ?? `activity-${index}`,
+      title,
+      detail: detailParts.join(' · ') || 'Completed quiz attempt',
+      date: activity?.created_at ?? '',
+      score:
+        hasScore && hasTotalQuestions
+          ? Math.round((score / totalQuestions) * 100)
+          : null,
+    };
+  });
 }
+
+
+
+
+
 
 function StatCard({ icon: Icon, label, value, helper }) {
   return (
