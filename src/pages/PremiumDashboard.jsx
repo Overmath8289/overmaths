@@ -379,6 +379,7 @@ function PremiumDashboard() {
   const navigate = useNavigate();
 
   const [profile, setProfile] = useState(null);
+  const [primaryExam, setPrimaryExam] = useState(null);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -395,6 +396,22 @@ const loadDashboard = useCallback(async () => {
       data: { session },
       error: sessionError,
     } = await supabase.auth.getSession();
+
+    if (session?.user) {
+  const { data: exam, error: examError } = await supabase
+    .from('student_exam_dates')
+    .select('id, exam_name, exam_date, is_primary')
+    .eq('auth_user_id', session.user.id)
+    .eq('is_primary', true)
+    .maybeSingle();
+
+  if (examError) {
+  console.error('Error loading primary exam:', examError);
+  setPrimaryExam(null);
+} else {
+  setPrimaryExam(exam);
+}
+}
 
     if (sessionError) {
       throw sessionError;
@@ -520,10 +537,11 @@ const loadDashboard = useCallback(async () => {
  
 
   const examName =
-    profile?.exam_type ||
-    profile?.exam_name ||
-    profile?.learning_route ||
-    'Your exam journey';
+  primaryExam?.exam_name ||
+  profile?.exam_type ||
+  profile?.exam_name ||
+  profile?.learning_route ||
+  'Your exam journey';
 
  const readiness = Number(
   overview?.exam_readiness ??
@@ -535,10 +553,11 @@ const loadDashboard = useCallback(async () => {
 );
 
   const examDate =
-    profile?.exam_date ||
-    profile?.target_exam_date ||
-    profile?.exam?.exam_date ||
-    null;
+  primaryExam?.exam_date ||
+  profile?.exam_date ||
+  profile?.target_exam_date ||
+  profile?.exam?.exam_date ||
+  null;
 
   const daysRemaining = examDate
     ? Math.max(
@@ -556,8 +575,8 @@ const loadDashboard = useCallback(async () => {
   };
 
   const handleSetExamDate = () => {
-    navigate('/student-profile');
-  };
+  navigate('/exam-dates');
+};
 
   const handleSignOut = () => {
     navigate('/login');

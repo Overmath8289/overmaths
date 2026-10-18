@@ -26,6 +26,7 @@ import ForgotPassword from './ForgotPassword'
 import ResetPassword from './ResetPassword'
 
 import StudentProfile from './pages/StudentProfile'
+import ExamDates from './pages/ExamDates'
 import Dashboard from './pages/Dashboard'
 import Practice from './pages/Practice'
 import Quiz from './pages/Quiz'
@@ -623,7 +624,17 @@ function App() {
 
 
 
-
+<Route
+  path="/exam-dates"
+  element={
+    <ProtectedRoute
+      user={user}
+      loading={authLoading}
+    >
+      <ExamDates />
+    </ProtectedRoute>
+  }
+/>
 
 
 
