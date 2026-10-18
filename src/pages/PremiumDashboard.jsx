@@ -233,6 +233,27 @@ function toDisplayText(value, fallback = '') {
   return fallback;
 }
 
+
+
+
+function formatDate(value) {
+  if (!value) return '';
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+
+  return date.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+  });
+}
+
+
+
+
 function normalizeActivities(activities) {
   if (!Array.isArray(activities)) return [];
 
