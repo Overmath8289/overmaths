@@ -215,42 +215,70 @@ function normalizeSubjects(subjects) {
     .sort((a, b) => a.accuracy - b.accuracy);
 }
 
+function toDisplayText(value, fallback = '') {
+  if (typeof value === 'string' || typeof value === 'number') {
+    return String(value);
+  }
+
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    if (typeof value.message === 'string' && value.message.trim()) {
+      return value.message;
+    }
+
+    if (typeof value.title === 'string' && value.title.trim()) {
+      return value.title;
+    }
+  }
+
+  return fallback;
+}
+
 function normalizeActivities(activities) {
   if (!Array.isArray(activities)) return [];
 
   return activities.slice(0, 5).map((activity, index) => ({
-    id: activity?.id ?? `${activity?.title ?? 'activity'}-${index}`,
-    title:
-      activity?.title ||
-      activity?.activity ||
-      activity?.exam_name ||
-      activity?.subject ||
-      'Practice activity',
-    detail:
-      activity?.detail ||
-      activity?.description ||
-      activity?.subject ||
-      activity?.mode ||
-      'Keep building your progress',
-    date: activity?.date || activity?.created_at || activity?.completed_at || '',
+    id: activity?.id ?? `activity-${index}`,
+
+    title: toDisplayText(
+      activity?.title,
+      toDisplayText(
+        activity?.activity,
+        toDisplayText(activity?.exam_name, 'Practice activity')
+      )
+    ),
+
+    detail: toDisplayText(
+      activity?.detail,
+      toDisplayText(
+        activity?.description,
+        toDisplayText(
+          activity?.subject,
+          toDisplayText(activity?.mode, 'Keep building your progress')
+        )
+      )
+    ),
+
+    date:
+      typeof activity?.date === 'string'
+        ? activity.date
+        : typeof activity?.created_at === 'string'
+          ? activity.created_at
+          : typeof activity?.completed_at === 'string'
+            ? activity.completed_at
+            : '',
+
     score:
-      activity?.accuracy ??
-      activity?.score_percentage ??
-      activity?.percentage ??
-      null,
+      typeof activity?.accuracy === 'number' ||
+      typeof activity?.accuracy === 'string'
+        ? activity.accuracy
+        : typeof activity?.score_percentage === 'number' ||
+          typeof activity?.score_percentage === 'string'
+          ? activity.score_percentage
+          : typeof activity?.percentage === 'number' ||
+            typeof activity?.percentage === 'string'
+            ? activity.percentage
+            : null,
   }));
-}
-
-function formatDate(value) {
-  if (!value) return '';
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-
-  return date.toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'short',
-  });
 }
 
 function StatCard({ icon: Icon, label, value, helper }) {
