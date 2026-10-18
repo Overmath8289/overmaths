@@ -18,6 +18,13 @@ const MyExam = () => {
   const navigate = useNavigate();
 
 
+  const [timetable, setTimetable] = React.useState([]);
+  const [loadingTimetable, setLoadingTimetable] = React.useState(true);
+  const [timetableError, setTimetableError] = React.useState('');
+
+
+
+
 
   React.useEffect(() => {
   let active = true;
@@ -333,8 +340,6 @@ const MyExam = () => {
 
 
 
-const [timetable, setTimetable] = React.useState([]);
-const [loadingTimetable, setLoadingTimetable] = React.useState(true);
-const [timetableError, setTimetableError] = React.useState('');
+
 
 export default MyExam;
