@@ -448,11 +448,11 @@ const loadDashboard = useCallback(async () => {
   const history = useMemo(
     () =>
       normalizeHistory(
-        summary?.performance_history ??
-          summary?.performance ??
-          summary?.trend ??
-          [],
-      ),
+  summary?.performance_history ??
+    summary?.performance?.history ??
+    summary?.trend ??
+    [],
+),
     [summary],
   );
 
