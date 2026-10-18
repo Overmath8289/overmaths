@@ -140,14 +140,22 @@ function getAccuracy(overview) {
   );
 }
 
+
+
+
+
 function getAttempts(overview) {
   return (
+    overview?.attempts ??
     overview?.total_attempts ??
     overview?.exams_taken ??
     overview?.total_exams ??
     0
   );
 }
+
+
+
 
 function getQuestionsAnswered(overview) {
   return (
