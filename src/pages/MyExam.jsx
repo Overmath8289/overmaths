@@ -326,9 +326,76 @@ const MyExam = () => {
         <h3>{task.subject}</h3>
         <p>Study date: {task.study_date}</p>
         <p>Target: {task.target_questions} questions</p>
-        <p>Completed: {task.completed_questions} questions</p>
+       <label>
+  Completed questions
+  <input
+    type="number"
+    min="0"
+    max={task.target_questions}
+    value={task.completed_questions}
+    onChange={async (event) => {
+      const completed = Number(event.target.value);
+
+      if (
+        !Number.isInteger(completed) ||
+        completed < 0 ||
+        completed > task.target_questions
+      ) {
+        return;
+      }
+
+      const { error } = await supabase
+        .from('student_study_timetable')
+        .update({
+          completed_questions: completed,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', task.id);
+
+      if (error) {
+        setTimetableError('Could not update completed questions.');
+        return;
+      }
+
+      setTimetable((previous) =>
+        previous.map((item) =>
+          item.id === task.id
+            ? { ...item, completed_questions: completed }
+            : item
+        )
+      );
+    }}
+  />
+</label>
 
         {task.notes && <p>{task.notes}</p>}
+
+        <button
+  type="button"
+  onClick={async () => {
+    const confirmed = window.confirm(
+      `Delete the study task for ${task.subject} on ${task.study_date}?`
+    );
+
+    if (!confirmed) return;
+
+    const { error } = await supabase
+      .from('student_study_timetable')
+      .delete()
+      .eq('id', task.id);
+
+    if (error) {
+      setTimetableError('Could not delete this study task.');
+      return;
+    }
+
+    setTimetable((previous) =>
+      previous.filter((item) => item.id !== task.id)
+    );
+  }}
+>
+  Delete task
+</button>
       </article>
     ))}
   </div>
