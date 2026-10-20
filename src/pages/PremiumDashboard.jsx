@@ -309,11 +309,9 @@ function normalizeActivities(activities) {
       detailParts.push(topic);
     }
 
-    if (hasScore && hasTotalQuestions) {
-      detailParts.push(
-        `${score}/${totalQuestions} questions recorded`
-      );
-    }
+    if (hasScore) {
+  detailParts.push(`${Math.round(score)}% score`);
+}
 
     if (mode) {
       detailParts.push(mode);
@@ -325,9 +323,9 @@ function normalizeActivities(activities) {
       detail: detailParts.join(' · ') || 'Completed quiz attempt',
       date: activity?.created_at ?? '',
       score:
-        hasScore && hasTotalQuestions
-          ? Math.round((score / totalQuestions) * 100)
-          : null,
+        score: hasScore
+  ? Math.round(Math.max(0, Math.min(100, score)))
+  : null,
     };
   });
 }
@@ -578,9 +576,16 @@ const loadDashboard = useCallback(async () => {
   navigate('/exam-dates');
 };
 
-  const handleSignOut = () => {
-    navigate('/login');
-  };
+  const handleSignOut = async () => {
+  const { error } = await supabase.auth.signOut();
+
+  if (error) {
+    setError('Could not sign out. Please try again.');
+    return;
+  }
+
+  navigate('/login', { replace: true });
+};
 
   if (loading) {
     return (

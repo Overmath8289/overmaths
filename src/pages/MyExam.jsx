@@ -113,6 +113,30 @@ const MyExam = () => {
         </div>
 
         <div className="my-exam-grid">
+
+
+          <article className="my-exam-card">
+  <div className="my-exam-card-icon performance-icon">
+    <Target size={24} />
+  </div>
+
+  <h3>Set Up New Exam</h3>
+
+  <p>
+    Choose your exam, select your subjects, set your
+    question target and duration, and begin your exam.
+  </p>
+
+  <button
+    type="button"
+    onClick={() => navigate('/my-exam-setup')}
+  >
+    Set up exam <ArrowRight size={16} />
+  </button>
+</article>
+
+
+
           <article className="my-exam-card">
             <div className="my-exam-card-icon timetable-icon">
               <CalendarDays size={24} />

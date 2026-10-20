@@ -1,0 +1,628 @@
+
+/* ==========================================
+   OVERMATHS — MY EXAM SETUP
+   Space theme • Neon gradients • Animations
+   ========================================== */
+
+.my-exam-setup {
+  --space-bg: #080b1d;
+  --space-card: rgba(20, 27, 59, 0.82);
+  --space-border: rgba(144, 163, 255, 0.19);
+  --space-text: #f4f5ff;
+  --space-muted: #a6afd0;
+  --space-purple: #9b5cff;
+  --space-blue: #45caff;
+  --space-pink: #ff65c8;
+  --space-green: #51e6bd;
+
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  overflow: hidden;
+  padding: 36px 20px 60px;
+  color: var(--space-text);
+  background:
+    radial-gradient(ellipse at 12% 15%, rgba(92, 49, 190, 0.25), transparent 38%),
+    radial-gradient(ellipse at 90% 55%, rgba(28, 119, 221, 0.18), transparent 35%),
+    radial-gradient(ellipse at 50% 100%, rgba(111, 40, 178, 0.16), transparent 40%),
+    var(--space-bg);
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+}
+
+/* Star field */
+.my-exam-setup::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(2px 2px at 10% 20%, #fff 45%, transparent 60%),
+    radial-gradient(2px 2px at 25% 65%, #8ceaff 45%, transparent 60%),
+    radial-gradient(1px 1px at 40% 15%, #fff 45%, transparent 60%),
+    radial-gradient(2px 2px at 65% 30%, #d5b6ff 45%, transparent 60%),
+    radial-gradient(1px 1px at 80% 70%, #fff 45%, transparent 60%),
+    radial-gradient(2px 2px at 92% 12%, #8ceaff 45%, transparent 60%),
+    radial-gradient(1px 1px at 55% 85%, #fff 45%, transparent 60%),
+    radial-gradient(1px 1px at 15% 88%, #d5b6ff 45%, transparent 60%);
+  background-size: 340px 300px;
+  opacity: 0.75;
+  animation: exam-stars 9s ease-in-out infinite alternate;
+}
+
+@keyframes exam-stars {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 0.95;
+  }
+}
+
+@keyframes exam-float {
+  0%, 100% {
+    transform: translateY(0) rotate(-5deg);
+  }
+  50% {
+    transform: translateY(-13px) rotate(4deg);
+  }
+}
+
+@keyframes exam-glow {
+  0%, 100% {
+    box-shadow: 0 0 18px rgba(155, 92, 255, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 32px rgba(69, 202, 255, 0.28);
+  }
+}
+
+/* Main layout */
+.my-exam-setup__container {
+  position: relative;
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* Back button */
+.my-exam-setup__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 28px;
+  padding: 10px 15px;
+  color: #cbd3f5;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--space-border);
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.25s ease;
+}
+
+.my-exam-setup__back:hover {
+  color: white;
+  background: rgba(155, 92, 255, 0.15);
+  border-color: rgba(155, 92, 255, 0.65);
+  transform: translateX(-3px);
+}
+
+/* Header / hero */
+.my-exam-setup__header {
+  position: relative;
+  margin-bottom: 30px;
+  padding: 30px 150px 25px 4px;
+}
+
+.my-exam-setup__header::after {
+  content: "🚀";
+  position: absolute;
+  top: 12px;
+  right: 20px;
+  font-size: clamp(4rem, 10vw, 6.8rem);
+  filter: drop-shadow(0 0 18px rgba(69, 202, 255, 0.55));
+  animation: exam-float 4s ease-in-out infinite;
+}
+
+.my-exam-setup__header::before {
+  content: "✦  ·  ✧";
+  position: absolute;
+  top: 8px;
+  right: 5px;
+  color: #b99aff;
+  font-size: 1.3rem;
+  letter-spacing: 14px;
+  animation: exam-float 5s ease-in-out infinite reverse;
+}
+
+.my-exam-setup__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 18px;
+  color: white;
+  background: linear-gradient(135deg, #8e55ff, #4a83ff 60%, #35d7ff);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 18px;
+  box-shadow: 0 8px 32px rgba(112, 78, 255, 0.32);
+}
+
+.my-exam-setup__eyebrow {
+  margin: 0 0 10px;
+  color: #7bdcff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+}
+
+.my-exam-setup__header h1 {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(2rem, 5vw, 3.35rem);
+  font-weight: 850;
+  letter-spacing: -1.8px;
+  line-height: 1.12;
+}
+
+.my-exam-setup__header h1 span {
+  color: transparent;
+  background: linear-gradient(90deg, #a878ff, #61d7ff, #ff80d4);
+  background-clip: text;
+  -webkit-background-clip: text;
+}
+
+.my-exam-setup__header p {
+  max-width: 550px;
+  margin: 15px 0 0;
+  color: var(--space-muted);
+  font-size: 1rem;
+  line-height: 1.8;
+}
+
+/* Main form card */
+.my-exam-setup__card {
+  position: relative;
+  padding: clamp(22px, 5vw, 38px);
+  overflow: hidden;
+  background:
+    linear-gradient(145deg, rgba(29, 38, 78, 0.92), rgba(14, 19, 44, 0.96));
+  border: 1px solid var(--space-border);
+  border-radius: 25px;
+  box-shadow:
+    0 25px 80px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  backdrop-filter: blur(18px);
+}
+
+.my-exam-setup__card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 12%;
+  width: 76%;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    #9b5cff,
+    #45caff,
+    transparent
+  );
+  opacity: 0.85;
+}
+
+.my-exam-setup__card h2 {
+  margin: 0 0 8px;
+  color: white;
+  font-size: 1.35rem;
+  font-weight: 750;
+}
+
+.my-exam-setup__card > p {
+  margin: 0 0 27px;
+  color: var(--space-muted);
+  font-size: 0.92rem;
+  line-height: 1.7;
+}
+
+/* Labels and fields */
+.my-exam-setup__field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.my-exam-setup__field label {
+  color: #e5e9ff;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.my-exam-setup__field input,
+.my-exam-setup__field select,
+.my-exam-setup__subject-entry input {
+  width: 100%;
+  min-width: 0;
+  padding: 14px 15px;
+  color: #f5f6ff;
+  background: rgba(5, 9, 28, 0.62);
+  border: 1px solid rgba(155, 172, 238, 0.2);
+  border-radius: 12px;
+  outline: none;
+  font: inherit;
+  font-size: 0.95rem;
+  transition:
+    border-color 0.25s ease,
+    box-shadow 0.25s ease,
+    background 0.25s ease;
+}
+
+.my-exam-setup__field input::placeholder,
+.my-exam-setup__subject-entry input::placeholder {
+  color: #7783aa;
+}
+
+.my-exam-setup__field input:focus,
+.my-exam-setup__field select:focus,
+.my-exam-setup__subject-entry input:focus {
+  background: rgba(9, 14, 39, 0.95);
+  border-color: #9b72ff;
+  box-shadow: 0 0 0 4px rgba(155, 92, 255, 0.12);
+}
+
+.my-exam-setup__field select {
+  cursor: pointer;
+}
+
+.my-exam-setup__field select option {
+  color: white;
+  background: #141b3b;
+}
+
+.my-exam-setup__hint {
+  color: #8e9ac2;
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+/* Subject entry */
+.my-exam-setup__subject-entry {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.my-exam-setup__subject-entry input {
+  flex: 1;
+}
+
+.my-exam-setup__add {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 18px;
+  color: white;
+  background: linear-gradient(135deg, #7955f5, #5c75ff);
+  border: 0;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 750;
+  cursor: pointer;
+  transition: 0.25s ease;
+}
+
+.my-exam-setup__add:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(121, 85, 245, 0.32);
+}
+
+.my-exam-setup__subjects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.my-exam-setup__subject {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  color: #dceaff;
+  background: rgba(69, 202, 255, 0.09);
+  border: 1px solid rgba(69, 202, 255, 0.27);
+  border-radius: 999px;
+  font-size: 0.84rem;
+  font-weight: 650;
+  transition: 0.2s ease;
+}
+
+.my-exam-setup__subject:hover {
+  background: rgba(69, 202, 255, 0.16);
+  border-color: rgba(69, 202, 255, 0.55);
+}
+
+/* If the subject chip contains a remove button */
+.my-exam-setup__subject button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: #ff9bbd;
+  background: rgba(255, 101, 200, 0.1);
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.my-exam-setup__subject button:hover {
+  color: white;
+  background: #e94e94;
+}
+
+/* Question count and duration */
+.my-exam-setup__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.my-exam-setup__grid .my-exam-setup__field {
+  margin-bottom: 22px;
+}
+
+/* Examination mode notice */
+.my-exam-setup__notice {
+  position: relative;
+  display: flex;
+  gap: 15px;
+  align-items: flex-start;
+  margin: 7px 0 26px;
+  padding: 19px;
+  background: linear-gradient(
+    115deg,
+    rgba(155, 92, 255, 0.13),
+    rgba(69, 202, 255, 0.07)
+  );
+  border: 1px solid rgba(155, 92, 255, 0.25);
+  border-radius: 16px;
+}
+
+.my-exam-setup__notice > svg {
+  flex-shrink: 0;
+  color: #b99aff;
+}
+
+.my-exam-setup__notice h3 {
+  margin: 0 0 6px;
+  color: #eee8ff;
+  font-size: 0.95rem;
+  font-weight: 750;
+}
+
+.my-exam-setup__notice p {
+  margin: 0;
+  color: #aeb8db;
+  font-size: 0.85rem;
+  line-height: 1.7;
+}
+
+/* Validation errors */
+.my-exam-setup__error {
+  margin: 0 0 20px;
+  padding: 13px 15px;
+  color: #ffb9c9;
+  background: rgba(255, 65, 110, 0.09);
+  border: 1px solid rgba(255, 65, 110, 0.3);
+  border-radius: 12px;
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+/* Launch exam button */
+.my-exam-setup__start {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: 58px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px 22px;
+  overflow: hidden;
+  color: white;
+  background: linear-gradient(100deg, #8a4dff, #586bff 52%, #30bde9);
+  border: 1px solid rgba(255, 255, 255, 0.19);
+  border-radius: 15px;
+  box-shadow: 0 10px 30px rgba(101, 84, 255, 0.25);
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease,
+    filter 0.25s ease;
+  animation: exam-glow 4s ease-in-out infinite;
+}
+
+.my-exam-setup__start::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    100deg,
+    transparent,
+    rgba(255, 255, 255, 0.19),
+    transparent
+  );
+  transform: skewX(-20deg);
+  transition: left 0.6s ease;
+}
+
+.my-exam-setup__start:hover {
+  transform: translateY(-3px);
+  filter: brightness(1.1);
+  box-shadow: 0 15px 38px rgba(101, 84, 255, 0.38);
+}
+
+.my-exam-setup__start:hover::before {
+  left: 150%;
+}
+
+.my-exam-setup__start:active {
+  transform: translateY(0);
+}
+
+.my-exam-setup__start:focus-visible,
+.my-exam-setup__back:focus-visible,
+.my-exam-setup__add:focus-visible {
+  outline: 3px solid #74ddff;
+  outline-offset: 4px;
+}
+
+/* Bottom decoration */
+.my-exam-setup__container::after {
+  content: "✦  YOUR NEXT CHAPTER STARTS HERE  ✦";
+  display: block;
+  margin-top: 25px;
+  color: #737fa9;
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-align: center;
+}
+
+/* Tablet */
+@media (max-width: 700px) {
+  .my-exam-setup {
+    padding: 25px 16px 40px;
+  }
+
+  .my-exam-setup__header {
+    padding-right: 100px;
+  }
+
+  .my-exam-setup__header::after {
+    top: 35px;
+    right: 0;
+    font-size: 4.5rem;
+  }
+
+  .my-exam-setup__header::before {
+    right: -5px;
+    font-size: 1rem;
+  }
+
+  .my-exam-setup__header h1 {
+    letter-spacing: -1px;
+  }
+
+  .my-exam-setup__card {
+    border-radius: 20px;
+  }
+}
+
+/* Mobile */
+@media (max-width: 480px) {
+  .my-exam-setup {
+    padding: 18px 12px 32px;
+  }
+
+  .my-exam-setup__back {
+    margin-bottom: 22px;
+  }
+
+  .my-exam-setup__header {
+    margin-bottom: 22px;
+    padding: 15px 0 20px;
+  }
+
+  .my-exam-setup__header::after {
+    top: -4px;
+    right: 2px;
+    font-size: 3.4rem;
+    opacity: 0.9;
+  }
+
+  .my-exam-setup__header::before {
+    top: -7px;
+    right: 0;
+    font-size: 0.8rem;
+    letter-spacing: 8px;
+  }
+
+  .my-exam-setup__icon {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 15px;
+    border-radius: 14px;
+  }
+
+  .my-exam-setup__header h1 {
+    max-width: 320px;
+    font-size: 2.15rem;
+  }
+
+  .my-exam-setup__header p {
+    font-size: 0.91rem;
+  }
+
+  .my-exam-setup__card {
+    padding: 21px 16px;
+    border-radius: 18px;
+  }
+
+  .my-exam-setup__grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .my-exam-setup__subject-entry {
+    flex-direction: column;
+  }
+
+  .my-exam-setup__add {
+    min-height: 46px;
+  }
+
+  .my-exam-setup__notice {
+    gap: 11px;
+    padding: 15px 12px;
+  }
+
+  .my-exam-setup__start {
+    min-height: 54px;
+    font-size: 0.93rem;
+  }
+
+  .my-exam-setup__container::after {
+    font-size: 0.57rem;
+    letter-spacing: 1.3px;
+  }
+}
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .my-exam-setup *,
+  .my-exam-setup *::before,
+  .my-exam-setup *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

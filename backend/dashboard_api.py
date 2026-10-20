@@ -565,16 +565,19 @@ def dashboard_summary():
 
         premium = get_premium_access(public_user)
 
-        # Get examination attempts using the actual table columns.
+        # Get completed My Exam attempts only.
         attempts = supabase_get(
             "quiz_attempts",
             {
                 "user_id": f"eq.{public_user_id}",
-                "mode": f"eq.{EXAM_MODE}",
+                "exam_purpose": "eq.my_exam",
+                "completed_at": "not.is.null",
                 "select": (
                     "id,user_id,course_id,score,"
                     "total_questions,mode,subjects,"
-                    "selected_topic,created_at"
+                    "selected_topic,exam_title,"
+                    "exam_date,started_at,completed_at,"
+                    "created_at"
                 ),
                 "order": "created_at.desc",
             },

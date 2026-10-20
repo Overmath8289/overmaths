@@ -39,6 +39,7 @@ import MyExam from './pages/MyExam'
 import PremiumDashboard from './pages/PremiumDashboard'
 import PremiumUpgrade from './pages/PremiumUpgrade'
 import PremiumRoute from './pages/PremiumRoute'
+import MyExamSetup from "./pages/MyExamSetup";
 
 // ============================================================
 // ADMIN
@@ -577,6 +578,17 @@ function App() {
       loading={authLoading}
     >
       <MyExam />
+    </PremiumRoute>
+  }
+/>
+
+
+
+<Route
+  path="/my-exam-setup"
+  element={
+    <PremiumRoute user={user} loading={authLoading}>
+      <MyExamSetup />
     </PremiumRoute>
   }
 />

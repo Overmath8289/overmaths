@@ -100,27 +100,79 @@ async function apiRequest(path, token, options = {}) {
   return data;
 }
 
+
+const EMPTY_SUBJECTS = [];
+
 export default function PremiumQuiz() {
+  
   const location = useLocation();
   const navigate = useNavigate();
   const config = location.state || {};
 
-  const {
-    subject = "All Subjects",
-    courseId = null,
-    courseCode = "",
-    courseName = "",
-    topic = "mixed",
-    questionCount = 10,
-    mode = "Practice Mode",
-  } = config;
+  const subjects = Array.isArray(config.subjects)
+    ? config.subjects
+    : EMPTY_SUBJECTS;
 
-  const isExamMode = /exam|examination|test/i.test(mode);
-  const requestedCount = Math.max(1, Number(questionCount) || 10);
+  const subject =
+    config.subject ||
+    subjects[0] ||
+    "All Subjects";
+
+  const courseId =
+    config.courseId ?? config.course_id ?? null;
+
+  const courseCode =
+    config.courseCode ?? config.course_code ?? "";
+
+  const courseName =
+    config.courseName ?? config.course_name ?? "";
+
+  const topic = config.topic || "mixed";
+
+  const questionCount = Math.max(
+    1,
+    Math.min(
+      100,
+      Number(
+        config.questionCount ??
+        config.question_count ??
+        10
+      ) || 10
+    )
+  );
+
+  const mode = config.mode || "Practice Mode";
+
+  const examPurpose = String(
+    config.examPurpose ??
+    config.exam_purpose ??
+    "practice"
+  ).trim().toLowerCase();
+
+  const examTitle =
+    config.examTitle ?? config.exam_title ?? "";
+
+  const examDate =
+    config.examDate ?? config.exam_date ?? null;
+
   const durationMinutes = Math.max(
     1,
-    Number(config.durationMinutes ?? config.duration ?? 30) || 30
+    Math.min(
+      180,
+      Number(
+        config.durationMinutes ??
+        config.duration_minutes ??
+        config.duration ??
+        30
+      ) || 30
+    )
   );
+
+  const isMyExam = examPurpose === "my_exam";
+
+  const isExamMode = /exam|examination|test/i.test(mode);
+
+  const requestedCount = questionCount;
 
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
@@ -190,7 +242,7 @@ export default function PremiumQuiz() {
       ? Math.round((correctCount / questions.length) * 100)
       : 0;
 
-  const loadQuestions = useCallback(async () => {
+    const loadQuestions = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -200,10 +252,14 @@ export default function PremiumQuiz() {
         error: sessionError,
       } = await supabase.auth.getSession();
 
-      if (sessionError) throw sessionError;
+      if (sessionError) {
+        throw sessionError;
+      }
 
       if (!session?.access_token) {
-        throw new Error("Please sign in before starting your premium quiz.");
+        throw new Error(
+          "Please sign in before starting your premium quiz."
+        );
       }
 
       if (
@@ -212,6 +268,12 @@ export default function PremiumQuiz() {
       ) {
         throw new Error(
           "Please select a specific subject or course before starting Premium Quiz."
+        );
+      }
+
+      if (isMyExam && subjects.length === 0) {
+        throw new Error(
+          "Please select at least one subject for My Exam."
         );
       }
 
@@ -224,59 +286,104 @@ export default function PremiumQuiz() {
           method: "POST",
           body: JSON.stringify({
             subject:
-              courseId != null && courseId !== "" ? null : subject,
+              courseId != null && courseId !== ""
+                ? null
+                : subject,
+
+            subjects: isMyExam ? subjects : [],
+
             course_id:
               courseId != null && courseId !== ""
                 ? Number(courseId)
                 : null,
+
             topic: topic || "mixed",
-            mode: isExamMode ? "examination" : "practice",
+
+            exam_purpose: isMyExam
+              ? "my_exam"
+              : "practice",
+
+            exam_title: isMyExam
+              ? examTitle || null
+              : null,
+
+            exam_date: isMyExam
+              ? examDate || null
+              : null,
+
+            mode: isExamMode
+              ? "examination"
+              : "practice",
+
             question_count: requestedCount,
+
+            duration_minutes: durationMinutes,
+
             time_per_question: Math.max(
               1,
-              Math.round((durationMinutes * 60) / requestedCount)
+              Math.round(
+                (durationMinutes * 60) / requestedCount
+              )
             ),
           }),
         }
       );
 
-      if (!Array.isArray(result.questions) || result.questions.length === 0) {
-        throw new Error("No questions were returned for this quiz.");
+      if (
+        !Array.isArray(result.questions) ||
+        result.questions.length === 0
+      ) {
+        throw new Error(
+          "No questions were returned for this quiz."
+        );
       }
 
       if (!result.session_token) {
-        throw new Error("The server did not create a valid quiz session.");
+        throw new Error(
+          "The server did not create a valid quiz session."
+        );
       }
 
       setAccessToken(token);
       setSessionToken(result.session_token);
       setServerResult(null);
+
       setQuestions(result.questions);
       setAnswers({});
       setMarked([]);
       setCurrentIndex(0);
+
       setTimeLeft(
         Number(result.duration_seconds) ||
-          (isExamMode ? durationMinutes * 60 : 0)
+          durationMinutes * 60
       );
+
       setElapsedSeconds(0);
       setSubmitted(false);
       setSubmitting(false);
       setSaveMessage("");
       setShowSubmitModal(false);
       setShowQuitModal(false);
+
       savedRef.current = false;
     } catch (loadError) {
-      setError(loadError?.message || "We could not load your questions.");
+      setError(
+        loadError?.message ||
+          "We could not load your questions."
+      );
     } finally {
       setLoading(false);
     }
   }, [
     courseId,
     subject,
+    subjects,
     topic,
     requestedCount,
     isExamMode,
+    isMyExam,
+    examTitle,
+    examDate,
     durationMinutes,
   ]);
 
@@ -460,7 +567,12 @@ export default function PremiumQuiz() {
     navigate(-1);
   };
 
-  const restartQuiz = () => {
+    const restartQuiz = () => {
+    window.clearInterval(timerRef.current);
+    window.clearInterval(elapsedRef.current);
+
+    savedRef.current = false;
+
     setAnswers({});
     setMarked([]);
     setCurrentIndex(0);
@@ -472,7 +584,7 @@ export default function PremiumQuiz() {
     setError("");
     setTimeLeft(0);
     setElapsedSeconds(0);
-    savedRef.current = false;
+
     loadQuestions();
   };
 
@@ -558,9 +670,14 @@ export default function PremiumQuiz() {
             <div className="pq-score-copy">
               <span className="pq-eyebrow">YOUR RESULT</span>
               <h2>{resultCorrect} out of {resultTotal} correct</h2>
-              <p>
-                {courseName || subject}
-                {topic && topic !== "mixed" ? ` · ${topic}` : ""}
+                            <p>
+                {isMyExam && examTitle
+                  ? examTitle
+                  : courseName || subject}
+
+                {topic && topic !== "mixed"
+                  ? ` · ${topic}`
+                  : ""}
               </p>
               <div className="pq-result-badges">
                 <span><CheckCircle2 size={15} /> {resultCorrect} correct</span>
