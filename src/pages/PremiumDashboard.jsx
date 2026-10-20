@@ -322,8 +322,8 @@ function normalizeActivities(activities) {
       title,
       detail: detailParts.join(' · ') || 'Completed quiz attempt',
       date: activity?.created_at ?? '',
-      score:
-        score: hasScore
+      
+      score: hasScore
   ? Math.round(Math.max(0, Math.min(100, score)))
   : null,
     };
