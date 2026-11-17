@@ -38,10 +38,50 @@ const API_URL = (
 ).replace(/\/$/, "");
 
 const LETTERS = ["A", "B", "C", "D"];
-const EMPTY_SUBJECTS = [];
-
 const MAX_QUESTIONS = 100;
 const MAX_DURATION_MINUTES = 180;
+const STORAGE_KEY = "overmaths_premium_quiz_active_v2";
+
+
+const EMPTY_ARRAY = Object.freeze([]);
+const EMPTY_CONFIG = Object.freeze({});
+
+const DEFAULT_ENVIRONMENT = {
+  shuffleQuestions: true,
+  shuffleOptions: false,
+  allowQuestionNavigation: true,
+  allowReview: true,
+  showTimer: true,
+  showProgress: true,
+  explanationsAfterSubmission: true,
+};
+
+const normalizeText = (value) =>
+  String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+
+const displaySubject = (value) => {
+  const normalized = normalizeText(value);
+
+  if (
+    normalized === "english" ||
+    normalized === "english language" ||
+    normalized === "english studies"
+  ) {
+    return "English Studies";
+  }
+
+  if (
+    normalized === "physical health education" ||
+    normalized === "physical and health education"
+  ) {
+    return "Physical and Health Education";
+  }
+
+  return String(value ?? "").trim() || "General";
+};
 
 const normalizeAnswer = (answer) => {
   if (answer == null) return "";
@@ -87,6 +127,54 @@ const getQuestionText = (question) =>
   question?.content ??
   "";
 
+const readStoredAttempt = () => {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.sessionStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeStoredAttempt = (value) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.sessionStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(value)
+    );
+  } catch {
+    // Storage may be unavailable or full.
+  }
+};
+
+const clearStoredAttempt = () => {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Ignore storage errors.
+  }
+};
+
+const isValidStoredAttempt = (saved) =>
+  Boolean(
+    saved &&
+      typeof saved.sessionToken === "string" &&
+      saved.sessionToken &&
+      Array.isArray(saved.questions) &&
+      saved.questions.length > 0 &&
+      saved.questions.every(
+        (question) =>
+          question?.id != null &&
+          Number.isInteger(Number(question.id))
+      )
+  );
+
 /*
   Safe arithmetic calculator.
 
@@ -118,7 +206,16 @@ function evaluateExpression(expression) {
       position++;
     }
 
-    const value = Number(input.slice(start, position));
+    const numberText = input.slice(start, position);
+
+    if (
+      !numberText ||
+      (numberText.match(/\./g) || []).length > 1
+    ) {
+      throw new Error("Invalid number.");
+    }
+
+    const value = Number(numberText);
 
     if (!Number.isFinite(value)) {
       throw new Error("Invalid number.");
@@ -138,7 +235,6 @@ function evaluateExpression(expression) {
       }
 
       position++;
-
       return value;
     }
 
@@ -172,7 +268,6 @@ function evaluateExpression(expression) {
       input[position] === "%"
     ) {
       const operator = input[position++];
-
       const right = parseUnary();
 
       if (
@@ -198,7 +293,6 @@ function evaluateExpression(expression) {
       input[position] === "-"
     ) {
       const operator = input[position++];
-
       const right = parseMultiplication();
 
       if (operator === "+") value += right;
@@ -247,7 +341,9 @@ async function apiRequest(path, token, options = {}) {
     data = responseText ? JSON.parse(responseText) : {};
   } catch {
     data = {
-      error: responseText || "The server returned an invalid response.",
+      error:
+        responseText ||
+        "The server returned an invalid response.",
     };
   }
 
@@ -266,31 +362,77 @@ export default function PremiumQuiz() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const config = location.state || {};
+  /*
+    RESTORE CONFIGURATION
+
+    React Router state may not always be available after
+    a browser refresh. The saved attempt contains a copy
+    of the configuration used to start the examination.
+  */
+
+  const storedAtMount = useMemo(
+    () => readStoredAttempt(),
+    []
+  );
+
+  const routeConfig = location.state || {};
+
+  const routeConfigMatchesSaved =
+    !Object.keys(routeConfig).length ||
+    (
+      storedAtMount?.config &&
+      String(
+        routeConfig.examTitle ??
+          routeConfig.exam_title ??
+          ""
+      ) ===
+        String(
+          storedAtMount.config.examTitle ??
+            storedAtMount.config.exam_title ??
+            ""
+        )
+    );
+
+  const initialSavedAttempt =
+    isValidStoredAttempt(storedAtMount) &&
+    routeConfigMatchesSaved
+      ? storedAtMount
+      : null;
+
+  const config =
+    Object.keys(routeConfig).length > 0
+      ? routeConfig
+      : initialSavedAttempt?.config || {};
 
   const subjects = Array.isArray(config.subjects)
-    ? config.subjects
-    : EMPTY_SUBJECTS;
+  ? config.subjects
+  : EMPTY_ARRAY;
 
-  // Individual subject allocations from MyExamSetup.jsx
-const subjectAllocations = Array.isArray(
-  config.subject_allocations
-)
-  ? config.subject_allocations
-  : Array.isArray(config.subjectAllocations)
-    ? config.subjectAllocations
-    : EMPTY_SUBJECTS;
+  const subjectAllocations = Array.isArray(
+    config.subject_allocations
+  )
+    ? config.subject_allocations
+    : Array.isArray(config.subjectAllocations)
+      ? config.subjectAllocations
+      : [];
 
-// Examination preferences
-const examEnvironment =
+  const environmentConfig =
   config.exam_environment ||
   config.examEnvironment ||
-  {};
+  EMPTY_CONFIG;
 
-const targetScore =
-  config.target_score ??
-  config.targetScore ??
-  null;
+const examEnvironment = useMemo(
+  () => ({
+    ...DEFAULT_ENVIRONMENT,
+    ...environmentConfig,
+  }),
+  [environmentConfig]
+);
+
+  const targetScore =
+    config.target_score ??
+    config.targetScore ??
+    null;
 
   const subject =
     config.subject ||
@@ -349,24 +491,62 @@ const targetScore =
   );
 
   const isMyExam = examPurpose === "my_exam";
-
   const isExamMode = /exam|examination|test/i.test(mode);
-
   const requestedCount = questionCount;
 
-  const [questions, setQuestions] = useState([]);
-  const [answers, setAnswers] = useState({});
-  const [marked, setMarked] = useState([]);
+  /*
+    RESTORED SESSION STATE
+  */
 
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [questions, setQuestions] = useState(
+    initialSavedAttempt?.questions || []
+  );
 
-  const [timeLeft, setTimeLeft] = useState(0);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [answers, setAnswers] = useState(
+    initialSavedAttempt?.answers || {}
+  );
+
+  const [marked, setMarked] = useState(
+    initialSavedAttempt?.marked || []
+  );
+
+  const [currentIndex, setCurrentIndex] = useState(
+    Number(initialSavedAttempt?.currentIndex) || 0
+  );
+
+  const [activeSubject, setActiveSubject] = useState(
+    initialSavedAttempt?.activeSubject || ""
+  );
+
+  const [timeLeft, setTimeLeft] = useState(() => {
+    if (initialSavedAttempt?.deadlineAt) {
+      return Math.max(
+        0,
+        Math.ceil(
+          (initialSavedAttempt.deadlineAt - Date.now()) /
+            1000
+        )
+      );
+    }
+
+    return Number(initialSavedAttempt?.timeLeft) || 0;
+  });
+
+  const [deadlineAt, setDeadlineAt] = useState(
+    Number(initialSavedAttempt?.deadlineAt) || 0
+  );
+
+  const [elapsedSeconds, setElapsedSeconds] = useState(
+    Number(initialSavedAttempt?.elapsedSeconds) || 0
+  );
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [submitted, setSubmitted] = useState(false);
+  const [submitted, setSubmitted] = useState(
+    Boolean(initialSavedAttempt?.submitted)
+  );
+
   const [submitting, setSubmitting] = useState(false);
 
   const [showSubmitModal, setShowSubmitModal] = useState(false);
@@ -380,21 +560,94 @@ const targetScore =
   const [saveMessage, setSaveMessage] = useState("");
 
   const [accessToken, setAccessToken] = useState("");
-  const [sessionToken, setSessionToken] = useState("");
+  const [sessionToken, setSessionToken] = useState(
+    initialSavedAttempt?.sessionToken || ""
+  );
 
-  const [serverResult, setServerResult] = useState(null);
+  const [serverResult, setServerResult] = useState(
+    initialSavedAttempt?.serverResult || null
+  );
 
   const timerRef = useRef(null);
   const elapsedRef = useRef(null);
-
-  const savedRef = useRef(false);
   const submitRef = useRef(null);
+  const savedRef = useRef(
+    Boolean(initialSavedAttempt?.submitted)
+  );
+
+  const restoredSessionRef = useRef(
+    Boolean(initialSavedAttempt)
+  );
 
   const currentQuestion = questions[currentIndex];
 
   const currentAnswer = currentQuestion
     ? answers[currentQuestion.id] ?? ""
     : "";
+
+  /*
+    SUBJECT SECTIONS
+
+    Every question is grouped by its subject. The
+    original question order and global question indexes
+    are preserved.
+  */
+
+  const subjectSections = useMemo(() => {
+    if (!isMyExam) return [];
+
+    const groups = new Map();
+
+    questions.forEach((question, index) => {
+      const label = displaySubject(
+        question.subject || subject
+      );
+
+      const key = normalizeText(label);
+
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          name: label,
+          indexes: [],
+        });
+      }
+
+      groups.get(key).indexes.push(index);
+    });
+
+    return Array.from(groups.values());
+  }, [questions, isMyExam, subject]);
+
+  const activeSection = subjectSections.find(
+    (section) => section.key === activeSubject
+  );
+
+  const visibleQuestionIndexes =
+    isMyExam && activeSection
+      ? activeSection.indexes
+      : questions.map((_, index) => index);
+
+  const sectionCounts = useMemo(() => {
+    const counts = {};
+
+    subjectSections.forEach((section) => {
+      const answered = section.indexes.filter((index) => {
+        const question = questions[index];
+        const answer = answers[question.id];
+
+        return answer != null && answer !== "";
+      }).length;
+
+      counts[section.key] = {
+        total: section.indexes.length,
+        answered,
+        remaining: section.indexes.length - answered,
+      };
+    });
+
+    return counts;
+  }, [subjectSections, questions, answers]);
 
   const answeredCount = useMemo(
     () =>
@@ -451,7 +704,56 @@ const targetScore =
         : 0;
 
   /*
-    LOAD QUESTIONS
+    SAVE THE ACTIVE ATTEMPT
+
+    This stores the signed session, question set,
+    answers, marked questions, current position,
+    timer deadline and submitted result.
+
+    The session token is needed to submit the same
+    examination after a browser refresh.
+  */
+
+  useEffect(() => {
+    if (
+      !sessionToken ||
+      questions.length === 0
+    ) {
+      return;
+    }
+
+    writeStoredAttempt({
+      config,
+      sessionToken,
+      questions,
+      answers,
+      marked,
+      currentIndex,
+      activeSubject,
+      timeLeft,
+      deadlineAt,
+      elapsedSeconds,
+      submitted,
+      serverResult,
+      savedAt: Date.now(),
+    });
+  }, [
+    config,
+    sessionToken,
+    questions,
+    answers,
+    marked,
+    currentIndex,
+    activeSubject,
+    timeLeft,
+    deadlineAt,
+    elapsedSeconds,
+    submitted,
+    serverResult,
+  ]);
+
+  /*
+    LOAD OR RESTORE QUESTIONS
   */
 
   const loadQuestions = useCallback(async () => {
@@ -471,14 +773,51 @@ const targetScore =
         error: sessionError,
       } = await supabase.auth.getSession();
 
-      if (sessionError) {
-        throw sessionError;
-      }
+      if (sessionError) throw sessionError;
 
       if (!session?.access_token) {
         throw new Error(
           "Please sign in before starting your premium quiz."
         );
+      }
+
+      const token = session.access_token;
+      setAccessToken(token);
+
+      /*
+        If a valid saved session exists, restore it.
+        Do not call /start again.
+      */
+
+      if (
+        restoredSessionRef.current &&
+        initialSavedAttempt
+      ) {
+        restoredSessionRef.current = false;
+
+        const restoredDeadline =
+          Number(initialSavedAttempt.deadlineAt) || 0;
+
+        if (restoredDeadline && isExamMode) {
+          const remaining = Math.max(
+            0,
+            Math.ceil(
+              (restoredDeadline - Date.now()) / 1000
+            )
+          );
+
+          setTimeLeft(remaining);
+        }
+
+        setSessionToken(
+          initialSavedAttempt.sessionToken
+        );
+
+        setSaveMessage(
+          "Your previous quiz session has been restored."
+        );
+
+        return;
       }
 
       if (
@@ -496,26 +835,28 @@ const targetScore =
         );
       }
 
+      if (
+        isMyExam &&
+        subjectAllocations.length === 0
+      ) {
+        throw new Error(
+          "Your subject allocations are missing. Please return to My Exam setup and configure your subjects again."
+        );
+      }
 
-      if (isMyExam && subjectAllocations.length === 0) {
-  throw new Error(
-    "Your subject allocations are missing. Please return to My Exam setup and configure your subjects again."
-  );
-}
+      if (isMyExam) {
+        const allocationTotal = subjectAllocations.reduce(
+          (total, allocation) =>
+            total + Number(allocation.question_count || 0),
+          0
+        );
 
-if (isMyExam) {
-  const allocationTotal = subjectAllocations.reduce(
-    (total, allocation) =>
-      total + Number(allocation.question_count || 0),
-    0
-  );
-
-  if (allocationTotal !== requestedCount) {
-    throw new Error(
-      `Your subject allocations add up to ${allocationTotal} questions, but your examination requires ${requestedCount}. Please review your exam setup.`
-    );
-  }
-}
+        if (allocationTotal !== requestedCount) {
+          throw new Error(
+            `Your subject allocations add up to ${allocationTotal} questions, but your examination requires ${requestedCount}. Please review your exam setup.`
+          );
+        }
+      }
 
       if (
         isMyExam &&
@@ -530,72 +871,74 @@ if (isMyExam) {
         );
       }
 
-      const token = session.access_token;
+      /*
+        A fresh attempt is being created. Remove any
+        previous attempt before making the request.
+      */
 
-      
-const result = await apiRequest(
-  "/api/premium-quiz/start",
-  token,
-  {
-    method: "POST",
-    body: JSON.stringify({
-      subject:
-        courseId != null && courseId !== ""
-          ? null
-          : subject,
+      clearStoredAttempt();
 
-      subjects: isMyExam ? subjects : [],
+      const result = await apiRequest(
+        "/api/premium-quiz/start",
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            subject:
+              courseId != null && courseId !== ""
+                ? null
+                : subject,
 
-      // CRITICAL: Send each subject's individual question allocation.
-      subject_allocations: isMyExam
-        ? subjectAllocations
-        : [],
+            subjects: isMyExam ? subjects : [],
 
-      course_id:
-        courseId != null && courseId !== ""
-          ? Number(courseId)
-          : null,
+            subject_allocations: isMyExam
+              ? subjectAllocations
+              : [],
 
-      topic: topic || "mixed",
+            course_id:
+              courseId != null && courseId !== ""
+                ? Number(courseId)
+                : null,
 
-      exam_purpose: isMyExam
-        ? "my_exam"
-        : "practice",
+            topic: topic || "mixed",
 
-      exam_title: isMyExam
-        ? examTitle || null
-        : null,
+            exam_purpose: isMyExam
+              ? "my_exam"
+              : "practice",
 
-      exam_date: isMyExam
-        ? examDate || null
-        : null,
+            exam_title: isMyExam
+              ? examTitle || null
+              : null,
 
-      target_score: isMyExam
-        ? targetScore
-        : null,
+            exam_date: isMyExam
+              ? examDate || null
+              : null,
 
-      mode: isExamMode
-        ? "examination"
-        : "practice",
+            target_score: isMyExam
+              ? targetScore
+              : null,
 
-      question_count: requestedCount,
+            mode: isExamMode
+              ? "examination"
+              : "practice",
 
-      duration_minutes: durationMinutes,
+            question_count: requestedCount,
 
-      time_per_question: Math.max(
-        1,
-        Math.round(
-          (durationMinutes * 60) / requestedCount
-        )
-      ),
+            duration_minutes: durationMinutes,
 
-      // Send the examination preferences too.
-      exam_environment: isMyExam
-        ? examEnvironment
-        : {},
-    }),
-  }
-);
+            time_per_question: Math.max(
+              1,
+              Math.round(
+                (durationMinutes * 60) / requestedCount
+              )
+            ),
+
+            exam_environment: isMyExam
+              ? examEnvironment
+              : {},
+          }),
+        }
+      );
 
       if (
         !Array.isArray(result.questions) ||
@@ -610,6 +953,54 @@ const result = await apiRequest(
         throw new Error(
           "The server did not create a valid quiz session."
         );
+      }
+
+      /*
+        Verify that the server respected the individual
+        subject allocations.
+      */
+
+      if (isMyExam) {
+        const actualCounts = result.questions.reduce(
+          (counts, question) => {
+            const key = normalizeText(
+              displaySubject(question.subject)
+            );
+
+            counts[key] = (counts[key] || 0) + 1;
+            return counts;
+          },
+          {}
+        );
+
+        const allocationErrors = subjectAllocations
+          .filter((allocation) => {
+            const key = normalizeText(
+              displaySubject(allocation.subject)
+            );
+
+            return (
+              (actualCounts[key] || 0) !==
+              Number(allocation.question_count)
+            );
+          })
+          .map((allocation) => {
+            const key = normalizeText(
+              displaySubject(allocation.subject)
+            );
+
+            return `${displaySubject(
+              allocation.subject
+            )}: expected ${Number(
+              allocation.question_count
+            )}, received ${actualCounts[key] || 0}`;
+          });
+
+        if (allocationErrors.length > 0) {
+          throw new Error(
+            `Your examination questions do not match your subject allocations:\n${allocationErrors.join("\n")}. Please try again.`
+          );
+        }
       }
 
       const questionIds = result.questions.map(
@@ -645,20 +1036,24 @@ const result = await apiRequest(
         );
       }
 
-      setAccessToken(token);
-      setSessionToken(result.session_token);
+      const durationSeconds =
+        Number(result.duration_seconds) ||
+        durationMinutes * 60;
 
+      setSessionToken(result.session_token);
       setServerResult(null);
 
       setQuestions(result.questions);
       setAnswers({});
       setMarked([]);
-
       setCurrentIndex(0);
 
-      setTimeLeft(
-        Number(result.duration_seconds) ||
-          durationMinutes * 60
+      setTimeLeft(durationSeconds);
+
+      setDeadlineAt(
+        isExamMode
+          ? Date.now() + durationSeconds * 1000
+          : 0
       );
 
       setElapsedSeconds(0);
@@ -674,6 +1069,14 @@ const result = await apiRequest(
       setCalculatorValue("");
       setCalculatorResult("");
 
+      setActiveSubject(
+        isMyExam && result.questions[0]?.subject
+          ? normalizeText(
+              displaySubject(result.questions[0].subject)
+            )
+          : ""
+      );
+
       savedRef.current = false;
     } catch (loadError) {
       setError(
@@ -688,6 +1091,7 @@ const result = await apiRequest(
     courseId,
     subject,
     subjects,
+    subjectAllocations,
     topic,
     requestedCount,
     isExamMode,
@@ -697,6 +1101,7 @@ const result = await apiRequest(
     durationMinutes,
     targetScore,
     examEnvironment,
+    initialSavedAttempt,
   ]);
 
   useEffect(() => {
@@ -704,9 +1109,30 @@ const result = await apiRequest(
   }, [loadQuestions]);
 
   /*
+    ENSURE THE ACTIVE SUBJECT IS VALID
+  */
+
+  useEffect(() => {
+    if (!isMyExam || subjectSections.length === 0) return;
+
+    const stillExists = subjectSections.some(
+      (section) => section.key === activeSubject
+    );
+
+    if (!stillExists) {
+      setActiveSubject(subjectSections[0].key);
+    }
+  }, [
+    isMyExam,
+    subjectSections,
+    activeSubject,
+  ]);
+
+  /*
     ELAPSED TIME
 
-    Pauses while submitting and resumes if submission fails.
+    Elapsed time is persisted so refreshing the page
+    does not reset the session duration.
   */
 
   useEffect(() => {
@@ -736,8 +1162,8 @@ const result = await apiRequest(
   /*
     EXAM COUNTDOWN
 
-    When time reaches zero, submit automatically.
-    If submission fails, the timer does not restart at zero.
+    Uses an absolute deadline. Refreshing the page
+    therefore does not restart the examination timer.
   */
 
   useEffect(() => {
@@ -747,26 +1173,31 @@ const result = await apiRequest(
       submitted ||
       submitting ||
       questions.length === 0 ||
-      timeLeft <= 0
+      !deadlineAt
     ) {
       return undefined;
     }
 
-    timerRef.current = window.setInterval(() => {
-      setTimeLeft((seconds) => {
-        if (seconds <= 1) {
-          window.clearInterval(timerRef.current);
+    const updateCountdown = () => {
+      const remaining = Math.max(
+        0,
+        Math.ceil((deadlineAt - Date.now()) / 1000)
+      );
 
-          window.setTimeout(() => {
-            submitRef.current?.("timeout");
-          }, 0);
+      setTimeLeft(remaining);
 
-          return 0;
-        }
+      if (remaining <= 0) {
+        window.clearInterval(timerRef.current);
+        submitRef.current?.("timeout");
+      }
+    };
 
-        return seconds - 1;
-      });
-    }, 1000);
+    updateCountdown();
+
+    timerRef.current = window.setInterval(
+      updateCountdown,
+      1000
+    );
 
     return () => {
       window.clearInterval(timerRef.current);
@@ -777,7 +1208,7 @@ const result = await apiRequest(
     submitted,
     submitting,
     questions.length,
-    timeLeft,
+    deadlineAt,
   ]);
 
   useEffect(() => {
@@ -810,6 +1241,10 @@ const result = await apiRequest(
     }));
   };
 
+  /*
+    QUESTION NAVIGATION
+  */
+
   const goToQuestion = (index) => {
     if (
       index < 0 ||
@@ -820,13 +1255,43 @@ const result = await apiRequest(
     }
 
     setCurrentIndex(index);
+
+    if (isMyExam) {
+      const nextSubject = normalizeText(
+        displaySubject(
+          questions[index]?.subject || subject
+        )
+      );
+
+      setActiveSubject(nextSubject);
+    }
+  };
+
+  const selectSubject = (section) => {
+    if (!section || submitting) return;
+
+    setActiveSubject(section.key);
+
+    const firstUnanswered = section.indexes.find(
+      (index) => {
+        const question = questions[index];
+        const answer = answers[question.id];
+
+        return answer == null || answer === "";
+      }
+    );
+
+    goToQuestion(
+      firstUnanswered ?? section.indexes[0]
+    );
   };
 
   const toggleMark = () => {
     if (
       !currentQuestion ||
       submitted ||
-      submitting
+      submitting ||
+      !examEnvironment.allowReview
     ) {
       return;
     }
@@ -864,9 +1329,8 @@ const result = await apiRequest(
   /*
     SUBMIT QUIZ
 
-    Sends every question to the Flask backend.
-    The backend grades the answers and calls
-    complete_quiz_attempt in Supabase.
+    The backend grades the answers and saves them
+    using complete_quiz_attempt.
   */
 
   const submitQuiz = useCallback(
@@ -882,7 +1346,7 @@ const result = await apiRequest(
 
       if (!sessionToken || !accessToken) {
         setSaveMessage(
-          "Your quiz session is missing or expired. Please start another quiz."
+          "Your quiz session or sign-in token is missing. Please sign in again and try submitting."
         );
         return;
       }
@@ -916,7 +1380,6 @@ const result = await apiRequest(
       }
 
       savedRef.current = true;
-
       setSubmitting(true);
 
       setShowSubmitModal(false);
@@ -935,11 +1398,8 @@ const result = await apiRequest(
         const submissionAnswers = questions.map(
           (question) => ({
             question_id: Number(question.id),
-
             selected_answer:
-              normalizeAnswer(
-                answers[question.id]
-              ) || null,
+              normalizeAnswer(answers[question.id]) || null,
           })
         );
 
@@ -955,10 +1415,7 @@ const result = await apiRequest(
           }
         );
 
-        if (
-          !result ||
-          result.success === false
-        ) {
+        if (!result || result.success === false) {
           throw new Error(
             result?.error ||
               result?.message ||
@@ -983,7 +1440,6 @@ const result = await apiRequest(
         }
 
         setServerResult(result);
-
         setSubmitted(true);
 
         setSaveMessage(
@@ -1019,43 +1475,45 @@ const result = await apiRequest(
   }, [submitQuiz]);
 
   /*
-    NAVIGATION
+    NAVIGATION ACTIONS
   */
 
   const goNext = () =>
     goToQuestion(
-      Math.min(
-        currentIndex + 1,
-        questions.length - 1
-      )
+      Math.min(currentIndex + 1, questions.length - 1)
     );
 
   const goPrevious = () =>
-    goToQuestion(
-      Math.max(currentIndex - 1, 0)
-    );
+    goToQuestion(Math.max(currentIndex - 1, 0));
 
-  const quitQuiz = () => {
+  const leaveQuiz = () => {
     window.clearInterval(timerRef.current);
     window.clearInterval(elapsedRef.current);
-
+    clearStoredAttempt();
     navigate(-1);
+  };
+
+  const quitQuiz = () => {
+    leaveQuiz();
   };
 
   const restartQuiz = () => {
     window.clearInterval(timerRef.current);
     window.clearInterval(elapsedRef.current);
 
-    savedRef.current = false;
+    clearStoredAttempt();
 
+    savedRef.current = false;
+    restoredSessionRef.current = false;
+
+    setQuestions([]);
     setAnswers({});
     setMarked([]);
-
     setCurrentIndex(0);
+    setActiveSubject("");
 
     setSubmitted(false);
     setSubmitting(false);
-
     setServerResult(null);
 
     setSessionToken("");
@@ -1065,6 +1523,7 @@ const result = await apiRequest(
     setError("");
 
     setTimeLeft(0);
+    setDeadlineAt(0);
     setElapsedSeconds(0);
 
     loadQuestions();
@@ -1154,7 +1613,7 @@ const result = await apiRequest(
         <header className="pq-topbar">
           <button
             className="pq-brand"
-            onClick={() => navigate(-1)}
+            onClick={leaveQuiz}
           >
             <span className="pq-brand-icon">
               <Sparkles size={19} />
@@ -1191,8 +1650,9 @@ const result = await apiRequest(
 
             <p>
               Your submission has been graded.
-              Review your answers and explanations
-              below before returning to your dashboard.
+              {examEnvironment.allowReview
+                ? " Review your answers and explanations below."
+                : " Your result is ready."}
             </p>
           </div>
 
@@ -1288,142 +1748,147 @@ const result = await apiRequest(
             </div>
           )}
 
-          <div className="pq-review-heading">
-            <div>
-              <span className="pq-eyebrow">
-                ANSWER REVIEW
-              </span>
+          {examEnvironment.allowReview && (
+            <>
+              <div className="pq-review-heading">
+                <div>
+                  <span className="pq-eyebrow">
+                    ANSWER REVIEW
+                  </span>
 
-              <h2>Review your questions</h2>
-            </div>
+                  <h2>Review your questions</h2>
+                </div>
 
-            <span className="pq-review-count">
-              {review.length} questions
-            </span>
-          </div>
+                <span className="pq-review-count">
+                  {review.length} questions
+                </span>
+              </div>
 
-          <div className="pq-review-list">
-            {review.map((question, index) => {
-              const selected = normalizeAnswer(
-                question.selected_answer
-              );
+              <div className="pq-review-list">
+                {review.map((question, index) => {
+                  const selected = normalizeAnswer(
+                    question.selected_answer
+                  );
 
-              const correct =
-                getCorrectAnswer(question);
+                  const correct =
+                    getCorrectAnswer(question);
 
-              const isCorrect =
-                Boolean(question.is_correct);
+                  const isCorrect =
+                    Boolean(question.is_correct);
 
-              const options = getOptions(question);
+                  const options = getOptions(question);
 
-              return (
-                <article
-                  className="pq-review-item"
-                  key={question.id ?? index}
-                >
-                  <div
-                    className={`pq-review-number ${
-                      isCorrect
-                        ? "is-correct"
-                        : selected
-                          ? "is-wrong"
-                          : "is-empty"
-                    }`}
-                  >
-                    {index + 1}
-                  </div>
-
-                  <div className="pq-review-body">
-                    <div className="pq-review-meta">
-                      <span>
-                        QUESTION {index + 1}
-                      </span>
-
-                      <span
-                        className={
+                  return (
+                    <article
+                      className="pq-review-item"
+                      key={question.id ?? index}
+                    >
+                      <div
+                        className={`pq-review-number ${
                           isCorrect
-                            ? "pq-text-success"
+                            ? "is-correct"
                             : selected
-                              ? "pq-text-danger"
-                              : ""
-                        }
+                              ? "is-wrong"
+                              : "is-empty"
+                        }`}
                       >
-                        {isCorrect
-                          ? "Correct"
-                          : selected
-                            ? "Incorrect"
-                            : "Not answered"}
-                      </span>
-                    </div>
-
-                    <div className="pq-review-question">
-                      <MathText
-                        text={getQuestionText(question)}
-                      />
-                    </div>
-
-                    {question.image_url && (
-                      <img
-                        className="pq-question-image"
-                        src={question.image_url}
-                        alt="Question illustration"
-                      />
-                    )}
-
-                    <div className="pq-review-answers">
-                      <p>
-                        Your answer:{" "}
-                        <strong>
-                          {selected
-                            ? `${selected}. ${
-                                options.find(
-                                  (option) =>
-                                    option.letter === selected
-                                )?.text || ""
-                              }`
-                            : "Not answered"}
-                        </strong>
-                      </p>
-
-                      {correct && (
-                        <p>
-                          Correct answer:{" "}
-                          <strong>
-                            {correct}.{" "}
-                            {options.find(
-                              (option) =>
-                                option.letter === correct
-                            )?.text || ""}
-                          </strong>
-                        </p>
-                      )}
-                    </div>
-
-                    {question.explanation && (
-                      <div className="pq-explanation">
-                        <Lightbulb size={16} />
-
-                        <div>
-                          <strong>Explanation</strong>
-
-                          <p>
-                            <MathText
-                              text={question.explanation}
-                            />
-                          </p>
-                        </div>
+                        {index + 1}
                       </div>
-                    )}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
+
+                      <div className="pq-review-body">
+                        <div className="pq-review-meta">
+                          <span>
+                            QUESTION {index + 1}
+                          </span>
+
+                          <span
+                            className={
+                              isCorrect
+                                ? "pq-text-success"
+                                : selected
+                                  ? "pq-text-danger"
+                                  : ""
+                            }
+                          >
+                            {isCorrect
+                              ? "Correct"
+                              : selected
+                                ? "Incorrect"
+                                : "Not answered"}
+                          </span>
+                        </div>
+
+                        <div className="pq-review-question">
+                          <MathText
+                            text={getQuestionText(question)}
+                          />
+                        </div>
+
+                        {question.image_url && (
+                          <img
+                            className="pq-question-image"
+                            src={question.image_url}
+                            alt="Question illustration"
+                          />
+                        )}
+
+                        <div className="pq-review-answers">
+                          <p>
+                            Your answer:{" "}
+                            <strong>
+                              {selected
+                                ? `${selected}. ${
+                                    options.find(
+                                      (option) =>
+                                        option.letter === selected
+                                    )?.text || ""
+                                  }`
+                                : "Not answered"}
+                            </strong>
+                          </p>
+
+                          {correct && (
+                            <p>
+                              Correct answer:{" "}
+                              <strong>
+                                {correct}.{" "}
+                                {options.find(
+                                  (option) =>
+                                    option.letter === correct
+                                )?.text || ""}
+                              </strong>
+                            </p>
+                          )}
+                        </div>
+
+                        {examEnvironment.explanationsAfterSubmission &&
+                          question.explanation && (
+                            <div className="pq-explanation">
+                              <Lightbulb size={16} />
+
+                              <div>
+                                <strong>Explanation</strong>
+
+                                <p>
+                                  <MathText
+                                    text={question.explanation}
+                                  />
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </>
+          )}
 
           <div className="pq-results-actions">
             <button
               className="pq-btn pq-btn-primary"
-              onClick={() => navigate(-1)}
+              onClick={leaveQuiz}
             >
               <ArrowLeft size={17} />
               Back to dashboard
@@ -1496,7 +1961,7 @@ const result = await apiRequest(
               : "Practice Mode"}
           </span>
 
-          {isExamMode && (
+          {isExamMode && examEnvironment.showTimer && (
             <div
               className={`pq-timer ${
                 timeLeft <= 300
@@ -1509,15 +1974,17 @@ const result = await apiRequest(
             </div>
           )}
 
-          <button
-            className="pq-icon-btn"
-            title="Toggle question palette"
-            onClick={() =>
-              setShowPalette((value) => !value)
-            }
-          >
-            <LayoutGrid size={18} />
-          </button>
+          {examEnvironment.allowQuestionNavigation && (
+            <button
+              className="pq-icon-btn"
+              title="Toggle question palette"
+              onClick={() =>
+                setShowPalette((value) => !value)
+              }
+            >
+              <LayoutGrid size={18} />
+            </button>
+          )}
 
           <button
             className="pq-exit-btn"
@@ -1529,32 +1996,111 @@ const result = await apiRequest(
         </div>
       </header>
 
-      <div className="pq-progress-strip">
-        <div className="pq-progress-info">
-          <span>QUIZ PROGRESS</span>
+      {examEnvironment.showProgress && (
+        <div className="pq-progress-strip">
+          <div className="pq-progress-info">
+            <span>QUIZ PROGRESS</span>
 
-          <strong>
-            {answeredCount} of {questions.length} answered
+            <strong>
+              {answeredCount} of {questions.length} answered
+            </strong>
+          </div>
+
+          <div className="pq-progress-track">
+            <div
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+
+          <strong className="pq-progress-percent">
+            {progress}%
           </strong>
         </div>
-
-        <div className="pq-progress-track">
-          <div
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-
-        <strong className="pq-progress-percent">
-          {progress}%
-        </strong>
-      </div>
+      )}
 
       <div
         className={`pq-workspace ${
-          showPalette ? "" : "pq-workspace-wide"
+          !showPalette ||
+          !examEnvironment.allowQuestionNavigation
+            ? "pq-workspace-wide"
+            : ""
         }`}
       >
         <section className="pq-main-column">
+          {isMyExam && subjectSections.length > 0 && (
+            <div className="pq-subject-nav">
+              <div className="pq-subject-nav-heading">
+                <div>
+                  <span className="pq-eyebrow">
+                    EXAMINATION SECTIONS
+                  </span>
+
+                  <h2>Choose a subject</h2>
+                </div>
+
+                <span className="pq-subject-total">
+                  {subjectSections.length} subjects
+                </span>
+              </div>
+
+              <div
+                className="pq-subject-tabs"
+                role="tablist"
+                aria-label="Examination subjects"
+              >
+                {subjectSections.map((section) => {
+                  const counts =
+                    sectionCounts[section.key] || {
+                      total: section.indexes.length,
+                      answered: 0,
+                      remaining: section.indexes.length,
+                    };
+
+                  const isActive =
+                    section.key === activeSubject;
+
+                  return (
+                    <button
+                      key={section.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      className={`pq-subject-tab ${
+                        isActive ? "is-active" : ""
+                      }`}
+                      onClick={() =>
+                        selectSubject(section)
+                      }
+                      disabled={submitting}
+                    >
+                      <span className="pq-subject-tab-name">
+                        {section.name}
+                      </span>
+
+                      <span className="pq-subject-tab-count">
+                        {counts.answered}/{counts.total} answered
+                      </span>
+
+                      <span className="pq-subject-tab-progress">
+                        <span
+                          style={{
+                            width: `${
+                              counts.total
+                                ? (counts.answered /
+                                    counts.total) *
+                                  100
+                                : 0
+                            }%`,
+                          }}
+                        />
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="pq-question-card">
             <div className="pq-question-card-top">
               <div className="pq-question-tags">
@@ -1563,6 +2109,12 @@ const result = await apiRequest(
                   <span>OF {questions.length}</span>
                 </span>
 
+                {isMyExam && currentQuestion?.subject && (
+                  <span className="pq-difficulty">
+                    {displaySubject(currentQuestion.subject)}
+                  </span>
+                )}
+
                 {currentQuestion?.difficulty && (
                   <span className="pq-difficulty">
                     {currentQuestion.difficulty}
@@ -1570,23 +2122,25 @@ const result = await apiRequest(
                 )}
               </div>
 
-              <button
-                className={`pq-mark-btn ${
-                  currentQuestion &&
-                  marked.includes(currentQuestion.id)
-                    ? "is-marked"
-                    : ""
-                }`}
-                onClick={toggleMark}
-                disabled={submitting}
-              >
-                <Flag size={16} />
+              {examEnvironment.allowReview && (
+                <button
+                  className={`pq-mark-btn ${
+                    currentQuestion &&
+                    marked.includes(currentQuestion.id)
+                      ? "is-marked"
+                      : ""
+                  }`}
+                  onClick={toggleMark}
+                  disabled={submitting}
+                >
+                  <Flag size={16} />
 
-                {currentQuestion &&
-                marked.includes(currentQuestion.id)
-                  ? "Marked for review"
-                  : "Mark for review"}
-              </button>
+                  {currentQuestion &&
+                  marked.includes(currentQuestion.id)
+                    ? "Marked for review"
+                    : "Mark for review"}
+                </button>
+              )}
             </div>
 
             <div className="pq-question-content">
@@ -1613,8 +2167,7 @@ const result = await apiRequest(
                     option.letter;
 
                   const practiceAnswered =
-                    !isExamMode &&
-                    currentAnswer !== "";
+                    !isExamMode && currentAnswer !== "";
 
                   const correct = !isExamMode
                     ? getCorrectAnswer(currentQuestion)
@@ -1727,16 +2280,20 @@ const result = await apiRequest(
             )}
 
             <div className="pq-question-footer">
-              <button
-                className="pq-btn pq-btn-light"
-                onClick={goPrevious}
-                disabled={
-                  currentIndex === 0 || submitting
-                }
-              >
-                <ArrowLeft size={17} />
-                Previous
-              </button>
+              {examEnvironment.allowQuestionNavigation ? (
+                <button
+                  className="pq-btn pq-btn-light"
+                  onClick={goPrevious}
+                  disabled={
+                    currentIndex === 0 || submitting
+                  }
+                >
+                  <ArrowLeft size={17} />
+                  Previous
+                </button>
+              ) : (
+                <span />
+              )}
 
               <div className="pq-footer-middle">
                 <span>
@@ -1787,164 +2344,177 @@ const result = await apiRequest(
           </div>
         </section>
 
-        {showPalette && (
-          <aside className="pq-sidebar">
-            <div className="pq-sidebar-card">
-              <div className="pq-sidebar-heading">
-                <div>
-                  <LayoutGrid size={18} />
-                  <h2>Question palette</h2>
+        {showPalette &&
+          examEnvironment.allowQuestionNavigation && (
+            <aside className="pq-sidebar">
+              <div className="pq-sidebar-card">
+                <div className="pq-sidebar-heading">
+                  <div>
+                    <LayoutGrid size={18} />
+                    <h2>
+                      {isMyExam && activeSection
+                        ? `${activeSection.name} questions`
+                        : "Question palette"}
+                    </h2>
+                  </div>
+
+                  <span>
+                    {visibleQuestionIndexes.length}
+                  </span>
                 </div>
 
-                <span>{questions.length}</span>
-              </div>
-
-              <p className="pq-sidebar-hint">
-                Select a question to move directly to it.
-              </p>
-
-              <div className="pq-question-grid">
-                {questions.map((question, index) => {
-                  const isAnswered =
-                    answers[question.id] != null &&
-                    answers[question.id] !== "";
-
-                  const isMarked = marked.includes(
-                    question.id
-                  );
-
-                  return (
-                    <button
-                      key={question.id ?? index}
-                      onClick={() =>
-                        goToQuestion(index)
-                      }
-                      disabled={submitting}
-                      className={`pq-palette-number ${
-                        index === currentIndex
-                          ? "is-current"
-                          : ""
-                      } ${
-                        isAnswered
-                          ? "is-answered"
-                          : ""
-                      } ${
-                        isMarked
-                          ? "is-marked"
-                          : ""
-                      }`}
-                      title={`Question ${index + 1}${
-                        isAnswered
-                          ? ", answered"
-                          : ", unanswered"
-                      }${
-                        isMarked
-                          ? ", marked for review"
-                          : ""
-                      }`}
-                    >
-                      {index + 1}
-
-                      {isMarked && (
-                        <span className="pq-palette-flag" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="pq-palette-legend">
-                <span>
-                  <i className="legend-current" />
-                  Current
-                </span>
-
-                <span>
-                  <i className="legend-answered" />
-                  Answered
-                </span>
-
-                <span>
-                  <i className="legend-marked" />
-                  Review
-                </span>
-
-                <span>
-                  <i className="legend-empty" />
-                  Unanswered
-                </span>
-              </div>
-            </div>
-
-            <div className="pq-sidebar-card pq-summary-card">
-              <div className="pq-sidebar-heading">
-                <div>
-                  <ListChecks size={18} />
-                  <h2>Session summary</h2>
-                </div>
-              </div>
-
-              <div className="pq-summary-row">
-                <span>Answered</span>
-                <strong>{answeredCount}</strong>
-              </div>
-
-              <div className="pq-summary-row">
-                <span>Unanswered</span>
-                <strong>{unansweredCount}</strong>
-              </div>
-
-              <div className="pq-summary-row">
-                <span>Marked for review</span>
-                <strong>{markedCount}</strong>
-              </div>
-
-              <div className="pq-summary-mini-track">
-                <div
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-
-              <p className="pq-summary-caption">
-                {progress}% of questions answered
-              </p>
-
-              <button
-                className="pq-btn pq-btn-primary pq-submit-wide"
-                onClick={() =>
-                  setShowSubmitModal(true)
-                }
-                disabled={submitting}
-              >
-                <Send size={16} />
-                Final submission
-              </button>
-            </div>
-
-            <div className="pq-security-note">
-              <ShieldCheck size={18} />
-
-              <div>
-                <strong>
-                  {isExamMode
-                    ? "Examination in progress"
-                    : "Practice session"}
-                </strong>
-
-                <p>
-                  {isExamMode
-                    ? "Correct answers are revealed after submission."
-                    : "Feedback appears after you answer a question."}
+                <p className="pq-sidebar-hint">
+                  Select a question to move directly to it.
                 </p>
+
+                <div className="pq-question-grid">
+                  {visibleQuestionIndexes.map((index) => {
+                    const question = questions[index];
+
+                    const isAnswered =
+                      answers[question.id] != null &&
+                      answers[question.id] !== "";
+
+                    const isMarked = marked.includes(
+                      question.id
+                    );
+
+                    return (
+                      <button
+                        key={question.id ?? index}
+                        onClick={() =>
+                          goToQuestion(index)
+                        }
+                        disabled={submitting}
+                        className={`pq-palette-number ${
+                          index === currentIndex
+                            ? "is-current"
+                            : ""
+                        } ${
+                          isAnswered
+                            ? "is-answered"
+                            : ""
+                        } ${
+                          isMarked
+                            ? "is-marked"
+                            : ""
+                        }`}
+                        title={`Question ${index + 1}${
+                          isAnswered
+                            ? ", answered"
+                            : ", unanswered"
+                        }${
+                          isMarked
+                            ? ", marked for review"
+                            : ""
+                        }`}
+                      >
+                        {index + 1}
+
+                        {isMarked && (
+                          <span className="pq-palette-flag" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="pq-palette-legend">
+                  <span>
+                    <i className="legend-current" />
+                    Current
+                  </span>
+
+                  <span>
+                    <i className="legend-answered" />
+                    Answered
+                  </span>
+
+                  <span>
+                    <i className="legend-marked" />
+                    Review
+                  </span>
+
+                  <span>
+                    <i className="legend-empty" />
+                    Unanswered
+                  </span>
+                </div>
               </div>
-            </div>
-          </aside>
-        )}
+
+              <div className="pq-sidebar-card pq-summary-card">
+                <div className="pq-sidebar-heading">
+                  <div>
+                    <ListChecks size={18} />
+                    <h2>Session summary</h2>
+                  </div>
+                </div>
+
+                <div className="pq-summary-row">
+                  <span>Answered</span>
+                  <strong>{answeredCount}</strong>
+                </div>
+
+                <div className="pq-summary-row">
+                  <span>Unanswered</span>
+                  <strong>{unansweredCount}</strong>
+                </div>
+
+                {examEnvironment.allowReview && (
+                  <div className="pq-summary-row">
+                    <span>Marked for review</span>
+                    <strong>{markedCount}</strong>
+                  </div>
+                )}
+
+                {examEnvironment.showProgress && (
+                  <>
+                    <div className="pq-summary-mini-track">
+                      <div
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+
+                    <p className="pq-summary-caption">
+                      {progress}% of questions answered
+                    </p>
+                  </>
+                )}
+
+                <button
+                  className="pq-btn pq-btn-primary pq-submit-wide"
+                  onClick={() =>
+                    setShowSubmitModal(true)
+                  }
+                  disabled={submitting}
+                >
+                  <Send size={16} />
+                  Final submission
+                </button>
+              </div>
+
+              <div className="pq-security-note">
+                <ShieldCheck size={18} />
+
+                <div>
+                  <strong>
+                    {isExamMode
+                      ? "Examination in progress"
+                      : "Practice session"}
+                  </strong>
+
+                  <p>
+                    {isExamMode
+                      ? "Correct answers are revealed after submission."
+                      : "Feedback appears after you answer a question."}
+                  </p>
+                </div>
+              </div>
+            </aside>
+          )}
       </div>
 
-      /*
-        CALCULATOR
-      */
+      {/* CALCULATOR */}
 
       {showCalculator && (
         <div className="pq-calculator">
@@ -1956,6 +2526,7 @@ const result = await apiRequest(
 
             <button
               onClick={() => setShowCalculator(false)}
+              aria-label="Close calculator"
             >
               <X size={17} />
             </button>
@@ -2001,18 +2572,14 @@ const result = await apiRequest(
         </div>
       )}
 
-      /*
-        SUBMIT CONFIRMATION
-      */
+      {/* SUBMIT CONFIRMATION */}
 
       {showSubmitModal && (
         <div
           className="pq-modal-backdrop"
           role="presentation"
           onMouseDown={(event) => {
-            if (
-              event.target === event.currentTarget
-            ) {
+            if (event.target === event.currentTarget) {
               setShowSubmitModal(false);
             }
           }}
@@ -2086,9 +2653,7 @@ const result = await apiRequest(
 
               <button
                 className="pq-btn pq-btn-primary"
-                onClick={() =>
-                  submitQuiz("manual")
-                }
+                onClick={() => submitQuiz("manual")}
                 disabled={submitting}
               >
                 {submitting
@@ -2104,18 +2669,14 @@ const result = await apiRequest(
         </div>
       )}
 
-      /*
-        QUIT CONFIRMATION
-      */
+      {/* QUIT CONFIRMATION */}
 
       {showQuitModal && (
         <div
           className="pq-modal-backdrop"
           role="presentation"
           onMouseDown={(event) => {
-            if (
-              event.target === event.currentTarget
-            ) {
+            if (event.target === event.currentTarget) {
               setShowQuitModal(false);
             }
           }}
@@ -2145,8 +2706,9 @@ const result = await apiRequest(
             </h2>
 
             <p>
-              Your current answers may not be saved
-              if you leave before submitting.
+              Your current answers are saved in this
+              browser session, but leaving will end your
+              access to this active quiz screen.
             </p>
 
             <div className="pq-modal-actions">
