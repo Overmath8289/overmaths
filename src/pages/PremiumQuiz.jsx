@@ -272,6 +272,26 @@ export default function PremiumQuiz() {
     ? config.subjects
     : EMPTY_SUBJECTS;
 
+  // Individual subject allocations from MyExamSetup.jsx
+const subjectAllocations = Array.isArray(
+  config.subject_allocations
+)
+  ? config.subject_allocations
+  : Array.isArray(config.subjectAllocations)
+    ? config.subjectAllocations
+    : EMPTY_SUBJECTS;
+
+// Examination preferences
+const examEnvironment =
+  config.exam_environment ||
+  config.examEnvironment ||
+  {};
+
+const targetScore =
+  config.target_score ??
+  config.targetScore ??
+  null;
+
   const subject =
     config.subject ||
     subjects[0] ||
@@ -476,6 +496,27 @@ export default function PremiumQuiz() {
         );
       }
 
+
+      if (isMyExam && subjectAllocations.length === 0) {
+  throw new Error(
+    "Your subject allocations are missing. Please return to My Exam setup and configure your subjects again."
+  );
+}
+
+if (isMyExam) {
+  const allocationTotal = subjectAllocations.reduce(
+    (total, allocation) =>
+      total + Number(allocation.question_count || 0),
+    0
+  );
+
+  if (allocationTotal !== requestedCount) {
+    throw new Error(
+      `Your subject allocations add up to ${allocationTotal} questions, but your examination requires ${requestedCount}. Please review your exam setup.`
+    );
+  }
+}
+
       if (
         isMyExam &&
         subjects.some(
@@ -491,56 +532,70 @@ export default function PremiumQuiz() {
 
       const token = session.access_token;
 
-      const result = await apiRequest(
-        "/api/premium-quiz/start",
-        token,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            subject:
-              courseId != null && courseId !== ""
-                ? null
-                : subject,
+      
+const result = await apiRequest(
+  "/api/premium-quiz/start",
+  token,
+  {
+    method: "POST",
+    body: JSON.stringify({
+      subject:
+        courseId != null && courseId !== ""
+          ? null
+          : subject,
 
-            subjects: isMyExam ? subjects : [],
+      subjects: isMyExam ? subjects : [],
 
-            course_id:
-              courseId != null && courseId !== ""
-                ? Number(courseId)
-                : null,
+      // CRITICAL: Send each subject's individual question allocation.
+      subject_allocations: isMyExam
+        ? subjectAllocations
+        : [],
 
-            topic: topic || "mixed",
+      course_id:
+        courseId != null && courseId !== ""
+          ? Number(courseId)
+          : null,
 
-            exam_purpose: isMyExam
-              ? "my_exam"
-              : "practice",
+      topic: topic || "mixed",
 
-            exam_title: isMyExam
-              ? examTitle || null
-              : null,
+      exam_purpose: isMyExam
+        ? "my_exam"
+        : "practice",
 
-            exam_date: isMyExam
-              ? examDate || null
-              : null,
+      exam_title: isMyExam
+        ? examTitle || null
+        : null,
 
-            mode: isExamMode
-              ? "examination"
-              : "practice",
+      exam_date: isMyExam
+        ? examDate || null
+        : null,
 
-            question_count: requestedCount,
+      target_score: isMyExam
+        ? targetScore
+        : null,
 
-            duration_minutes: durationMinutes,
+      mode: isExamMode
+        ? "examination"
+        : "practice",
 
-            time_per_question: Math.max(
-              1,
-              Math.round(
-                (durationMinutes * 60) /
-                  requestedCount
-              )
-            ),
-          }),
-        }
-      );
+      question_count: requestedCount,
+
+      duration_minutes: durationMinutes,
+
+      time_per_question: Math.max(
+        1,
+        Math.round(
+          (durationMinutes * 60) / requestedCount
+        )
+      ),
+
+      // Send the examination preferences too.
+      exam_environment: isMyExam
+        ? examEnvironment
+        : {},
+    }),
+  }
+);
 
       if (
         !Array.isArray(result.questions) ||
@@ -640,6 +695,8 @@ export default function PremiumQuiz() {
     examTitle,
     examDate,
     durationMinutes,
+    targetScore,
+    examEnvironment,
   ]);
 
   useEffect(() => {
