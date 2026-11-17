@@ -33,46 +33,57 @@ const navigationItems = [
     label: "Command Center",
     path: "/premium",
     icon: LayoutDashboard,
+    activePaths: [],
   },
   {
     label: "My Exam",
     path: "/my-exam",
     icon: GraduationCap,
+    activePaths: [
+      "/premium-quiz",
+    ],
   },
   {
     label: "Daily Mission",
     path: "/daily-mission",
     icon: Target,
+    activePaths: [],
   },
   {
     label: "Practice & Mastery",
     path: "/practice-mastery",
     icon: BookOpen,
+    activePaths: [],
   },
   {
     label: "Revision Centre",
     path: "/revision-centre",
     icon: Brain,
+    activePaths: [],
   },
   {
     label: "Battle Arena",
     path: "/battle-arena",
     icon: Swords,
+    activePaths: [],
   },
   {
     label: "AI Study Coach",
     path: "/ai-study-coach",
     icon: Bot,
+    activePaths: [],
   },
   {
     label: "Performance & Readiness",
     path: "/performance-readiness",
     icon: ChartNoAxesCombined,
+    activePaths: [],
   },
   {
     label: "Achievements & Streaks",
     path: "/achievements-streaks",
     icon: Award,
+    activePaths: [],
   },
 ];
 
@@ -83,18 +94,26 @@ function PremiumWorkspaceLayout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const activeItem = navigationItems.find((item) => {
-    if (item.path === "/premium") {
+  const isPathActive = (path) => {
+    if (path === "/premium") {
       return location.pathname === "/premium";
     }
 
     return (
-      location.pathname === item.path ||
-      location.pathname.startsWith(`${item.path}/`)
+      location.pathname === path ||
+      location.pathname.startsWith(`${path}/`)
+    );
+  };
+
+  const activeItem = navigationItems.find((item) => {
+    return (
+      isPathActive(item.path) ||
+      item.activePaths?.some(isPathActive)
     );
   });
 
-  const pageTitle = activeItem?.label || "Premium Workspace";
+  const pageTitle =
+    activeItem?.label || "Premium Workspace";
 
   function closeSidebar() {
     setSidebarOpen(false);
@@ -108,14 +127,14 @@ function PremiumWorkspaceLayout({ children }) {
     try {
       const { error } = await supabase.auth.signOut();
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
       navigate("/login", { replace: true });
     } catch (error) {
       console.error("SIGN OUT ERROR:", error);
+
       alert("Unable to sign out. Please try again.");
+
       setSigningOut(false);
     }
   }
@@ -167,15 +186,20 @@ function PremiumWorkspaceLayout({ children }) {
           {navigationItems.map((item) => {
             const Icon = item.icon;
 
+            const active =
+              isPathActive(item.path) ||
+              item.activePaths?.some(isPathActive);
+
             return (
               <NavLink
                 key={item.path}
                 to={item.path}
                 end={item.path === "/premium"}
                 onClick={closeSidebar}
-                className={({ isActive }) =>
+                aria-current={active ? "page" : undefined}
+                className={() =>
                   `premium-nav-link ${
-                    isActive
+                    active
                       ? "premium-nav-link-active"
                       : ""
                   }`
@@ -214,6 +238,7 @@ function PremiumWorkspaceLayout({ children }) {
             disabled={signingOut}
           >
             <LogOut size={18} />
+
             <span>
               {signingOut ? "Signing out..." : "Sign out"}
             </span>

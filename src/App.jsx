@@ -39,7 +39,6 @@ import Quiz from './pages/Quiz'
 import PremiumDashboard from './pages/PremiumDashboard'
 import PremiumUpgrade from './pages/PremiumUpgrade'
 import PremiumRoute from './pages/PremiumRoute'
-import MyExam from './pages/MyExam'
 import MyExamSetup from './pages/MyExamSetup'
 import PremiumQuiz from './pages/PremiumQuiz'
 import PremiumQuizSetup from './pages/PremiumQuizSetup'
@@ -64,7 +63,6 @@ import FreeRoute from './routes/FreeRoute'
 // ============================================================
 
 function ProtectedRoute({ children, user, loading }) {
-
   if (loading) {
     return (
       <div
@@ -95,7 +93,6 @@ function ProtectedRoute({ children, user, loading }) {
 // ============================================================
 
 function AdminRoute({ children, user, loading }) {
-
   const [checkingAdmin, setCheckingAdmin] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
 
@@ -103,13 +100,11 @@ function AdminRoute({ children, user, loading }) {
     let mounted = true
 
     async function checkAdmin() {
-
       if (!user) {
         if (mounted) {
           setIsAdmin(false)
           setCheckingAdmin(false)
         }
-
         return
       }
 
@@ -128,14 +123,12 @@ function AdminRoute({ children, user, loading }) {
         } else {
           setIsAdmin(data?.role === 'admin')
         }
-
       } catch (error) {
         console.error('Admin verification error:', error)
 
         if (mounted) {
           setIsAdmin(false)
         }
-
       } finally {
         if (mounted) {
           setCheckingAdmin(false)
@@ -150,7 +143,6 @@ function AdminRoute({ children, user, loading }) {
     return () => {
       mounted = false
     }
-
   }, [user, loading])
 
   if (loading || checkingAdmin) {
@@ -187,7 +179,6 @@ function AdminRoute({ children, user, loading }) {
 // ============================================================
 
 function App() {
-
   const [user, setUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
 
@@ -196,28 +187,22 @@ function App() {
   // ==========================================================
 
   useEffect(() => {
-
     let mounted = true
 
     async function loadSession() {
-
       try {
         const currentUser = await getCurrentUser()
 
         if (!mounted) return
 
         setUser(currentUser)
-
       } catch (error) {
-
         console.error('Session loading error:', error)
 
         if (mounted) {
           setUser(null)
         }
-
       } finally {
-
         if (mounted) {
           setAuthLoading(false)
         }
@@ -225,8 +210,6 @@ function App() {
     }
 
     loadSession()
-
-    // SUPABASE AUTH LISTENER
 
     if (!supabase) {
       return () => {
@@ -236,24 +219,16 @@ function App() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return
 
-        if (!mounted) return
-
-        setUser(session?.user || null)
-      }
-    )
-
-    // CLEANUP
+      setUser(session?.user || null)
+    })
 
     return () => {
-
       mounted = false
-
       subscription?.unsubscribe()
     }
-
   }, [])
 
   // ==========================================================
@@ -261,7 +236,6 @@ function App() {
   // ==========================================================
 
   useEffect(() => {
-
     if (user) {
       startInactivityTimer()
     } else {
@@ -271,7 +245,6 @@ function App() {
     return () => {
       stopInactivityTimer()
     }
-
   }, [user])
 
   // ==========================================================
@@ -280,12 +253,9 @@ function App() {
 
   return (
     <BrowserRouter>
-
       <Routes>
 
-        {/* ================================================
-            PUBLIC PAGES
-        ================================================ */}
+        {/* PUBLIC PAGES */}
 
         <Route path="/" element={<LandingPage />} />
 
@@ -299,9 +269,7 @@ function App() {
 
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* ================================================
-            STUDENT PROFILE
-        ================================================ */}
+        {/* STUDENT PROFILE */}
 
         <Route
           path="/student-profile"
@@ -312,9 +280,7 @@ function App() {
           }
         />
 
-        {/* ================================================
-            FREE STUDENT DASHBOARD
-        ================================================ */}
+        {/* FREE STUDENT DASHBOARD */}
 
         <Route
           element={
@@ -326,9 +292,7 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
         </Route>
 
-        {/* ================================================
-            FREE PRACTICE
-        ================================================ */}
+        {/* FREE PRACTICE */}
 
         <Route
           path="/practice"
@@ -339,9 +303,7 @@ function App() {
           }
         />
 
-        {/* ================================================
-            FREE QUIZ
-        ================================================ */}
+        {/* FREE QUIZ */}
 
         <Route
           path="/quiz"
@@ -352,9 +314,7 @@ function App() {
           }
         />
 
-        {/* ================================================
-            EXAM DATES
-        ================================================ */}
+        {/* EXAM DATES */}
 
         <Route
           path="/exam-dates"
@@ -365,9 +325,7 @@ function App() {
           }
         />
 
-        {/* ================================================
-            PREMIUM UPGRADE
-        ================================================ */}
+        {/* PREMIUM UPGRADE */}
 
         <Route
           path="/premium-upgrade"
@@ -378,9 +336,11 @@ function App() {
           }
         />
 
-        {/* ================================================
-            SHARED PREMIUM WORKSPACE
-        ================================================ */}
+        {/* ==================================================
+            PREMIUM WORKSPACE
+
+            All these pages share the same sidebar and layout.
+        ================================================== */}
 
         <Route
           element={
@@ -389,7 +349,6 @@ function App() {
             </PremiumRoute>
           }
         >
-
           {/* COMMAND CENTER */}
 
           <Route
@@ -397,16 +356,25 @@ function App() {
             element={<PremiumDashboard />}
           />
 
-          {/* MY EXAM */}
+          {/* MY EXAM SETUP */}
 
           <Route
             path="/my-exam"
-            element={<MyExam />}
+            element={<MyExamSetup />}
           />
+
+          {/* OLD MY EXAM SETUP URL */}
 
           <Route
             path="/my-exam-setup"
-            element={<MyExamSetup />}
+            element={<Navigate to="/my-exam" replace />}
+          />
+
+          {/* PREMIUM EXAMINATION */}
+
+          <Route
+            path="/premium-quiz"
+            element={<PremiumQuiz />}
           />
 
           {/* DAILY MISSION */}
@@ -471,13 +439,13 @@ function App() {
               <PremiumSectionPage section="Achievements & Streaks" />
             }
           />
-
         </Route>
 
-        {/* ================================================
-            PREMIUM QUIZ
-            Separate from the shared workspace
-        ================================================ */}
+        {/* ==================================================
+            PREMIUM QUIZ SETUP
+
+            Kept separate to preserve the existing route.
+        ================================================== */}
 
         <Route
           path="/premium-quiz-setup"
@@ -488,19 +456,7 @@ function App() {
           }
         />
 
-        <Route
-          path="/premium-quiz"
-          element={
-            <PremiumRoute>
-              <PremiumQuiz />
-            </PremiumRoute>
-          }
-        />
-
-        {/* ================================================
-            OLD PREMIUM URL REDIRECTS
-            Preserve existing links
-        ================================================ */}
+        {/* OLD PREMIUM URL REDIRECTS */}
 
         <Route
           path="/premium-practice"
@@ -537,9 +493,7 @@ function App() {
           }
         />
 
-        {/* ================================================
-            ADMIN QUESTIONS
-        ================================================ */}
+        {/* ADMIN QUESTIONS */}
 
         <Route
           path="/admin/questions"
@@ -550,9 +504,7 @@ function App() {
           }
         />
 
-        {/* ================================================
-            ADMIN DASHBOARD
-        ================================================ */}
+        {/* ADMIN DASHBOARD */}
 
         <Route
           path="/admin"
@@ -563,9 +515,7 @@ function App() {
           }
         />
 
-        {/* ================================================
-            FALLBACK
-        ================================================ */}
+        {/* FALLBACK */}
 
         <Route
           path="*"
@@ -573,10 +523,8 @@ function App() {
         />
 
       </Routes>
-
     </BrowserRouter>
   )
 }
 
 export default App
-
