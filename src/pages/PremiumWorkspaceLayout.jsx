@@ -1,12 +1,22 @@
 
 import React, { useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import {
+  NavLink,
+  useNavigate,
+  useLocation,
+  Outlet,
+} from "react-router-dom";
+
+import { supabase } from "../supabaseClient";
+
 import {
   LayoutDashboard,
-  ClipboardCheck,
+  GraduationCap,
+  Target,
   BookOpen,
   Brain,
-  Trophy,
+  Swords,
+  Bot,
   ChartNoAxesCombined,
   Award,
   Menu,
@@ -27,45 +37,87 @@ const navigationItems = [
   {
     label: "My Exam",
     path: "/my-exam",
-    icon: ClipboardCheck,
+    icon: GraduationCap,
   },
   {
-    label: "Practice",
-    path: "/premium-practice",
+    label: "Daily Mission",
+    path: "/daily-mission",
+    icon: Target,
+  },
+  {
+    label: "Practice & Mastery",
+    path: "/practice-mastery",
     icon: BookOpen,
   },
   {
-    label: "Smart Revision",
-    path: "/smart-revision",
+    label: "Revision Centre",
+    path: "/revision-centre",
     icon: Brain,
   },
   {
-    label: "Challenges",
-    path: "/challenges",
-    icon: Trophy,
+    label: "Battle Arena",
+    path: "/battle-arena",
+    icon: Swords,
   },
   {
-    label: "Performance",
-    path: "/performance",
+    label: "AI Study Coach",
+    path: "/ai-study-coach",
+    icon: Bot,
+  },
+  {
+    label: "Performance & Readiness",
+    path: "/performance-readiness",
     icon: ChartNoAxesCombined,
   },
   {
-    label: "Achievements",
-    path: "/achievements",
+    label: "Achievements & Streaks",
+    path: "/achievements-streaks",
     icon: Award,
   },
 ];
 
-function PremiumWorkspaceLayout({ children, activeSection }) {
+function PremiumWorkspaceLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const activeItem = navigationItems.find((item) => {
+    if (item.path === "/premium") {
+      return location.pathname === "/premium";
+    }
+
+    return (
+      location.pathname === item.path ||
+      location.pathname.startsWith(`${item.path}/`)
+    );
+  });
+
+  const pageTitle = activeItem?.label || "Premium Workspace";
 
   function closeSidebar() {
     setSidebarOpen(false);
   }
 
-  function handleSignOut() {
-    navigate("/login");
+  async function handleSignOut() {
+    if (signingOut) return;
+
+    setSigningOut(true);
+
+    try {
+      const { error } = await supabase.auth.signOut();
+
+      if (error) {
+        throw error;
+      }
+
+      navigate("/login", { replace: true });
+    } catch (error) {
+      console.error("SIGN OUT ERROR:", error);
+      alert("Unable to sign out. Please try again.");
+      setSigningOut(false);
+    }
   }
 
   return (
@@ -108,7 +160,10 @@ function PremiumWorkspaceLayout({ children, activeSection }) {
           LEARNING WORKSPACE
         </div>
 
-        <nav className="premium-navigation" aria-label="Premium navigation">
+        <nav
+          className="premium-navigation"
+          aria-label="Premium navigation"
+        >
           {navigationItems.map((item) => {
             const Icon = item.icon;
 
@@ -118,14 +173,13 @@ function PremiumWorkspaceLayout({ children, activeSection }) {
                 to={item.path}
                 end={item.path === "/premium"}
                 onClick={closeSidebar}
-                className={({ isActive }) => {
-                  const selected =
-                    activeSection === item.label || isActive;
-
-                  return `premium-nav-link ${
-                    selected ? "premium-nav-link-active" : ""
-                  }`;
-                }}
+                className={({ isActive }) =>
+                  `premium-nav-link ${
+                    isActive
+                      ? "premium-nav-link-active"
+                      : ""
+                  }`
+                }
               >
                 <Icon size={19} strokeWidth={1.8} />
 
@@ -157,9 +211,12 @@ function PremiumWorkspaceLayout({ children, activeSection }) {
             type="button"
             className="premium-signout-button"
             onClick={handleSignOut}
+            disabled={signingOut}
           >
             <LogOut size={18} />
-            <span>Sign out</span>
+            <span>
+              {signingOut ? "Signing out..." : "Sign out"}
+            </span>
           </button>
         </div>
       </aside>
@@ -181,7 +238,7 @@ function PremiumWorkspaceLayout({ children, activeSection }) {
                 YOUR LEARNING JOURNEY
               </p>
 
-              <h2>{activeSection || "Premium Workspace"}</h2>
+              <h2>{pageTitle}</h2>
             </div>
           </div>
 
@@ -191,7 +248,9 @@ function PremiumWorkspaceLayout({ children, activeSection }) {
           </div>
         </header>
 
-        <div className="premium-workspace-content">{children}</div>
+        <div className="premium-workspace-content">
+          {children ?? <Outlet />}
+        </div>
       </div>
     </div>
   );
