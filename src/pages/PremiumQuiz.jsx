@@ -33,20 +33,28 @@ import {
 import "./PremiumQuiz.css";
 
 const API_URL = (
-  import.meta.env.VITE_API_BASE_URL || "https://overmaths.onrender.com"
+  import.meta.env.VITE_API_BASE_URL ||
+  "https://overmaths.onrender.com"
 ).replace(/\/$/, "");
 
 const LETTERS = ["A", "B", "C", "D"];
+const EMPTY_SUBJECTS = [];
+
+const MAX_QUESTIONS = 100;
+const MAX_DURATION_MINUTES = 180;
 
 const normalizeAnswer = (answer) => {
   if (answer == null) return "";
+
   const value = String(answer).trim().toUpperCase();
   const match = value.match(/^(?:OPTION\s*)?([A-D])$/);
+
   return match ? match[1] : value;
 };
 
 const formatTime = (seconds) => {
   const safe = Math.max(0, Number(seconds) || 0);
+
   const hours = Math.floor(safe / 3600);
   const minutes = Math.floor((safe % 3600) / 60);
   const remainingSeconds = safe % 60;
@@ -79,34 +87,185 @@ const getQuestionText = (question) =>
   question?.content ??
   "";
 
-async function apiRequest(path, token, options = {}) {
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      ...(options.headers || {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
-    },
-  });
+/*
+  Safe arithmetic calculator.
 
-  const data = await response.json().catch(() => ({}));
+  Supports:
+  +  -  *  /  %
+  brackets
+  decimal numbers
+  unary plus and minus
+
+  Does not execute arbitrary JavaScript.
+*/
+
+function evaluateExpression(expression) {
+  const input = expression.replace(/\s+/g, "");
+
+  if (!input || !/^[0-9+\-*/().%]+$/.test(input)) {
+    throw new Error("Enter a valid arithmetic expression.");
+  }
+
+  let position = 0;
+
+  function parseNumber() {
+    const start = position;
+
+    while (
+      position < input.length &&
+      /[0-9.]/.test(input[position])
+    ) {
+      position++;
+    }
+
+    const value = Number(input.slice(start, position));
+
+    if (!Number.isFinite(value)) {
+      throw new Error("Invalid number.");
+    }
+
+    return value;
+  }
+
+  function parsePrimary() {
+    if (input[position] === "(") {
+      position++;
+
+      const value = parseAddition();
+
+      if (input[position] !== ")") {
+        throw new Error("Missing closing bracket.");
+      }
+
+      position++;
+
+      return value;
+    }
+
+    if (/[0-9.]/.test(input[position] || "")) {
+      return parseNumber();
+    }
+
+    throw new Error("Invalid expression.");
+  }
+
+  function parseUnary() {
+    if (input[position] === "+") {
+      position++;
+      return parseUnary();
+    }
+
+    if (input[position] === "-") {
+      position++;
+      return -parseUnary();
+    }
+
+    return parsePrimary();
+  }
+
+  function parseMultiplication() {
+    let value = parseUnary();
+
+    while (
+      input[position] === "*" ||
+      input[position] === "/" ||
+      input[position] === "%"
+    ) {
+      const operator = input[position++];
+
+      const right = parseUnary();
+
+      if (
+        (operator === "/" || operator === "%") &&
+        right === 0
+      ) {
+        throw new Error("Division by zero is not allowed.");
+      }
+
+      if (operator === "*") value *= right;
+      if (operator === "/") value /= right;
+      if (operator === "%") value %= right;
+    }
+
+    return value;
+  }
+
+  function parseAddition() {
+    let value = parseMultiplication();
+
+    while (
+      input[position] === "+" ||
+      input[position] === "-"
+    ) {
+      const operator = input[position++];
+
+      const right = parseMultiplication();
+
+      if (operator === "+") value += right;
+      if (operator === "-") value -= right;
+    }
+
+    return value;
+  }
+
+  const result = parseAddition();
+
+  if (position !== input.length || !Number.isFinite(result)) {
+    throw new Error("Check the expression and try again.");
+  }
+
+  return result;
+}
+
+async function apiRequest(path, token, options = {}) {
+  let response;
+
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        ...(token
+          ? { Authorization: `Bearer ${token}` }
+          : {}),
+        ...(options.body
+          ? { "Content-Type": "application/json" }
+          : {}),
+      },
+    });
+  } catch {
+    throw new Error(
+      "Unable to connect to the Overmaths server. Check your internet connection and try again."
+    );
+  }
+
+  const responseText = await response.text();
+
+  let data = {};
+
+  try {
+    data = responseText ? JSON.parse(responseText) : {};
+  } catch {
+    data = {
+      error: responseText || "The server returned an invalid response.",
+    };
+  }
 
   if (!response.ok) {
     throw new Error(
-      data?.error || data?.message || `Request failed (${response.status})`
+      data?.error ||
+        data?.message ||
+        `Request failed (${response.status}).`
     );
   }
 
   return data;
 }
 
-
-const EMPTY_SUBJECTS = [];
-
 export default function PremiumQuiz() {
-  
   const location = useLocation();
   const navigate = useNavigate();
+
   const config = location.state || {};
 
   const subjects = Array.isArray(config.subjects)
@@ -132,11 +291,11 @@ export default function PremiumQuiz() {
   const questionCount = Math.max(
     1,
     Math.min(
-      100,
+      MAX_QUESTIONS,
       Number(
         config.questionCount ??
-        config.question_count ??
-        10
+          config.question_count ??
+          10
       ) || 10
     )
   );
@@ -145,9 +304,11 @@ export default function PremiumQuiz() {
 
   const examPurpose = String(
     config.examPurpose ??
-    config.exam_purpose ??
-    "practice"
-  ).trim().toLowerCase();
+      config.exam_purpose ??
+      "practice"
+  )
+    .trim()
+    .toLowerCase();
 
   const examTitle =
     config.examTitle ?? config.exam_title ?? "";
@@ -155,17 +316,16 @@ export default function PremiumQuiz() {
   const examDate =
     config.examDate ?? config.exam_date ?? null;
 
-  const durationMinutes = Math.max(
-    1,
-    Math.min(
-      180,
-      Number(
-        config.durationMinutes ??
-        config.duration_minutes ??
-        config.duration ??
-        30
-      ) || 30
-    )
+  const requestedDuration = Number(
+    config.durationMinutes ??
+      config.duration_minutes ??
+      config.duration ??
+      30
+  ) || 30;
+
+  const durationMinutes = Math.min(
+    MAX_DURATION_MINUTES,
+    Math.max(1, requestedDuration)
   );
 
   const isMyExam = examPurpose === "my_exam";
@@ -177,30 +337,41 @@ export default function PremiumQuiz() {
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
   const [marked, setMarked] = useState([]);
+
   const [currentIndex, setCurrentIndex] = useState(0);
+
   const [timeLeft, setTimeLeft] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [showQuitModal, setShowQuitModal] = useState(false);
   const [showPalette, setShowPalette] = useState(true);
+
   const [showCalculator, setShowCalculator] = useState(false);
   const [calculatorValue, setCalculatorValue] = useState("");
   const [calculatorResult, setCalculatorResult] = useState("");
+
   const [saveMessage, setSaveMessage] = useState("");
+
   const [accessToken, setAccessToken] = useState("");
   const [sessionToken, setSessionToken] = useState("");
+
   const [serverResult, setServerResult] = useState(null);
 
   const timerRef = useRef(null);
   const elapsedRef = useRef(null);
+
   const savedRef = useRef(false);
   const submitRef = useRef(null);
 
   const currentQuestion = questions[currentIndex];
+
   const currentAnswer = currentQuestion
     ? answers[currentQuestion.id] ?? ""
     : "";
@@ -209,44 +380,72 @@ export default function PremiumQuiz() {
     () =>
       questions.filter(
         (question) =>
-          answers[question.id] != null && answers[question.id] !== ""
+          answers[question.id] != null &&
+          answers[question.id] !== ""
       ).length,
     [questions, answers]
   );
 
-  const unansweredCount = Math.max(0, questions.length - answeredCount);
+  const unansweredCount = Math.max(
+    0,
+    questions.length - answeredCount
+  );
+
   const markedCount = marked.length;
+
   const progress = questions.length
     ? Math.round((answeredCount / questions.length) * 100)
     : 0;
 
-  const correctCount = submitted && serverResult
-    ? Number(serverResult.correct) || 0
-    : questions.reduce((total, question) => {
-        const correct = getCorrectAnswer(question);
-        return (
-          total +
-          (correct && normalizeAnswer(answers[question.id]) === correct
-            ? 1
-            : 0)
-        );
-      }, 0);
+  const correctCount =
+    submitted && serverResult
+      ? Number(serverResult.correct) || 0
+      : questions.reduce((total, question) => {
+          const correct = getCorrectAnswer(question);
 
-  const incorrectCount = submitted && serverResult
-    ? Math.max(0, Number(serverResult.total) - Number(serverResult.correct))
-    : Math.max(0, answeredCount - correctCount);
+          return (
+            total +
+            (correct &&
+            normalizeAnswer(answers[question.id]) === correct
+              ? 1
+              : 0)
+          );
+        }, 0);
 
-  const scorePercent = submitted && serverResult
-    ? Number(serverResult.score) || 0
-    : questions.length
-      ? Math.round((correctCount / questions.length) * 100)
-      : 0;
+  const incorrectCount =
+    submitted && serverResult
+      ? Math.max(
+          0,
+          Number(serverResult.total) -
+            Number(serverResult.correct)
+        )
+      : Math.max(0, answeredCount - correctCount);
 
-    const loadQuestions = useCallback(async () => {
+  const scorePercent =
+    submitted && serverResult
+      ? Number(serverResult.score) || 0
+      : questions.length
+        ? Math.round(
+            (correctCount / questions.length) * 100
+          )
+        : 0;
+
+  /*
+    LOAD QUESTIONS
+  */
+
+  const loadQuestions = useCallback(async () => {
     setLoading(true);
     setError("");
+    setSaveMessage("");
 
     try {
+      if (requestedDuration > MAX_DURATION_MINUTES) {
+        throw new Error(
+          `The maximum supported examination duration is ${MAX_DURATION_MINUTES} minutes. Please adjust your exam settings.`
+        );
+      }
+
       const {
         data: { session },
         error: sessionError,
@@ -274,6 +473,19 @@ export default function PremiumQuiz() {
       if (isMyExam && subjects.length === 0) {
         throw new Error(
           "Please select at least one subject for My Exam."
+        );
+      }
+
+      if (
+        isMyExam &&
+        subjects.some(
+          (item) =>
+            typeof item !== "string" ||
+            !item.trim()
+        )
+      ) {
+        throw new Error(
+          "One or more selected subjects are invalid. Please update your exam settings."
         );
       }
 
@@ -322,7 +534,8 @@ export default function PremiumQuiz() {
             time_per_question: Math.max(
               1,
               Math.round(
-                (durationMinutes * 60) / requestedCount
+                (durationMinutes * 60) /
+                  requestedCount
               )
             ),
           }),
@@ -334,7 +547,7 @@ export default function PremiumQuiz() {
         result.questions.length === 0
       ) {
         throw new Error(
-          "No questions were returned for this quiz."
+          "No questions were returned for this quiz. Check that your selected subjects have available questions."
         );
       }
 
@@ -344,13 +557,48 @@ export default function PremiumQuiz() {
         );
       }
 
+      const questionIds = result.questions.map(
+        (question) => question.id
+      );
+
+      if (
+        questionIds.some(
+          (id) =>
+            id === undefined ||
+            id === null ||
+            !Number.isInteger(Number(id)) ||
+            Number(id) <= 0
+        )
+      ) {
+        throw new Error(
+          "The server returned questions with invalid IDs."
+        );
+      }
+
+      if (
+        new Set(questionIds.map(String)).size !==
+        questionIds.length
+      ) {
+        throw new Error(
+          "The server returned duplicate questions. Please try again."
+        );
+      }
+
+      if (result.questions.length > MAX_QUESTIONS) {
+        throw new Error(
+          "The server returned too many questions for one examination."
+        );
+      }
+
       setAccessToken(token);
       setSessionToken(result.session_token);
+
       setServerResult(null);
 
       setQuestions(result.questions);
       setAnswers({});
       setMarked([]);
+
       setCurrentIndex(0);
 
       setTimeLeft(
@@ -359,11 +607,17 @@ export default function PremiumQuiz() {
       );
 
       setElapsedSeconds(0);
+
       setSubmitted(false);
       setSubmitting(false);
+
       setSaveMessage("");
+
       setShowSubmitModal(false);
       setShowQuitModal(false);
+
+      setCalculatorValue("");
+      setCalculatorResult("");
 
       savedRef.current = false;
     } catch (loadError) {
@@ -375,6 +629,7 @@ export default function PremiumQuiz() {
       setLoading(false);
     }
   }, [
+    requestedDuration,
     courseId,
     subject,
     subjects,
@@ -391,18 +646,52 @@ export default function PremiumQuiz() {
     loadQuestions();
   }, [loadQuestions]);
 
+  /*
+    ELAPSED TIME
+
+    Pauses while submitting and resumes if submission fails.
+  */
+
   useEffect(() => {
-    if (loading || submitted || questions.length === 0) return undefined;
+    if (
+      loading ||
+      submitted ||
+      submitting ||
+      questions.length === 0
+    ) {
+      return undefined;
+    }
 
     elapsedRef.current = window.setInterval(() => {
       setElapsedSeconds((seconds) => seconds + 1);
     }, 1000);
 
-    return () => window.clearInterval(elapsedRef.current);
-  }, [loading, submitted, questions.length]);
+    return () => {
+      window.clearInterval(elapsedRef.current);
+    };
+  }, [
+    loading,
+    submitted,
+    submitting,
+    questions.length,
+  ]);
+
+  /*
+    EXAM COUNTDOWN
+
+    When time reaches zero, submit automatically.
+    If submission fails, the timer does not restart at zero.
+  */
 
   useEffect(() => {
-    if (!isExamMode || loading || submitted || questions.length === 0) {
+    if (
+      !isExamMode ||
+      loading ||
+      submitted ||
+      submitting ||
+      questions.length === 0 ||
+      timeLeft <= 0
+    ) {
       return undefined;
     }
 
@@ -410,7 +699,11 @@ export default function PremiumQuiz() {
       setTimeLeft((seconds) => {
         if (seconds <= 1) {
           window.clearInterval(timerRef.current);
-          window.setTimeout(() => submitRef.current?.("timeout"), 0);
+
+          window.setTimeout(() => {
+            submitRef.current?.("timeout");
+          }, 0);
+
           return 0;
         }
 
@@ -418,21 +711,41 @@ export default function PremiumQuiz() {
       });
     }, 1000);
 
-    return () => window.clearInterval(timerRef.current);
-  }, [isExamMode, loading, submitted, questions.length]);
+    return () => {
+      window.clearInterval(timerRef.current);
+    };
+  }, [
+    isExamMode,
+    loading,
+    submitted,
+    submitting,
+    questions.length,
+    timeLeft,
+  ]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    return () => {
       window.clearInterval(timerRef.current);
       window.clearInterval(elapsedRef.current);
-    },
-    []
-  );
+    };
+  }, []);
+
+  /*
+    ANSWER SELECTION
+  */
 
   const chooseAnswer = (letter) => {
-    if (!currentQuestion || submitted || submitting) return;
+    if (
+      !currentQuestion ||
+      submitted ||
+      submitting
+    ) {
+      return;
+    }
 
-    if (!isExamMode && currentAnswer !== "") return;
+    if (!isExamMode && currentAnswer !== "") {
+      return;
+    }
 
     setAnswers((previous) => ({
       ...previous,
@@ -441,168 +754,238 @@ export default function PremiumQuiz() {
   };
 
   const goToQuestion = (index) => {
-    if (index < 0 || index >= questions.length) return;
+    if (
+      index < 0 ||
+      index >= questions.length ||
+      submitting
+    ) {
+      return;
+    }
+
     setCurrentIndex(index);
   };
 
   const toggleMark = () => {
-    if (!currentQuestion || submitted) return;
+    if (
+      !currentQuestion ||
+      submitted ||
+      submitting
+    ) {
+      return;
+    }
 
     setMarked((previous) =>
       previous.includes(currentQuestion.id)
-        ? previous.filter((id) => id !== currentQuestion.id)
+        ? previous.filter(
+            (id) => id !== currentQuestion.id
+          )
         : [...previous, currentQuestion.id]
     );
   };
 
+  /*
+    CALCULATOR
+  */
+
   const evaluateCalculator = () => {
-    const expression = calculatorValue.trim();
-
-    if (!expression || !/^[0-9+\-*/().%\s]+$/.test(expression)) {
-      setCalculatorResult("Enter a valid arithmetic expression.");
-      return;
-    }
-
     try {
-      const value = Function(`"use strict"; return (${expression})`)();
+      const value = evaluateExpression(calculatorValue);
+
       setCalculatorResult(
-        Number.isFinite(value) ? String(value) : "Invalid calculation."
+        Number.isInteger(value)
+          ? String(value)
+          : String(Number(value.toFixed(10)))
       );
-    } catch {
-      setCalculatorResult("Check the expression and try again.");
+    } catch (calculatorError) {
+      setCalculatorResult(
+        calculatorError?.message ||
+          "Check the expression and try again."
+      );
     }
   };
 
-  
-const submitQuiz = useCallback(
-  async (reason = "manual") => {
-    // Prevent duplicate submissions.
-    if (
-      savedRef.current ||
-      submitting ||
-      submitted ||
-      questions.length === 0
-    ) {
-      return;
-    }
+  /*
+    SUBMIT QUIZ
 
-    if (!sessionToken || !accessToken) {
-      setSaveMessage(
-        "Your quiz session is missing or expired. Please start another quiz."
+    Sends every question to the Flask backend.
+    The backend grades the answers and calls
+    complete_quiz_attempt in Supabase.
+  */
+
+  const submitQuiz = useCallback(
+    async (reason = "manual") => {
+      if (
+        savedRef.current ||
+        submitting ||
+        submitted ||
+        questions.length === 0
+      ) {
+        return;
+      }
+
+      if (!sessionToken || !accessToken) {
+        setSaveMessage(
+          "Your quiz session is missing or expired. Please start another quiz."
+        );
+        return;
+      }
+
+      if (questions.length > MAX_QUESTIONS) {
+        setSaveMessage(
+          "This examination contains more than 100 questions. Please contact support."
+        );
+        return;
+      }
+
+      const questionIds = questions.map(
+        (question) => question.id
       );
-      return;
-    }
 
-    // Backend supports a maximum of 100 questions.
-    if (questions.length > 100) {
+      if (
+        questionIds.some(
+          (id) =>
+            id === undefined ||
+            id === null ||
+            !Number.isInteger(Number(id)) ||
+            Number(id) <= 0
+        ) ||
+        new Set(questionIds.map(String)).size !==
+          questionIds.length
+      ) {
+        setSaveMessage(
+          "Some questions have missing or duplicate IDs. Please restart the quiz."
+        );
+        return;
+      }
+
+      savedRef.current = true;
+
+      setSubmitting(true);
+
+      setShowSubmitModal(false);
+      setShowQuitModal(false);
+
+      setError("");
+
       setSaveMessage(
-        "This examination contains more than 100 questions. Please contact support."
+        "Submitting your examination. Please wait..."
       );
-      return;
-    }
 
-    // Validate question IDs before sending.
-    const questionIds = questions.map((question) => question.id);
+      window.clearInterval(timerRef.current);
+      window.clearInterval(elapsedRef.current);
 
-    if (
-      questionIds.some((id) => id === undefined || id === null) ||
-      new Set(questionIds.map(String)).size !== questionIds.length
-    ) {
-      setSaveMessage(
-        "Some questions have missing or duplicate IDs. Please restart the quiz."
-      );
-      return;
-    }
+      try {
+        const submissionAnswers = questions.map(
+          (question) => ({
+            question_id: Number(question.id),
 
-    savedRef.current = true;
-    setSubmitting(true);
-    setShowSubmitModal(false);
-    setShowQuitModal(false);
-    setError("");
-    setSaveMessage("Submitting your examination. Please wait...");
+            selected_answer:
+              normalizeAnswer(
+                answers[question.id]
+              ) || null,
+          })
+        );
 
-    window.clearInterval(timerRef.current);
-    window.clearInterval(elapsedRef.current);
+        const result = await apiRequest(
+          "/api/premium-quiz/submit",
+          accessToken,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              session_token: sessionToken,
+              answers: submissionAnswers,
+            }),
+          }
+        );
 
-    try {
-      // Send every question, including unanswered questions.
-      const submissionAnswers = questions.map((question) => ({
-        question_id: question.id,
-        selected_answer:
-          normalizeAnswer(answers[question.id]) || null,
-      }));
-
-      const result = await apiRequest(
-        "/api/premium-quiz/submit",
-        accessToken,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            session_token: sessionToken,
-            answers: submissionAnswers,
-          }),
+        if (
+          !result ||
+          result.success === false
+        ) {
+          throw new Error(
+            result?.error ||
+              result?.message ||
+              "The server could not save your examination."
+          );
         }
-      );
 
-      if (!result || result.success === false) {
-        throw new Error(
-          result?.error || result?.message || "The server could not save your examination."
+        if (!Array.isArray(result.review)) {
+          throw new Error(
+            "The server response is missing the examination review."
+          );
+        }
+
+        if (
+          result.correct === undefined ||
+          result.total === undefined ||
+          result.score === undefined
+        ) {
+          throw new Error(
+            "The server returned an incomplete examination result."
+          );
+        }
+
+        setServerResult(result);
+
+        setSubmitted(true);
+
+        setSaveMessage(
+          reason === "timeout"
+            ? "Time is up! Your examination has been submitted successfully."
+            : "Your examination has been submitted and your result has been saved."
         );
-      }
+      } catch (submitError) {
+        savedRef.current = false;
 
-      if (!Array.isArray(result.review)) {
-        throw new Error(
-          "The server response is missing the examination review."
+        setSaveMessage(
+          `Submission failed: ${
+            submitError?.message ||
+            "Please check your connection and try again."
+          }`
         );
+      } finally {
+        setSubmitting(false);
       }
+    },
+    [
+      submitting,
+      submitted,
+      questions,
+      sessionToken,
+      accessToken,
+      answers,
+    ]
+  );
 
-      // Save the result returned by the backend.
-      setServerResult(result);
-      setSubmitted(true);
+  useEffect(() => {
+    submitRef.current = submitQuiz;
+  }, [submitQuiz]);
 
-      setSaveMessage(
-        reason === "timeout"
-          ? "Time is up! Your examination has been submitted successfully."
-          : "Your examination has been submitted and your result has been saved."
-      );
-    } catch (submitError) {
-      savedRef.current = false;
-
-      setSaveMessage(
-        `Submission failed: ${
-          submitError?.message || "Please check your connection and try again."
-        }`
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  },
-  [
-    submitting,
-    submitted,
-    questions,
-    sessionToken,
-    accessToken,
-    answers,
-  ]
-);
-
-useEffect(() => {
-  submitRef.current = submitQuiz;
-}, [submitQuiz]);
+  /*
+    NAVIGATION
+  */
 
   const goNext = () =>
-    goToQuestion(Math.min(currentIndex + 1, questions.length - 1));
+    goToQuestion(
+      Math.min(
+        currentIndex + 1,
+        questions.length - 1
+      )
+    );
 
-  const goPrevious = () => goToQuestion(Math.max(currentIndex - 1, 0));
+  const goPrevious = () =>
+    goToQuestion(
+      Math.max(currentIndex - 1, 0)
+    );
 
   const quitQuiz = () => {
     window.clearInterval(timerRef.current);
     window.clearInterval(elapsedRef.current);
+
     navigate(-1);
   };
 
-    const restartQuiz = () => {
+  const restartQuiz = () => {
     window.clearInterval(timerRef.current);
     window.clearInterval(elapsedRef.current);
 
@@ -610,45 +993,85 @@ useEffect(() => {
 
     setAnswers({});
     setMarked([]);
+
     setCurrentIndex(0);
+
     setSubmitted(false);
     setSubmitting(false);
+
     setServerResult(null);
+
     setSessionToken("");
+    setAccessToken("");
+
     setSaveMessage("");
     setError("");
+
     setTimeLeft(0);
     setElapsedSeconds(0);
 
     loadQuestions();
   };
 
+  /*
+    LOADING SCREEN
+  */
+
   if (loading) {
     return (
       <main className="pq-screen pq-centered">
         <div className="pq-loading-card">
-          <div className="pq-logo-mark"><Sparkles size={22} /></div>
-          <LoaderCircle className="pq-spinner" size={30} />
+          <div className="pq-logo-mark">
+            <Sparkles size={22} />
+          </div>
+
+          <LoaderCircle
+            className="pq-spinner"
+            size={30}
+          />
+
           <h2>Preparing your premium quiz</h2>
-          <p>Getting your questions ready. This should only take a moment.</p>
+
+          <p>
+            Getting your questions ready.
+            This should only take a moment.
+          </p>
         </div>
       </main>
     );
   }
 
+  /*
+    ERROR SCREEN
+  */
+
   if (error && questions.length === 0) {
     return (
       <main className="pq-screen pq-centered">
         <div className="pq-error-card">
-          <div className="pq-error-icon"><XCircle size={28} /></div>
+          <div className="pq-error-icon">
+            <XCircle size={28} />
+          </div>
+
           <h2>We couldn't start your quiz</h2>
+
           <p>{error}</p>
+
           <div className="pq-button-row">
-            <button className="pq-btn pq-btn-primary" onClick={loadQuestions}>
-              <RotateCcw size={16} /> Try again
+            <button
+              className="pq-btn pq-btn-primary"
+              onClick={loadQuestions}
+            >
+              <RotateCcw size={16} />
+              Try again
             </button>
-            <button className="pq-btn pq-btn-light" onClick={() => navigate(-1)}>
-              <ArrowLeft size={16} /> Go back
+
+            <button
+              className="pq-btn pq-btn-light"
+              onClick={() => navigate(-1)}
+            >
+              <ArrowLeft size={16} />
+              Go back
             </button>
           </div>
         </div>
@@ -656,28 +1079,51 @@ useEffect(() => {
     );
   }
 
+  /*
+    RESULTS SCREEN
+  */
+
   if (submitted && serverResult) {
     const review = serverResult.review || [];
-    const resultTotal = Number(serverResult.total) || questions.length;
-    const resultCorrect = Number(serverResult.correct) || 0;
+
+    const resultTotal =
+      Number(serverResult.total) || questions.length;
+
+    const resultCorrect =
+      Number(serverResult.correct) || 0;
 
     return (
       <main className="pq-screen pq-results-screen">
         <header className="pq-topbar">
-          <button className="pq-brand" onClick={() => navigate(-1)}>
-            <span className="pq-brand-icon"><Sparkles size={19} /></span>
-            <span>Overmaths<span className="pq-brand-premium"> PREMIUM</span></span>
+          <button
+            className="pq-brand"
+            onClick={() => navigate(-1)}
+          >
+            <span className="pq-brand-icon">
+              <Sparkles size={19} />
+            </span>
+
+            <span>
+              Overmaths
+              <span className="pq-brand-premium">
+                {" "}PREMIUM
+              </span>
+            </span>
           </button>
+
           <span className="pq-topbar-status">
-            <ShieldCheck size={15} /> Quiz completed
+            <ShieldCheck size={15} />
+            Quiz completed
           </span>
         </header>
 
         <section className="pq-results-wrap">
           <div className="pq-results-heading">
             <span className="pq-eyebrow">
-              <Award size={15} /> PERFORMANCE REPORT
+              <Award size={15} />
+              PERFORMANCE REPORT
             </span>
+
             <h1>
               {scorePercent >= 80
                 ? "Excellent work!"
@@ -685,16 +1131,20 @@ useEffect(() => {
                   ? "Good effort. Keep going!"
                   : "Keep practising. You can improve!"}
             </h1>
+
             <p>
-              Your submission has been graded. Review your answers and
-              explanations below before returning to your dashboard.
+              Your submission has been graded.
+              Review your answers and explanations
+              below before returning to your dashboard.
             </p>
           </div>
 
           <div className="pq-score-card">
             <div
               className="pq-score-ring"
-              style={{ "--pq-score": `${scorePercent}%` }}
+              style={{
+                "--pq-score": `${scorePercent}%`,
+              }}
             >
               <div className="pq-score-ring-inner">
                 <strong>{scorePercent}%</strong>
@@ -703,9 +1153,15 @@ useEffect(() => {
             </div>
 
             <div className="pq-score-copy">
-              <span className="pq-eyebrow">YOUR RESULT</span>
-              <h2>{resultCorrect} out of {resultTotal} correct</h2>
-                            <p>
+              <span className="pq-eyebrow">
+                YOUR RESULT
+              </span>
+
+              <h2>
+                {resultCorrect} out of {resultTotal} correct
+              </h2>
+
+              <p>
                 {isMyExam && examTitle
                   ? examTitle
                   : courseName || subject}
@@ -714,10 +1170,26 @@ useEffect(() => {
                   ? ` · ${topic}`
                   : ""}
               </p>
+
               <div className="pq-result-badges">
-                <span><CheckCircle2 size={15} /> {resultCorrect} correct</span>
-                <span><XCircle size={15} /> {Math.max(0, resultTotal - resultCorrect)} incorrect</span>
-                <span><Clock3 size={15} /> {formatTime(elapsedSeconds)}</span>
+                <span>
+                  <CheckCircle2 size={15} />
+                  {resultCorrect} correct
+                </span>
+
+                <span>
+                  <XCircle size={15} />
+                  {Math.max(
+                    0,
+                    resultTotal - resultCorrect
+                  )}{" "}
+                  incorrect
+                </span>
+
+                <span>
+                  <Clock3 size={15} />
+                  {formatTime(elapsedSeconds)}
+                </span>
               </div>
             </div>
           </div>
@@ -725,22 +1197,29 @@ useEffect(() => {
           <div className="pq-stats-grid">
             <div className="pq-stat-card">
               <span>Questions answered</span>
-              <strong>{answeredCount}/{questions.length}</strong>
+              <strong>
+                {answeredCount}/{questions.length}
+              </strong>
               <small>{progress}% completion</small>
             </div>
+
             <div className="pq-stat-card">
               <span>Unanswered</span>
               <strong>{unansweredCount}</strong>
               <small>Questions left blank</small>
             </div>
+
             <div className="pq-stat-card">
               <span>Marked for review</span>
               <strong>{markedCount}</strong>
               <small>Flagged questions</small>
             </div>
+
             <div className="pq-stat-card">
               <span>Time spent</span>
-              <strong>{formatTime(elapsedSeconds)}</strong>
+              <strong>
+                {formatTime(elapsedSeconds)}
+              </strong>
               <small>Time in this session</small>
             </div>
           </div>
@@ -754,21 +1233,37 @@ useEffect(() => {
 
           <div className="pq-review-heading">
             <div>
-              <span className="pq-eyebrow">ANSWER REVIEW</span>
+              <span className="pq-eyebrow">
+                ANSWER REVIEW
+              </span>
+
               <h2>Review your questions</h2>
             </div>
-            <span className="pq-review-count">{review.length} questions</span>
+
+            <span className="pq-review-count">
+              {review.length} questions
+            </span>
           </div>
 
           <div className="pq-review-list">
             {review.map((question, index) => {
-              const selected = normalizeAnswer(question.selected_answer);
-              const correct = getCorrectAnswer(question);
-              const isCorrect = Boolean(question.is_correct);
+              const selected = normalizeAnswer(
+                question.selected_answer
+              );
+
+              const correct =
+                getCorrectAnswer(question);
+
+              const isCorrect =
+                Boolean(question.is_correct);
+
               const options = getOptions(question);
 
               return (
-                <article className="pq-review-item" key={question.id ?? index}>
+                <article
+                  className="pq-review-item"
+                  key={question.id ?? index}
+                >
                   <div
                     className={`pq-review-number ${
                       isCorrect
@@ -783,7 +1278,10 @@ useEffect(() => {
 
                   <div className="pq-review-body">
                     <div className="pq-review-meta">
-                      <span>QUESTION {index + 1}</span>
+                      <span>
+                        QUESTION {index + 1}
+                      </span>
+
                       <span
                         className={
                           isCorrect
@@ -802,8 +1300,18 @@ useEffect(() => {
                     </div>
 
                     <div className="pq-review-question">
-                      <MathText text={getQuestionText(question)} />
+                      <MathText
+                        text={getQuestionText(question)}
+                      />
                     </div>
+
+                    {question.image_url && (
+                      <img
+                        className="pq-question-image"
+                        src={question.image_url}
+                        alt="Question illustration"
+                      />
+                    )}
 
                     <div className="pq-review-answers">
                       <p>
@@ -811,7 +1319,10 @@ useEffect(() => {
                         <strong>
                           {selected
                             ? `${selected}. ${
-                                options.find((option) => option.letter === selected)?.text || ""
+                                options.find(
+                                  (option) =>
+                                    option.letter === selected
+                                )?.text || ""
                               }`
                             : "Not answered"}
                         </strong>
@@ -822,7 +1333,10 @@ useEffect(() => {
                           Correct answer:{" "}
                           <strong>
                             {correct}.{" "}
-                            {options.find((option) => option.letter === correct)?.text || ""}
+                            {options.find(
+                              (option) =>
+                                option.letter === correct
+                            )?.text || ""}
                           </strong>
                         </p>
                       )}
@@ -831,9 +1345,15 @@ useEffect(() => {
                     {question.explanation && (
                       <div className="pq-explanation">
                         <Lightbulb size={16} />
+
                         <div>
                           <strong>Explanation</strong>
-                          <p><MathText text={question.explanation} /></p>
+
+                          <p>
+                            <MathText
+                              text={question.explanation}
+                            />
+                          </p>
                         </div>
                       </div>
                     )}
@@ -848,10 +1368,16 @@ useEffect(() => {
               className="pq-btn pq-btn-primary"
               onClick={() => navigate(-1)}
             >
-              <ArrowLeft size={17} /> Back to dashboard
+              <ArrowLeft size={17} />
+              Back to dashboard
             </button>
-            <button className="pq-btn pq-btn-light" onClick={restartQuiz}>
-              <RotateCcw size={17} /> Try another quiz
+
+            <button
+              className="pq-btn pq-btn-light"
+              onClick={restartQuiz}
+            >
+              <RotateCcw size={17} />
+              Try another quiz
             </button>
           </div>
         </section>
@@ -859,27 +1385,68 @@ useEffect(() => {
     );
   }
 
+  /*
+    MAIN QUIZ SCREEN
+  */
+
   return (
     <main className="pq-screen">
       <header className="pq-topbar">
-        <button className="pq-brand" onClick={() => setShowQuitModal(true)}>
-          <span className="pq-brand-icon"><Sparkles size={19} /></span>
-          <span>Overmaths<span className="pq-brand-premium"> PREMIUM</span></span>
+        <button
+          className="pq-brand"
+          onClick={() => setShowQuitModal(true)}
+        >
+          <span className="pq-brand-icon">
+            <Sparkles size={19} />
+          </span>
+
+          <span>
+            Overmaths
+            <span className="pq-brand-premium">
+              {" "}PREMIUM
+            </span>
+          </span>
         </button>
 
         <div className="pq-session-title">
-          <span>{courseCode || subject}</span>
-          <strong>{courseName || topic || "Quiz session"}</strong>
+          <span>
+            {isMyExam
+              ? examTitle || "My Exam"
+              : courseCode || subject}
+          </span>
+
+          <strong>
+            {isMyExam
+              ? subjects.join(", ")
+              : courseName || topic || "Quiz session"}
+          </strong>
         </div>
 
         <div className="pq-topbar-actions">
-          <span className={`pq-mode-pill ${isExamMode ? "pq-mode-exam" : "pq-mode-practice"}`}>
-            {isExamMode ? <LockKeyhole size={14} /> : <Lightbulb size={14} />}
-            {isExamMode ? "Examination Mode" : "Practice Mode"}
+          <span
+            className={`pq-mode-pill ${
+              isExamMode
+                ? "pq-mode-exam"
+                : "pq-mode-practice"
+            }`}
+          >
+            {isExamMode
+              ? <LockKeyhole size={14} />
+              : <Lightbulb size={14} />}
+
+            {isExamMode
+              ? "Examination Mode"
+              : "Practice Mode"}
           </span>
 
           {isExamMode && (
-            <div className={`pq-timer ${timeLeft <= 300 ? "pq-timer-warning" : ""}`}>
+            <div
+              className={`pq-timer ${
+                timeLeft <= 300
+                  ? "pq-timer-warning"
+                  : ""
+              }`}
+            >
               <Clock3 size={17} />
               <span>{formatTime(timeLeft)}</span>
             </div>
@@ -888,13 +1455,19 @@ useEffect(() => {
           <button
             className="pq-icon-btn"
             title="Toggle question palette"
-            onClick={() => setShowPalette((value) => !value)}
+            onClick={() =>
+              setShowPalette((value) => !value)
+            }
           >
             <LayoutGrid size={18} />
           </button>
 
-          <button className="pq-exit-btn" onClick={() => setShowQuitModal(true)}>
-            <X size={16} /><span>Exit</span>
+          <button
+            className="pq-exit-btn"
+            onClick={() => setShowQuitModal(true)}
+          >
+            <X size={16} />
+            <span>Exit</span>
           </button>
         </div>
       </header>
@@ -902,44 +1475,70 @@ useEffect(() => {
       <div className="pq-progress-strip">
         <div className="pq-progress-info">
           <span>QUIZ PROGRESS</span>
-          <strong>{answeredCount} of {questions.length} answered</strong>
+
+          <strong>
+            {answeredCount} of {questions.length} answered
+          </strong>
         </div>
+
         <div className="pq-progress-track">
-          <div style={{ width: `${progress}%` }} />
+          <div
+            style={{ width: `${progress}%` }}
+          />
         </div>
-        <strong className="pq-progress-percent">{progress}%</strong>
+
+        <strong className="pq-progress-percent">
+          {progress}%
+        </strong>
       </div>
 
-      <div className={`pq-workspace ${showPalette ? "" : "pq-workspace-wide"}`}>
+      <div
+        className={`pq-workspace ${
+          showPalette ? "" : "pq-workspace-wide"
+        }`}
+      >
         <section className="pq-main-column">
           <div className="pq-question-card">
             <div className="pq-question-card-top">
               <div className="pq-question-tags">
                 <span className="pq-question-number">
-                  QUESTION {currentIndex + 1} <span>OF {questions.length}</span>
+                  QUESTION {currentIndex + 1}{" "}
+                  <span>OF {questions.length}</span>
                 </span>
+
                 {currentQuestion?.difficulty && (
-                  <span className="pq-difficulty">{currentQuestion.difficulty}</span>
+                  <span className="pq-difficulty">
+                    {currentQuestion.difficulty}
+                  </span>
                 )}
               </div>
 
               <button
                 className={`pq-mark-btn ${
-                  currentQuestion && marked.includes(currentQuestion.id)
+                  currentQuestion &&
+                  marked.includes(currentQuestion.id)
                     ? "is-marked"
                     : ""
                 }`}
                 onClick={toggleMark}
+                disabled={submitting}
               >
                 <Flag size={16} />
-                {currentQuestion && marked.includes(currentQuestion.id)
+
+                {currentQuestion &&
+                marked.includes(currentQuestion.id)
                   ? "Marked for review"
                   : "Mark for review"}
               </button>
             </div>
 
             <div className="pq-question-content">
-              <h1><MathText text={getQuestionText(currentQuestion)} /></h1>
+              <h1>
+                <MathText
+                  text={getQuestionText(currentQuestion)}
+                />
+              </h1>
+
               {currentQuestion?.image_url && (
                 <img
                   className="pq-question-image"
@@ -950,56 +1549,114 @@ useEffect(() => {
             </div>
 
             <div className="pq-options">
-              {getOptions(currentQuestion).map((option) => {
-                const selected = currentAnswer === option.letter;
-                const practiceAnswered = !isExamMode && currentAnswer !== "";
-                const correct = !isExamMode
-                  ? getCorrectAnswer(currentQuestion)
-                  : "";
-                const showCorrect = practiceAnswered && correct === option.letter;
-                const showWrong =
-                  practiceAnswered && selected && correct !== option.letter;
+              {getOptions(currentQuestion).map(
+                (option) => {
+                  const selected =
+                    normalizeAnswer(currentAnswer) ===
+                    option.letter;
 
-                return (
-                  <button
-                    key={option.letter}
-                    className={`pq-option ${selected ? "is-selected" : ""} ${showCorrect ? "is-correct" : ""} ${showWrong ? "is-wrong" : ""}`}
-                    onClick={() => chooseAnswer(option.letter)}
-                    disabled={!isExamMode && currentAnswer !== ""}
-                  >
-                    <span className="pq-option-letter">{option.letter}</span>
-                    <span className="pq-option-text">
-                      <MathText text={String(option.text ?? "")} />
-                    </span>
-                    {showCorrect && <CheckCircle2 className="pq-option-status" size={19} />}
-                    {showWrong && <XCircle className="pq-option-status" size={19} />}
-                    {selected && !showCorrect && !showWrong && (
-                      <Check className="pq-option-status" size={19} />
-                    )}
-                  </button>
-                );
-              })}
+                  const practiceAnswered =
+                    !isExamMode &&
+                    currentAnswer !== "";
+
+                  const correct = !isExamMode
+                    ? getCorrectAnswer(currentQuestion)
+                    : "";
+
+                  const showCorrect =
+                    practiceAnswered &&
+                    correct === option.letter;
+
+                  const showWrong =
+                    practiceAnswered &&
+                    selected &&
+                    correct !== option.letter;
+
+                  return (
+                    <button
+                      key={option.letter}
+                      className={`pq-option ${
+                        selected ? "is-selected" : ""
+                      } ${
+                        showCorrect ? "is-correct" : ""
+                      } ${
+                        showWrong ? "is-wrong" : ""
+                      }`}
+                      onClick={() =>
+                        chooseAnswer(option.letter)
+                      }
+                      disabled={
+                        submitting ||
+                        (!isExamMode &&
+                          currentAnswer !== "")
+                      }
+                    >
+                      <span className="pq-option-letter">
+                        {option.letter}
+                      </span>
+
+                      <span className="pq-option-text">
+                        <MathText
+                          text={String(option.text ?? "")}
+                        />
+                      </span>
+
+                      {showCorrect && (
+                        <CheckCircle2
+                          className="pq-option-status"
+                          size={19}
+                        />
+                      )}
+
+                      {showWrong && (
+                        <XCircle
+                          className="pq-option-status"
+                          size={19}
+                        />
+                      )}
+
+                      {selected &&
+                        !showCorrect &&
+                        !showWrong && (
+                          <Check
+                            className="pq-option-status"
+                            size={19}
+                          />
+                        )}
+                    </button>
+                  );
+                }
+              )}
             </div>
 
             {!isExamMode && currentAnswer && (
               <div
                 className={`pq-feedback ${
-                  normalizeAnswer(currentAnswer) === getCorrectAnswer(currentQuestion)
+                  normalizeAnswer(currentAnswer) ===
+                  getCorrectAnswer(currentQuestion)
                     ? "pq-feedback-success"
                     : "pq-feedback-error"
                 }`}
               >
-                {normalizeAnswer(currentAnswer) === getCorrectAnswer(currentQuestion)
+                {normalizeAnswer(currentAnswer) ===
+                getCorrectAnswer(currentQuestion)
                   ? <CheckCircle2 size={19} />
                   : <XCircle size={19} />}
+
                 <div>
                   <strong>
-                    {normalizeAnswer(currentAnswer) === getCorrectAnswer(currentQuestion)
+                    {normalizeAnswer(currentAnswer) ===
+                    getCorrectAnswer(currentQuestion)
                       ? "Correct answer"
                       : "Not quite. Review the correct answer."}
                   </strong>
+
                   {currentQuestion?.explanation && (
-                    <p><MathText text={currentQuestion.explanation} /></p>
+                    <p>
+                      <MathText
+                        text={currentQuestion.explanation}
+                      />
+                    </p>
                   )}
                 </div>
               </div>
@@ -1016,33 +1673,49 @@ useEffect(() => {
               <button
                 className="pq-btn pq-btn-light"
                 onClick={goPrevious}
-                disabled={currentIndex === 0 || submitting}
+                disabled={
+                  currentIndex === 0 || submitting
+                }
               >
-                <ArrowLeft size={17} /> Previous
+                <ArrowLeft size={17} />
+                Previous
               </button>
 
               <div className="pq-footer-middle">
-                <span>{currentIndex + 1} / {questions.length}</span>
+                <span>
+                  {currentIndex + 1} / {questions.length}
+                </span>
+
                 <button
                   className="pq-icon-btn"
                   title="Calculator"
-                  onClick={() => setShowCalculator((value) => !value)}
+                  onClick={() =>
+                    setShowCalculator((value) => !value)
+                  }
                 >
                   <Calculator size={18} />
                 </button>
               </div>
 
               {currentIndex < questions.length - 1 ? (
-                <button className="pq-btn pq-btn-primary" onClick={goNext}>
-                  Next question <ArrowRight size={17} />
+                <button
+                  className="pq-btn pq-btn-primary"
+                  onClick={goNext}
+                  disabled={submitting}
+                >
+                  Next question
+                  <ArrowRight size={17} />
                 </button>
               ) : (
                 <button
                   className="pq-btn pq-btn-primary"
-                  onClick={() => setShowSubmitModal(true)}
+                  onClick={() =>
+                    setShowSubmitModal(true)
+                  }
                   disabled={submitting}
                 >
-                  <Send size={16} /> Submit quiz
+                  <Send size={16} />
+                  Submit quiz
                 </button>
               )}
             </div>
@@ -1050,6 +1723,7 @@ useEffect(() => {
 
           <div className="pq-bottom-note">
             <ShieldCheck size={16} />
+
             {isExamMode
               ? "Your answers are submitted for secure grading when you finish."
               : "Practice mode gives you feedback after you select an answer."}
@@ -1060,63 +1734,146 @@ useEffect(() => {
           <aside className="pq-sidebar">
             <div className="pq-sidebar-card">
               <div className="pq-sidebar-heading">
-                <div><LayoutGrid size={18} /><h2>Question palette</h2></div>
+                <div>
+                  <LayoutGrid size={18} />
+                  <h2>Question palette</h2>
+                </div>
+
                 <span>{questions.length}</span>
               </div>
+
               <p className="pq-sidebar-hint">
                 Select a question to move directly to it.
               </p>
+
               <div className="pq-question-grid">
                 {questions.map((question, index) => {
                   const isAnswered =
-                    answers[question.id] != null && answers[question.id] !== "";
-                  const isMarked = marked.includes(question.id);
+                    answers[question.id] != null &&
+                    answers[question.id] !== "";
+
+                  const isMarked = marked.includes(
+                    question.id
+                  );
 
                   return (
                     <button
                       key={question.id ?? index}
-                      onClick={() => goToQuestion(index)}
-                      className={`pq-palette-number ${index === currentIndex ? "is-current" : ""} ${isAnswered ? "is-answered" : ""} ${isMarked ? "is-marked" : ""}`}
-                      title={`Question ${index + 1}${isAnswered ? ", answered" : ", unanswered"}${isMarked ? ", marked for review" : ""}`}
+                      onClick={() =>
+                        goToQuestion(index)
+                      }
+                      disabled={submitting}
+                      className={`pq-palette-number ${
+                        index === currentIndex
+                          ? "is-current"
+                          : ""
+                      } ${
+                        isAnswered
+                          ? "is-answered"
+                          : ""
+                      } ${
+                        isMarked
+                          ? "is-marked"
+                          : ""
+                      }`}
+                      title={`Question ${index + 1}${
+                        isAnswered
+                          ? ", answered"
+                          : ", unanswered"
+                      }${
+                        isMarked
+                          ? ", marked for review"
+                          : ""
+                      }`}
                     >
                       {index + 1}
-                      {isMarked && <span className="pq-palette-flag" />}
+
+                      {isMarked && (
+                        <span className="pq-palette-flag" />
+                      )}
                     </button>
                   );
                 })}
               </div>
+
               <div className="pq-palette-legend">
-                <span><i className="legend-current" /> Current</span>
-                <span><i className="legend-answered" /> Answered</span>
-                <span><i className="legend-marked" /> Review</span>
-                <span><i className="legend-empty" /> Unanswered</span>
+                <span>
+                  <i className="legend-current" />
+                  Current
+                </span>
+
+                <span>
+                  <i className="legend-answered" />
+                  Answered
+                </span>
+
+                <span>
+                  <i className="legend-marked" />
+                  Review
+                </span>
+
+                <span>
+                  <i className="legend-empty" />
+                  Unanswered
+                </span>
               </div>
             </div>
 
             <div className="pq-sidebar-card pq-summary-card">
               <div className="pq-sidebar-heading">
-                <div><ListChecks size={18} /><h2>Session summary</h2></div>
+                <div>
+                  <ListChecks size={18} />
+                  <h2>Session summary</h2>
+                </div>
               </div>
-              <div className="pq-summary-row"><span>Answered</span><strong>{answeredCount}</strong></div>
-              <div className="pq-summary-row"><span>Unanswered</span><strong>{unansweredCount}</strong></div>
-              <div className="pq-summary-row"><span>Marked for review</span><strong>{markedCount}</strong></div>
+
+              <div className="pq-summary-row">
+                <span>Answered</span>
+                <strong>{answeredCount}</strong>
+              </div>
+
+              <div className="pq-summary-row">
+                <span>Unanswered</span>
+                <strong>{unansweredCount}</strong>
+              </div>
+
+              <div className="pq-summary-row">
+                <span>Marked for review</span>
+                <strong>{markedCount}</strong>
+              </div>
+
               <div className="pq-summary-mini-track">
-                <div style={{ width: `${progress}%` }} />
+                <div
+                  style={{ width: `${progress}%` }}
+                />
               </div>
-              <p className="pq-summary-caption">{progress}% of questions answered</p>
+
+              <p className="pq-summary-caption">
+                {progress}% of questions answered
+              </p>
+
               <button
                 className="pq-btn pq-btn-primary pq-submit-wide"
-                onClick={() => setShowSubmitModal(true)}
+                onClick={() =>
+                  setShowSubmitModal(true)
+                }
                 disabled={submitting}
               >
-                <Send size={16} /> Final submission
+                <Send size={16} />
+                Final submission
               </button>
             </div>
 
             <div className="pq-security-note">
               <ShieldCheck size={18} />
+
               <div>
-                <strong>{isExamMode ? "Examination in progress" : "Practice session"}</strong>
+                <strong>
+                  {isExamMode
+                    ? "Examination in progress"
+                    : "Practice session"}
+                </strong>
+
                 <p>
                   {isExamMode
                     ? "Correct answers are revealed after submission."
@@ -1128,19 +1885,38 @@ useEffect(() => {
         )}
       </div>
 
+      /*
+        CALCULATOR
+      */
+
       {showCalculator && (
         <div className="pq-calculator">
           <div className="pq-calculator-heading">
-            <span><Calculator size={17} /> Calculator</span>
-            <button onClick={() => setShowCalculator(false)}><X size={17} /></button>
+            <span>
+              <Calculator size={17} />
+              Calculator
+            </span>
+
+            <button
+              onClick={() => setShowCalculator(false)}
+            >
+              <X size={17} />
+            </button>
           </div>
+
           <input
             value={calculatorValue}
-            onChange={(event) => setCalculatorValue(event.target.value)}
-            onKeyDown={(event) => event.key === "Enter" && evaluateCalculator()}
+            onChange={(event) =>
+              setCalculatorValue(event.target.value)
+            }
+            onKeyDown={(event) =>
+              event.key === "Enter" &&
+              evaluateCalculator()
+            }
             placeholder="e.g. (25 + 5) / 2"
             aria-label="Calculator expression"
           />
+
           <div className="pq-calculator-actions">
             <button
               className="pq-btn pq-btn-light"
@@ -1151,96 +1927,185 @@ useEffect(() => {
             >
               Clear
             </button>
-            <button className="pq-btn pq-btn-primary" onClick={evaluateCalculator}>
+
+            <button
+              className="pq-btn pq-btn-primary"
+              onClick={evaluateCalculator}
+            >
               = Calculate
             </button>
           </div>
+
           {calculatorResult && (
-            <div className="pq-calculator-result">{calculatorResult}</div>
+            <div className="pq-calculator-result">
+              {calculatorResult}
+            </div>
           )}
         </div>
       )}
+
+      /*
+        SUBMIT CONFIRMATION
+      */
 
       {showSubmitModal && (
         <div
           className="pq-modal-backdrop"
           role="presentation"
-          onMouseDown={(event) =>
-            event.target === event.currentTarget && setShowSubmitModal(false)
-          }
+          onMouseDown={(event) => {
+            if (
+              event.target === event.currentTarget
+            ) {
+              setShowSubmitModal(false);
+            }
+          }}
         >
-          <div className="pq-modal" role="dialog" aria-modal="true" aria-labelledby="pq-submit-title">
-            <div className="pq-modal-icon"><Send size={22} /></div>
+          <div
+            className="pq-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pq-submit-title"
+          >
+            <div className="pq-modal-icon">
+              <Send size={22} />
+            </div>
+
             <button
               className="pq-modal-close"
-              onClick={() => setShowSubmitModal(false)}
+              onClick={() =>
+                setShowSubmitModal(false)
+              }
               aria-label="Close"
             >
               <X size={19} />
             </button>
-            <h2 id="pq-submit-title">Submit your quiz?</h2>
+
+            <h2 id="pq-submit-title">
+              Submit your quiz?
+            </h2>
+
             <p>
               {isExamMode
                 ? "Once you submit, your examination will end and your results will be shown."
                 : "Finish this quiz and view your performance report."}
             </p>
+
             <div className="pq-confirm-stats">
-              <div><span>Answered</span><strong>{answeredCount}</strong></div>
-              <div><span>Unanswered</span><strong>{unansweredCount}</strong></div>
-              <div><span>Marked</span><strong>{markedCount}</strong></div>
+              <div>
+                <span>Answered</span>
+                <strong>{answeredCount}</strong>
+              </div>
+
+              <div>
+                <span>Unanswered</span>
+                <strong>{unansweredCount}</strong>
+              </div>
+
+              <div>
+                <span>Marked</span>
+                <strong>{markedCount}</strong>
+              </div>
             </div>
+
             {unansweredCount > 0 && (
               <p className="pq-modal-warning">
-                <Lightbulb size={16} /> You still have {unansweredCount} unanswered question{unansweredCount === 1 ? "" : "s"}.
+                <Lightbulb size={16} />
+
+                You still have {unansweredCount} unanswered
+                question{unansweredCount === 1 ? "" : "s"}.
               </p>
             )}
+
             <div className="pq-modal-actions">
               <button
                 className="pq-btn pq-btn-light"
-                onClick={() => setShowSubmitModal(false)}
+                onClick={() =>
+                  setShowSubmitModal(false)
+                }
                 disabled={submitting}
               >
                 Keep working
               </button>
+
               <button
                 className="pq-btn pq-btn-primary"
-                onClick={() => submitQuiz("manual")}
+                onClick={() =>
+                  submitQuiz("manual")
+                }
                 disabled={submitting}
               >
                 {submitting
                   ? <LoaderCircle className="pq-spinner" size={16} />
                   : <Send size={16} />}
-                {submitting ? "Submitting..." : "Confirm submission"}
+
+                {submitting
+                  ? "Submitting..."
+                  : "Confirm submission"}
               </button>
             </div>
           </div>
         </div>
       )}
 
+      /*
+        QUIT CONFIRMATION
+      */
+
       {showQuitModal && (
         <div
           className="pq-modal-backdrop"
           role="presentation"
-          onMouseDown={(event) =>
-            event.target === event.currentTarget && setShowQuitModal(false)
-          }
+          onMouseDown={(event) => {
+            if (
+              event.target === event.currentTarget
+            ) {
+              setShowQuitModal(false);
+            }
+          }}
         >
-          <div className="pq-modal" role="dialog" aria-modal="true" aria-labelledby="pq-quit-title">
-            <div className="pq-modal-icon pq-modal-icon-warning"><X size={22} /></div>
+          <div
+            className="pq-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pq-quit-title"
+          >
+            <div className="pq-modal-icon pq-modal-icon-warning">
+              <X size={22} />
+            </div>
+
             <button
               className="pq-modal-close"
-              onClick={() => setShowQuitModal(false)}
+              onClick={() =>
+                setShowQuitModal(false)
+              }
               aria-label="Close"
             >
               <X size={19} />
             </button>
-            <h2 id="pq-quit-title">Leave this quiz?</h2>
-            <p>Your current answers may not be saved if you leave before submitting.</p>
+
+            <h2 id="pq-quit-title">
+              Leave this quiz?
+            </h2>
+
+            <p>
+              Your current answers may not be saved
+              if you leave before submitting.
+            </p>
+
             <div className="pq-modal-actions">
-              <button className="pq-btn pq-btn-light" onClick={() => setShowQuitModal(false)}>
+              <button
+                className="pq-btn pq-btn-light"
+                onClick={() =>
+                  setShowQuitModal(false)
+                }
+              >
                 Stay here
               </button>
-              <button className="pq-btn pq-btn-danger" onClick={quitQuiz}>
+
+              <button
+                className="pq-btn pq-btn-danger"
+                onClick={quitQuiz}
+              >
                 Exit quiz
               </button>
             </div>
