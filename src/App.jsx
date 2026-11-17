@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react'
 import {
   BrowserRouter,
@@ -30,7 +31,6 @@ import ExamDates from './pages/ExamDates'
 import Dashboard from './pages/Dashboard'
 import Practice from './pages/Practice'
 import Quiz from './pages/Quiz'
-import MyExam from './pages/MyExam'
 
 // ============================================================
 // PREMIUM
@@ -39,7 +39,12 @@ import MyExam from './pages/MyExam'
 import PremiumDashboard from './pages/PremiumDashboard'
 import PremiumUpgrade from './pages/PremiumUpgrade'
 import PremiumRoute from './pages/PremiumRoute'
-import MyExamSetup from "./pages/MyExamSetup";
+import MyExam from './pages/MyExam'
+import MyExamSetup from './pages/MyExamSetup'
+import PremiumQuiz from './pages/PremiumQuiz'
+import PremiumQuizSetup from './pages/PremiumQuizSetup'
+import PremiumSectionPage from './pages/PremiumSectionPage'
+import PremiumWorkspaceLayout from './pages/PremiumWorkspaceLayout'
 
 // ============================================================
 // ADMIN
@@ -47,22 +52,18 @@ import MyExamSetup from "./pages/MyExamSetup";
 
 import AdminDashboard from './pages/AdminDashboard'
 import AdminQuestions from './pages/AdminQuestions'
+
+// ============================================================
+// ROUTES
+// ============================================================
+
 import FreeRoute from './routes/FreeRoute'
-import PremiumQuiz from "./pages/PremiumQuiz";
-import PremiumQuizSetup from "./pages/PremiumQuizSetup";
-import PremiumSectionPage from './pages/PremiumSectionPage';
+
 // ============================================================
 // PROTECTED ROUTE
 // ============================================================
 
-function ProtectedRoute({
-  children,
-  user,
-  loading,
-}) {
-  // ----------------------------------------------------------
-  // AUTH LOADING
-  // ----------------------------------------------------------
+function ProtectedRoute({ children, user, loading }) {
 
   if (loading) {
     return (
@@ -82,45 +83,26 @@ function ProtectedRoute({
     )
   }
 
-  // ----------------------------------------------------------
-  // NOT LOGGED IN
-  // ----------------------------------------------------------
-
   if (!user) {
-    return (
-      <Navigate
-        to="/login"
-        replace
-      />
-    )
+    return <Navigate to="/login" replace />
   }
 
   return children
 }
 
-
 // ============================================================
 // ADMIN ROUTE
 // ============================================================
 
-function AdminRoute({
-  children,
-  user,
-  loading,
-}) {
-  const [checkingAdmin, setCheckingAdmin] =
-    useState(true)
+function AdminRoute({ children, user, loading }) {
 
-  const [isAdmin, setIsAdmin] =
-    useState(false)
+  const [checkingAdmin, setCheckingAdmin] = useState(true)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
     let mounted = true
 
     async function checkAdmin() {
-      // ------------------------------------------------------
-      // NO USER
-      // ------------------------------------------------------
 
       if (!user) {
         if (mounted) {
@@ -131,15 +113,8 @@ function AdminRoute({
         return
       }
 
-      // ------------------------------------------------------
-      // CHECK DATABASE ROLE
-      // ------------------------------------------------------
-
       try {
-        const {
-          data,
-          error,
-        } = await supabase
+        const { data, error } = await supabase
           .from('users')
           .select('role')
           .eq('auth_user_id', user.id)
@@ -148,26 +123,19 @@ function AdminRoute({
         if (!mounted) return
 
         if (error) {
-          console.error(
-            'Admin check error:',
-            error
-          )
-
+          console.error('Admin check error:', error)
           setIsAdmin(false)
         } else {
-          setIsAdmin(
-            data?.role === 'admin'
-          )
+          setIsAdmin(data?.role === 'admin')
         }
+
       } catch (error) {
-        console.error(
-          'Admin verification error:',
-          error
-        )
+        console.error('Admin verification error:', error)
 
         if (mounted) {
           setIsAdmin(false)
         }
+
       } finally {
         if (mounted) {
           setCheckingAdmin(false)
@@ -182,11 +150,8 @@ function AdminRoute({
     return () => {
       mounted = false
     }
-  }, [user, loading])
 
-  // ----------------------------------------------------------
-  // LOADING
-  // ----------------------------------------------------------
+  }, [user, loading])
 
   if (loading || checkingAdmin) {
     return (
@@ -206,70 +171,53 @@ function AdminRoute({
     )
   }
 
-  // ----------------------------------------------------------
-  // NOT LOGGED IN
-  // ----------------------------------------------------------
-
   if (!user) {
-    return (
-      <Navigate
-        to="/login"
-        replace
-      />
-    )
+    return <Navigate to="/login" replace />
   }
 
-  // ----------------------------------------------------------
-  // NOT ADMIN
-  // ----------------------------------------------------------
-
   if (!isAdmin) {
-    return (
-      <Navigate
-        to="/dashboard"
-        replace
-      />
-    )
+    return <Navigate to="/dashboard" replace />
   }
 
   return children
 }
-
 
 // ============================================================
 // APP
 // ============================================================
 
 function App() {
+
   const [user, setUser] = useState(null)
-  const [authLoading, setAuthLoading] =
-    useState(true)
+  const [authLoading, setAuthLoading] = useState(true)
 
   // ==========================================================
   // LOAD AUTH SESSION
   // ==========================================================
 
   useEffect(() => {
+
     let mounted = true
 
     async function loadSession() {
+
       try {
-        const currentUser =
-          await getCurrentUser()
+        const currentUser = await getCurrentUser()
 
         if (!mounted) return
 
         setUser(currentUser)
+
       } catch (error) {
-        console.error(
-          'Session loading error:',
-          error
-        )
+
+        console.error('Session loading error:', error)
 
         if (mounted) {
           setUser(null)
         }
+
       } finally {
+
         if (mounted) {
           setAuthLoading(false)
         }
@@ -278,9 +226,7 @@ function App() {
 
     loadSession()
 
-    // --------------------------------------------------------
     // SUPABASE AUTH LISTENER
-    // --------------------------------------------------------
 
     if (!supabase) {
       return () => {
@@ -289,36 +235,33 @@ function App() {
     }
 
     const {
-      data: {
-        subscription,
-      },
+      data: { subscription },
     } = supabase.auth.onAuthStateChange(
       (_event, session) => {
+
         if (!mounted) return
 
-        setUser(
-          session?.user || null
-        )
+        setUser(session?.user || null)
       }
     )
 
-    // --------------------------------------------------------
     // CLEANUP
-    // --------------------------------------------------------
 
     return () => {
+
       mounted = false
 
       subscription?.unsubscribe()
     }
-  }, [])
 
+  }, [])
 
   // ==========================================================
   // INACTIVITY TIMER
   // ==========================================================
 
   useEffect(() => {
+
     if (user) {
       startInactivityTimer()
     } else {
@@ -328,8 +271,8 @@ function App() {
     return () => {
       stopInactivityTimer()
     }
-  }, [user])
 
+  }, [user])
 
   // ==========================================================
   // ROUTES
@@ -340,338 +283,293 @@ function App() {
 
       <Routes>
 
-        {/* ==================================================
-            PUBLIC
-        ================================================== */}
+        {/* ================================================
+            PUBLIC PAGES
+        ================================================ */}
 
-        <Route
-          path="/"
-          element={<LandingPage />}
-        />
+        <Route path="/" element={<LandingPage />} />
 
-        <Route
-          path="/register"
-          element={<Register />}
-        />
+        <Route path="/register" element={<Register />} />
 
-        <Route
-          path="/login"
-          element={<Login />}
-        />
+        <Route path="/login" element={<Login />} />
 
-        <Route
-          path="/verify-email"
-          element={<VerifyEmail />}
-        />
+        <Route path="/verify-email" element={<VerifyEmail />} />
 
-        <Route
-          path="/forgot-password"
-          element={<ForgotPassword />}
-        />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
 
-        <Route
-          path="/reset-password"
-          element={<ResetPassword />}
-        />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
-
-        {/* ==================================================
-            STUDENT
-        ================================================== */}
+        {/* ================================================
+            STUDENT PROFILE
+        ================================================ */}
 
         <Route
           path="/student-profile"
           element={
-            <ProtectedRoute
-              user={user}
-              loading={authLoading}
-            >
+            <ProtectedRoute user={user} loading={authLoading}>
               <StudentProfile />
             </ProtectedRoute>
           }
         />
 
-
-        {/* ==================================================
-            NORMAL DASHBOARD
-        ================================================== */}
+        {/* ================================================
+            FREE STUDENT DASHBOARD
+        ================================================ */}
 
         <Route
-  element={
-    <ProtectedRoute
-      user={user}
-      loading={authLoading}
-    >
-      <FreeRoute />
-    </ProtectedRoute>
-  }
->
-  <Route
-    path="/dashboard"
-    element={<Dashboard />}
-  />
-</Route>
+          element={
+            <ProtectedRoute user={user} loading={authLoading}>
+              <FreeRoute />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/dashboard" element={<Dashboard />} />
+        </Route>
 
-
-        {/* ==================================================
-            PRACTICE
-        ================================================== */}
+        {/* ================================================
+            FREE PRACTICE
+        ================================================ */}
 
         <Route
           path="/practice"
           element={
-            <ProtectedRoute
-              user={user}
-              loading={authLoading}
-            >
+            <ProtectedRoute user={user} loading={authLoading}>
               <Practice />
             </ProtectedRoute>
           }
         />
 
-
-        {/* ==================================================
-            QUIZ
-        ================================================== */}
+        {/* ================================================
+            FREE QUIZ
+        ================================================ */}
 
         <Route
           path="/quiz"
           element={
-            <ProtectedRoute
-              user={user}
-              loading={authLoading}
-            >
+            <ProtectedRoute user={user} loading={authLoading}>
               <Quiz />
             </ProtectedRoute>
           }
         />
 
+        {/* ================================================
+            EXAM DATES
+        ================================================ */}
 
-        {/* ==================================================
+        <Route
+          path="/exam-dates"
+          element={
+            <ProtectedRoute user={user} loading={authLoading}>
+              <ExamDates />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ================================================
             PREMIUM UPGRADE
-           
-            Any logged-in user can see the upgrade page.
-           
-            Free user:
-              Dashboard
-                  ↓
-              Unlock Premium
-                  ↓
-              /premium-upgrade
-           
-        ================================================== */}
+        ================================================ */}
 
         <Route
           path="/premium-upgrade"
           element={
-            <ProtectedRoute
-              user={user}
-              loading={authLoading}
-            >
+            <ProtectedRoute user={user} loading={authLoading}>
               <PremiumUpgrade />
             </ProtectedRoute>
           }
         />
 
-
-        {/* ==================================================
-            PREMIUM DASHBOARD
-           
-            IMPORTANT:
-            PremiumRoute must verify the subscription.
-           
-            Active Premium:
-                /premium
-                    ↓
-                PremiumDashboard
-           
-            Not Premium:
-                /premium
-                    ↓
-                /premium-upgrade
-           
-        ================================================== */}
+        {/* ================================================
+            SHARED PREMIUM WORKSPACE
+        ================================================ */}
 
         <Route
-          path="/premium"
           element={
-            <PremiumRoute
-              user={user}
-              loading={authLoading}
-            >
-              <PremiumDashboard />
+            <PremiumRoute>
+              <PremiumWorkspaceLayout />
+            </PremiumRoute>
+          }
+        >
+
+          {/* COMMAND CENTER */}
+
+          <Route
+            path="/premium"
+            element={<PremiumDashboard />}
+          />
+
+          {/* MY EXAM */}
+
+          <Route
+            path="/my-exam"
+            element={<MyExam />}
+          />
+
+          <Route
+            path="/my-exam-setup"
+            element={<MyExamSetup />}
+          />
+
+          {/* DAILY MISSION */}
+
+          <Route
+            path="/daily-mission"
+            element={
+              <PremiumSectionPage section="Daily Mission" />
+            }
+          />
+
+          {/* PRACTICE & MASTERY */}
+
+          <Route
+            path="/practice-mastery"
+            element={
+              <PremiumSectionPage section="Practice & Mastery" />
+            }
+          />
+
+          {/* REVISION CENTRE */}
+
+          <Route
+            path="/revision-centre"
+            element={
+              <PremiumSectionPage section="Revision Centre" />
+            }
+          />
+
+          {/* BATTLE ARENA */}
+
+          <Route
+            path="/battle-arena"
+            element={
+              <PremiumSectionPage section="Battle Arena" />
+            }
+          />
+
+          {/* AI STUDY COACH */}
+
+          <Route
+            path="/ai-study-coach"
+            element={
+              <PremiumSectionPage section="AI Study Coach" />
+            }
+          />
+
+          {/* PERFORMANCE & READINESS */}
+
+          <Route
+            path="/performance-readiness"
+            element={
+              <PremiumSectionPage section="Performance & Readiness" />
+            }
+          />
+
+          {/* ACHIEVEMENTS & STREAKS */}
+
+          <Route
+            path="/achievements-streaks"
+            element={
+              <PremiumSectionPage section="Achievements & Streaks" />
+            }
+          />
+
+        </Route>
+
+        {/* ================================================
+            PREMIUM QUIZ
+            Separate from the shared workspace
+        ================================================ */}
+
+        <Route
+          path="/premium-quiz-setup"
+          element={
+            <PremiumRoute>
+              <PremiumQuizSetup />
             </PremiumRoute>
           }
         />
 
+        <Route
+          path="/premium-quiz"
+          element={
+            <PremiumRoute>
+              <PremiumQuiz />
+            </PremiumRoute>
+          }
+        />
 
+        {/* ================================================
+            OLD PREMIUM URL REDIRECTS
+            Preserve existing links
+        ================================================ */}
 
+        <Route
+          path="/premium-practice"
+          element={
+            <Navigate to="/practice-mastery" replace />
+          }
+        />
 
-        
-{/* ==================================================
-    PREMIUM QUIZ
-================================================== */}
+        <Route
+          path="/smart-revision"
+          element={
+            <Navigate to="/revision-centre" replace />
+          }
+        />
 
-<Route
-  path="/premium-quiz-setup"
-  element={
-    <PremiumRoute user={user} loading={authLoading}>
-      <PremiumQuizSetup />
-    </PremiumRoute>
-  }
-/>
+        <Route
+          path="/challenges"
+          element={
+            <Navigate to="/battle-arena" replace />
+          }
+        />
 
-<Route
-  path="/premium-quiz"
-  element={
-    <PremiumRoute user={user} loading={authLoading}>
-      <PremiumQuiz />
-    </PremiumRoute>
-  }
-/>
+        <Route
+          path="/performance"
+          element={
+            <Navigate to="/performance-readiness" replace />
+          }
+        />
 
+        <Route
+          path="/achievements"
+          element={
+            <Navigate to="/achievements-streaks" replace />
+          }
+        />
 
-
-        {/* ==================================================
+        {/* ================================================
             ADMIN QUESTIONS
-        ================================================== */}
+        ================================================ */}
 
         <Route
           path="/admin/questions"
           element={
-            <AdminRoute
-              user={user}
-              loading={authLoading}
-            >
+            <AdminRoute user={user} loading={authLoading}>
               <AdminQuestions />
             </AdminRoute>
           }
         />
 
-
-        {/* ==================================================
+        {/* ================================================
             ADMIN DASHBOARD
-        ================================================== */}
+        ================================================ */}
 
         <Route
           path="/admin"
           element={
-            <AdminRoute
-              user={user}
-              loading={authLoading}
-            >
+            <AdminRoute user={user} loading={authLoading}>
               <AdminDashboard />
             </AdminRoute>
           }
         />
 
-
-
-
-
-
-        <Route
-  path="/my-exam"
-  element={
-    <PremiumRoute
-      user={user}
-      loading={authLoading}
-    >
-      <MyExam />
-    </PremiumRoute>
-  }
-/>
-
-
-
-<Route
-  path="/my-exam-setup"
-  element={
-    <PremiumRoute user={user} loading={authLoading}>
-      <MyExamSetup />
-    </PremiumRoute>
-  }
-/>
-
-<Route
-  path="/premium-practice"
-  element={
-    <PremiumRoute>
-      <PremiumSectionPage section="Practice" />
-    </PremiumRoute>
-  }
-/>
-
-<Route
-  path="/smart-revision"
-  element={
-    <PremiumRoute>
-      <PremiumSectionPage section="Smart Revision" />
-    </PremiumRoute>
-  }
-/>
-
-<Route
-  path="/challenges"
-  element={
-    <PremiumRoute>
-      <PremiumSectionPage section="Challenges" />
-    </PremiumRoute>
-  }
-/>
-
-<Route
-  path="/performance"
-  element={
-    <PremiumRoute>
-      <PremiumSectionPage section="Performance" />
-    </PremiumRoute>
-  }
-/>
-
-<Route
-  path="/achievements"
-  element={
-    <PremiumRoute>
-      <PremiumSectionPage section="Achievements" />
-    </PremiumRoute>
-  }
-/>
-
-
-
-<Route
-  path="/exam-dates"
-  element={
-    <ProtectedRoute
-      user={user}
-      loading={authLoading}
-    >
-      <ExamDates />
-    </ProtectedRoute>
-  }
-/>
-
-
-
-
-
-
-
-
-
-        {/* ==================================================
+        {/* ================================================
             FALLBACK
-        ================================================== */}
+        ================================================ */}
 
         <Route
           path="*"
-          element={
-            <Navigate
-              to="/dashboard"
-              replace
-            />
-          }
+          element={<Navigate to="/dashboard" replace />}
         />
 
       </Routes>
@@ -681,3 +579,4 @@ function App() {
 }
 
 export default App
+
