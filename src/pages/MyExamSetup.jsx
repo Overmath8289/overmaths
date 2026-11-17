@@ -538,28 +538,7 @@ useEffect(() => {
   )}
 </div>
 
-                <div className="my-exam-setup__custom-subject">
-                  <input
-                    value={subjectInput}
-                    onChange={(e) => setSubjectInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addSubject(subjectInput);
-                      }
-                    }}
-                    placeholder="Add another subject..."
-                    aria-label="Custom subject name"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => addSubject(subjectInput)}
-                  >
-                    <Plus size={17} />
-                    Add subject
-                  </button>
-                </div>
-
+                
                 {subjects.length > 0 && (
                   <div className="my-exam-setup__selected">
                     <div className="my-exam-setup__selected-heading">
