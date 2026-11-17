@@ -200,22 +200,28 @@ export default function PremiumQuizSetup() {
       (course) => String(course.id) === String(courseId)
     );
 
+    
+
     navigate("/premium-quiz", {
-      state: {
-        subject: learningRoute === "secondary" ? subject : "All Subjects",
-        courseId: learningRoute === "university" ? Number(courseId) : null,
-        courseCode: selectedCourse?.code || "",
-        courseName: selectedCourse?.name || "",
-        topic,
-        questionCount,
-        mode:
-          mode === "examination"
-            ? "Examination Mode"
-            : "Practice Mode",
-        timePerQuestion,
-        learningRoute,
-      },
-    });
+  state: {
+    examPurpose: "practice",
+    exam_purpose: "practice",
+
+    subject: learningRoute === "secondary" ? subject : "All Subjects",
+    courseId: learningRoute === "university" ? Number(courseId) : null,
+    courseCode: selectedCourse?.code || "",
+    courseName: selectedCourse?.name || "",
+    topic,
+    questionCount,
+    mode:
+      mode === "examination"
+        ? "Examination Mode"
+        : "Practice Mode",
+    timePerQuestion,
+    learningRoute,
+  },
+});
+
   }
 
   return (

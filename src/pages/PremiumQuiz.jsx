@@ -409,12 +409,12 @@ export default function PremiumQuiz() {
   : EMPTY_ARRAY;
 
   const subjectAllocations = Array.isArray(
-    config.subject_allocations
-  )
-    ? config.subject_allocations
-    : Array.isArray(config.subjectAllocations)
-      ? config.subjectAllocations
-      : [];
+  config.subject_allocations
+)
+  ? config.subject_allocations
+  : Array.isArray(config.subjectAllocations)
+    ? config.subjectAllocations
+    : EMPTY_ARRAY;
 
   const environmentConfig =
   config.exam_environment ||
