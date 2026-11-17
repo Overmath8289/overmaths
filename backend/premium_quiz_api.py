@@ -1,3 +1,4 @@
+
 import os
 import random
 import re
@@ -6,8 +7,16 @@ from datetime import datetime, timezone
 
 import requests
 from flask import Blueprint, jsonify, request
-from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+from itsdangerous import (
+    URLSafeTimedSerializer,
+    BadSignature,
+    SignatureExpired,
+)
 
+
+# ============================================================
+# PREMIUM QUIZ BLUEPRINT
+# ============================================================
 
 premium_quiz_api = Blueprint(
     "premium_quiz_api",
@@ -15,8 +24,14 @@ premium_quiz_api = Blueprint(
     url_prefix="/api/premium-quiz",
 )
 
+
+# ============================================================
+# ENVIRONMENT CONFIGURATION
+# ============================================================
+
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+
 PREMIUM_SECRET = (
     os.getenv("PREMIUM_QUIZ_SECRET")
     or os.getenv("SECRET_KEY")
@@ -31,6 +46,14 @@ serializer = (
     else None
 )
 
+MAX_QUESTIONS = 100
+MAX_DURATION_MINUTES = 180
+SESSION_MAX_AGE = 6 * 60 * 60
+
+
+# ============================================================
+# DATABASE HEADERS
+# ============================================================
 
 def db_headers():
     return {
@@ -39,6 +62,10 @@ def db_headers():
         "Content-Type": "application/json",
     }
 
+
+# ============================================================
+# DATABASE GET
+# ============================================================
 
 def db_get(table, params):
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
@@ -49,9 +76,15 @@ def db_get(table, params):
             f"{SUPABASE_URL}/rest/v1/{table}",
             headers=db_headers(),
             params=params,
-            timeout=20,
+            timeout=30,
         )
-    except requests.RequestException:
+
+    except requests.Timeout:
+        print(f"Premium Quiz GET {table}: timeout")
+        return None, 504
+
+    except requests.RequestException as exc:
+        print(f"Premium Quiz GET {table}: {exc}")
         return None, 503
 
     if response.status_code != 200:
@@ -68,6 +101,10 @@ def db_get(table, params):
         return None, 502
 
 
+# ============================================================
+# DATABASE INSERT
+# ============================================================
+
 def db_insert(table, payload):
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
         return None, 500
@@ -80,9 +117,15 @@ def db_insert(table, payload):
                 "Prefer": "return=representation",
             },
             json=payload,
-            timeout=20,
+            timeout=30,
         )
-    except requests.RequestException:
+
+    except requests.Timeout:
+        print(f"Premium Quiz INSERT {table}: timeout")
+        return None, 504
+
+    except requests.RequestException as exc:
+        print(f"Premium Quiz INSERT {table}: {exc}")
         return None, 503
 
     if response.status_code not in (200, 201):
@@ -98,49 +141,100 @@ def db_insert(table, payload):
     except ValueError:
         return None, 502
 
+    if not isinstance(rows, list):
+        return None, 502
+
     return (rows[0] if rows else None), 200
 
 
-def db_patch(table, params, payload):
+# ============================================================
+# DATABASE RPC
+# ============================================================
+
+def db_rpc(function_name, payload):
+    """
+    Calls a PostgreSQL RPC function through Supabase.
+
+    The complete_quiz_attempt function saves all quiz answers
+    and completes the attempt in one database transaction.
+    """
+
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
         return None, 500
 
     try:
-        response = requests.patch(
-            f"{SUPABASE_URL}/rest/v1/{table}",
+        response = requests.post(
+            f"{SUPABASE_URL}/rest/v1/rpc/{function_name}",
             headers={
                 **db_headers(),
                 "Prefer": "return=representation",
             },
-            params=params,
             json=payload,
-            timeout=20,
+            timeout=60,
         )
-    except requests.RequestException:
+
+    except requests.Timeout:
+        print(f"Premium Quiz RPC {function_name}: timeout")
+        return None, 504
+
+    except requests.RequestException as exc:
+        print(f"Premium Quiz RPC {function_name}: {exc}")
         return None, 503
 
-    if response.status_code not in (200, 204):
+    if response.status_code not in (200, 201):
         print(
-            f"Premium Quiz PATCH {table}:",
+            f"Premium Quiz RPC {function_name}:",
             response.status_code,
             response.text,
         )
+
+        error_text = response.text.lower()
+
+        if any(
+            message in error_text
+            for message in (
+                "already completed",
+                "attempt not found",
+                "unauthorized",
+                "not found",
+            )
+        ):
+            return None, 409
+
         return None, 502
 
     try:
-        rows = response.json() if response.content else []
+        result = response.json()
     except ValueError:
         return None, 502
 
-    return rows, 200
+    # Supabase JSONB functions normally return an object.
+    # This also handles a one-item list defensively.
+    if isinstance(result, list):
+        result = result[0] if result else None
 
+    if not isinstance(result, dict):
+        return None, 502
+
+    return result, 200
+
+
+# ============================================================
+# AUTHENTICATION
+# ============================================================
 
 def authenticate():
-    authorization = request.headers.get("Authorization", "")
+
+    authorization = request.headers.get(
+        "Authorization",
+        "",
+    )
 
     if not authorization.startswith("Bearer "):
         return None, (
-            jsonify({"error": "Please sign in first."}),
+            jsonify({
+                "error": "Please sign in first."
+            }),
             401,
         )
 
@@ -148,7 +242,9 @@ def authenticate():
 
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
         return None, (
-            jsonify({"error": "Authentication is not configured."}),
+            jsonify({
+                "error": "Authentication is not configured."
+            }),
             500,
         )
 
@@ -159,8 +255,17 @@ def authenticate():
                 "apikey": SUPABASE_SERVICE_KEY,
                 "Authorization": f"Bearer {token}",
             },
-            timeout=15,
+            timeout=20,
         )
+
+    except requests.Timeout:
+        return None, (
+            jsonify({
+                "error": "Authentication service timed out."
+            }),
+            504,
+        )
+
     except requests.RequestException:
         return None, (
             jsonify({
@@ -181,15 +286,27 @@ def authenticate():
         auth_user = response.json()
     except ValueError:
         return None, (
-            jsonify({"error": "Invalid authentication response."}),
+            jsonify({
+                "error": "Invalid authentication response."
+            }),
             502,
+        )
+
+    auth_user_id = auth_user.get("id")
+
+    if not auth_user_id:
+        return None, (
+            jsonify({
+                "error": "Unable to identify your account."
+            }),
+            401,
         )
 
     profiles, status = db_get(
         "users",
         {
             "select": "id,auth_user_id,learning_route,exam_type",
-            "auth_user_id": f"eq.{auth_user.get('id')}",
+            "auth_user_id": f"eq.{auth_user_id}",
             "limit": 1,
         },
     )
@@ -204,14 +321,111 @@ def authenticate():
 
     if not profiles:
         return None, (
-            jsonify({"error": "Student profile not found."}),
+            jsonify({
+                "error": "Student profile not found."
+            }),
             404,
         )
 
     return profiles[0], None
 
 
+# ============================================================
+# GENERAL HELPERS
+# ============================================================
+
+def parse_positive_int(value, default, maximum):
+    try:
+        number = int(value)
+
+        if number < 1:
+            return default
+
+        return min(number, maximum)
+
+    except (TypeError, ValueError):
+        return default
+
+
+def utc_datetime(value):
+
+    if not value:
+        return None
+
+    try:
+        if isinstance(value, datetime):
+            parsed = value
+        else:
+            parsed = datetime.fromisoformat(
+                str(value).replace("Z", "+00:00")
+            )
+
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+
+        return parsed.astimezone(timezone.utc)
+
+    except (
+        ValueError,
+        TypeError,
+        AttributeError,
+    ):
+        return None
+
+
+TOPIC_ALIASES = {
+    "factorization": "factorisation",
+    "number base": "number bases",
+    "vector": "vectors",
+    "ratio and proportion": "ratio and proportion",
+    "angles and shapes": "angles and shapes",
+    "set theory": "set theory",
+}
+
+
+def normalize_topic(topic):
+
+    value = unicodedata.normalize(
+        "NFKC",
+        str(topic or ""),
+    )
+
+    value = value.casefold().strip()
+    value = re.sub(r"\s+", " ", value)
+
+    return TOPIC_ALIASES.get(value, value)
+
+
+def public_question(question, reveal_answer=False):
+
+    result = {
+        "id": question.get("id"),
+        "subject": question.get("subject"),
+        "course_id": question.get("course_id"),
+        "topic": question.get("topic"),
+        "question_text": question.get("question_text"),
+        "option_a": question.get("option_a"),
+        "option_b": question.get("option_b"),
+        "option_c": question.get("option_c"),
+        "option_d": question.get("option_d"),
+        "image_url": question.get("image_url"),
+    }
+
+    if reveal_answer:
+        result["correction_answer"] = question.get(
+            "correction_answer"
+        )
+        result["explanation"] = question.get("explanation")
+
+    return result
+
+
+# ============================================================
+# PREMIUM SUBSCRIPTION CHECK
+# ============================================================
+
 def has_premium_access(user_id):
+
     rows, status = db_get(
         "subscriptions",
         {
@@ -227,7 +441,17 @@ def has_premium_access(user_id):
 
     now = datetime.now(timezone.utc)
 
+    premium_plans = {
+        "premium",
+        "premium monthly",
+        "premium annual",
+        "premium yearly",
+        "pro",
+        "paid",
+    }
+
     for subscription in rows:
+
         plan = str(
             subscription.get("plan") or ""
         ).strip().lower()
@@ -236,40 +460,16 @@ def has_premium_access(user_id):
             subscription.get("status") or ""
         ).strip().lower()
 
-        if plan not in {
-            "premium",
-            "premium monthly",
-            "premium annual",
-            "premium yearly",
-            "pro",
-            "paid",
-        }:
+        if plan not in premium_plans or state != "active":
             continue
 
-        if state != "active":
-            continue
+        start = utc_datetime(
+            subscription.get("started_at")
+        )
 
-        try:
-            start_text = subscription.get("started_at")
-            expiry_text = subscription.get("expires_at")
-
-            start = (
-                datetime.fromisoformat(
-                    start_text.replace("Z", "+00:00")
-                )
-                if start_text
-                else None
-            )
-
-            expiry = (
-                datetime.fromisoformat(
-                    expiry_text.replace("Z", "+00:00")
-                )
-                if expiry_text
-                else None
-            )
-        except (ValueError, TypeError, AttributeError):
-            continue
+        expiry = utc_datetime(
+            subscription.get("expires_at")
+        )
 
         if start and start > now:
             continue
@@ -283,6 +483,7 @@ def has_premium_access(user_id):
 
 
 def premium_student():
+
     profile, auth_error = authenticate()
 
     if auth_error:
@@ -323,86 +524,19 @@ def premium_student():
     return profile, None
 
 
-def parse_positive_int(value, default, maximum):
-    try:
-        number = int(value)
-        return max(1, min(number, maximum))
-    except (TypeError, ValueError):
-        return default
-
-
-def utc_datetime(value):
-    if not value:
-        return None
-
-    try:
-        parsed = datetime.fromisoformat(
-            value.replace("Z", "+00:00")
-        )
-
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-
-        return parsed.astimezone(timezone.utc)
-
-    except (ValueError, TypeError, AttributeError):
-        return None
-
-
-TOPIC_ALIASES = {
-    "factorization": "factorisation",
-    "number base": "number bases",
-    "vector": "vectors",
-    "ratio and proportion": "ratio and proportion",
-    "angles and shapes": "angles and shapes",
-    "set theory": "set theory",
-}
-
-
-def normalize_topic(topic):
-    """Return a consistent key for equivalent topic names."""
-    value = unicodedata.normalize(
-        "NFKC",
-        str(topic or ""),
-    )
-
-    value = value.casefold().strip()
-    value = re.sub(r"\s+", " ", value)
-
-    return TOPIC_ALIASES.get(value, value)
-
-
-def public_question(question, reveal_answer=False):
-    result = {
-        "id": question.get("id"),
-        "subject": question.get("subject"),
-        "course_id": question.get("course_id"),
-        "topic": question.get("topic"),
-        "question_text": question.get("question_text"),
-        "option_a": question.get("option_a"),
-        "option_b": question.get("option_b"),
-        "option_c": question.get("option_c"),
-        "option_d": question.get("option_d"),
-        "image_url": question.get("image_url"),
-    }
-
-    if reveal_answer:
-        result["correction_answer"] = question.get(
-            "correction_answer"
-        )
-        result["explanation"] = question.get("explanation")
-
-    return result
-
+# ============================================================
+# START QUIZ
+# ============================================================
 
 @premium_quiz_api.route("/start", methods=["POST"])
 def start_quiz():
+
     profile, error = premium_student()
 
     if error:
         return error
 
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
 
     if not isinstance(data, dict):
         return jsonify({
@@ -410,18 +544,28 @@ def start_quiz():
         }), 400
 
     subject = str(data.get("subject") or "").strip()
-    subjects = data.get("subjects") or []
-    course_id = data.get("course_id")
-    topic = str(data.get("topic") or "mixed").strip()
 
-    exam_title = (
-        str(data.get("exam_title") or "").strip() or None
-    )
+    subjects = data.get("subjects") or []
+    allocations = data.get("subject_allocations") or []
+
+    course_id = data.get("course_id")
+
+    topic = str(
+        data.get("topic") or "mixed"
+    ).strip()
+
+    exam_title = str(
+        data.get("exam_title") or ""
+    ).strip() or None
+
     exam_date = data.get("exam_date") or None
 
-    # Validate exam purpose.
     exam_purpose = str(
         data.get("exam_purpose") or "practice"
+    ).strip().lower()
+
+    mode = str(
+        data.get("mode") or "practice"
     ).strip().lower()
 
     if exam_purpose not in {"practice", "my_exam"}:
@@ -429,29 +573,38 @@ def start_quiz():
             "error": "Invalid exam purpose."
         }), 400
 
-    # Validate the selected subject list.
-    if not isinstance(subjects, list):
-        return jsonify({
-            "error": "Invalid subjects selection."
-        }), 400
-
-    subjects = list(dict.fromkeys(
-        item.strip()
-        for item in subjects
-        if isinstance(item, str) and item.strip()
-    ))
-
-    # Validate quiz mode.
-    mode = str(
-        data.get("mode") or "practice"
-    ).strip().lower()
-
     if mode not in {"practice", "examination"}:
         return jsonify({
             "error": "Choose practice or examination mode."
         }), 400
 
-    # Validate the course ID.
+    if not isinstance(subjects, list):
+        return jsonify({
+            "error": "Invalid subjects selection."
+        }), 400
+
+    if not isinstance(allocations, list):
+        return jsonify({
+            "error": "Invalid subject allocations."
+        }), 400
+
+    # Normalize and deduplicate subjects case-insensitively.
+    normalized_subjects = {}
+
+    for item in subjects:
+        if isinstance(item, str) and item.strip():
+            cleaned = item.strip()
+            normalized_subjects.setdefault(
+                cleaned.casefold(),
+                cleaned,
+            )
+
+    subjects = list(normalized_subjects.values())
+
+    # --------------------------------------------------------
+    # COURSE VALIDATION
+    # --------------------------------------------------------
+
     try:
         course_id = (
             int(course_id)
@@ -468,29 +621,30 @@ def start_quiz():
             "error": "Invalid course selection."
         }), 400
 
-    # Validate subject/course selections.
+    # --------------------------------------------------------
+    # EXAM PURPOSE VALIDATION
+    # --------------------------------------------------------
+
     if exam_purpose == "my_exam":
+
         if course_id is not None:
             return jsonify({
-                "error": (
-                    "Choose subjects or a course, not both."
-                )
+                "error": "Choose subjects or a course, not both."
             }), 400
 
         if not subjects and subject:
             subjects = [subject]
 
-        if not subjects:
+        if not subjects and not allocations:
             return jsonify({
-                "error": (
-                    "Select at least one subject for My Exam."
-                )
+                "error": "Select at least one subject."
             }), 400
 
         subject = ""
 
     else:
-        if subjects:
+
+        if subjects or allocations:
             return jsonify({
                 "error": (
                     "Multiple subjects are available only in My Exam."
@@ -502,12 +656,170 @@ def start_quiz():
                 "error": "Select either a subject or a course."
             }), 400
 
-    # Validate question count and timing.
-    count = parse_positive_int(
-        data.get("question_count"),
-        10,
-        100,
-    )
+    # --------------------------------------------------------
+    # SUBJECT ALLOCATIONS
+    # --------------------------------------------------------
+
+    validated_allocations = []
+
+    if allocations:
+
+        if exam_purpose != "my_exam":
+            return jsonify({
+                "error": (
+                    "Subject allocations are only for My Exam."
+                )
+            }), 400
+
+        if not subjects:
+            subjects = [
+                str(item.get("subject") or "").strip()
+                for item in allocations
+                if isinstance(item, dict)
+                and str(item.get("subject") or "").strip()
+            ]
+
+        seen_subjects = set()
+        total_allocated = 0
+
+        for item in allocations:
+
+            if not isinstance(item, dict):
+                return jsonify({
+                    "error": "Invalid subject allocation."
+                }), 400
+
+            allocation_subject = str(
+                item.get("subject") or ""
+            ).strip()
+
+            if not allocation_subject:
+                return jsonify({
+                    "error": "Every allocation needs a subject."
+                }), 400
+
+            subject_key = allocation_subject.casefold()
+
+            if subject_key in seen_subjects:
+                return jsonify({
+                    "error": (
+                        f"Duplicate subject: {allocation_subject}"
+                    )
+                }), 400
+
+            seen_subjects.add(subject_key)
+
+            try:
+                allocation_count = int(
+                    item.get("question_count")
+                )
+            except (TypeError, ValueError):
+                return jsonify({
+                    "error": (
+                        f"Invalid question count for "
+                        f"{allocation_subject}."
+                    )
+                }), 400
+
+            if not 1 <= allocation_count <= MAX_QUESTIONS:
+                return jsonify({
+                    "error": (
+                        "Each subject must have between "
+                        "1 and 100 questions."
+                    )
+                }), 400
+
+            difficulty = str(
+                item.get("difficulty") or "mixed"
+            ).strip().lower()
+
+            if difficulty not in {
+                "easy",
+                "medium",
+                "hard",
+                "mixed",
+            }:
+                return jsonify({
+                    "error": (
+                        f"Invalid difficulty for {allocation_subject}."
+                    )
+                }), 400
+
+            selected_topics = item.get("topics") or []
+
+            if not isinstance(selected_topics, list):
+                return jsonify({
+                    "error": (
+                        f"Invalid topics for {allocation_subject}."
+                    )
+                }), 400
+
+            selected_topics = list(dict.fromkeys(
+                value.strip()
+                for value in selected_topics
+                if isinstance(value, str) and value.strip()
+            ))
+
+            total_allocated += allocation_count
+
+            validated_allocations.append({
+                "subject": allocation_subject,
+                "question_count": allocation_count,
+                "difficulty": difficulty,
+                "topics": selected_topics,
+            })
+
+        if total_allocated > MAX_QUESTIONS:
+            return jsonify({
+                "error": (
+                    "An examination cannot exceed "
+                    "100 questions."
+                )
+            }), 400
+
+        if seen_subjects != {
+            item.casefold() for item in subjects
+        }:
+            return jsonify({
+                "error": (
+                    "Selected subjects and allocations do not match."
+                )
+            }), 400
+
+        count = total_allocated
+
+    else:
+
+        count = parse_positive_int(
+            data.get("question_count"),
+            10,
+            MAX_QUESTIONS,
+        )
+
+    # --------------------------------------------------------
+    # DURATION VALIDATION
+    # --------------------------------------------------------
+
+    duration_minutes = data.get("duration_minutes")
+
+    if duration_minutes not in (None, ""):
+
+        try:
+            duration_minutes = int(duration_minutes)
+
+            if not 1 <= duration_minutes <= MAX_DURATION_MINUTES:
+                raise ValueError
+
+        except (TypeError, ValueError):
+            return jsonify({
+                "error": (
+                    "Duration must be between "
+                    "1 and 180 minutes."
+                )
+            }), 400
+
+    else:
+        duration_minutes = None
 
     seconds_per_question = parse_positive_int(
         data.get("time_per_question"),
@@ -515,46 +827,52 @@ def start_quiz():
         120,
     )
 
-    # Use the requested duration when supplied.
-    # Otherwise, calculate duration from the question count.
-    duration_minutes = data.get("duration_minutes")
+    duration_seconds = (
+        duration_minutes * 60
+        if duration_minutes is not None
+        else count * seconds_per_question
+    )
 
-    if duration_minutes not in (None, ""):
+    # --------------------------------------------------------
+    # TARGET SCORE
+    # --------------------------------------------------------
+
+    target_score = data.get("target_score")
+
+    if target_score not in (None, ""):
+
         try:
-            duration_minutes = int(duration_minutes)
+            target_score = int(target_score)
 
-            if not 1 <= duration_minutes <= 180:
+            if not 0 <= target_score <= 100:
                 raise ValueError
+
         except (TypeError, ValueError):
             return jsonify({
-                "error": (
-                    "Duration must be between 1 and 180 minutes."
-                )
+                "error": "Target score must be between 0 and 100."
             }), 400
-    else:
-        duration_minutes = None
 
-    if duration_minutes is not None:
-        duration_seconds = duration_minutes * 60
     else:
-        duration_seconds = count * seconds_per_question
+        target_score = None
 
-    # Validate exam date format when supplied.
+    # --------------------------------------------------------
+    # EXAM DATE
+    # --------------------------------------------------------
+
     if exam_date and exam_purpose == "my_exam":
-        try:
-            datetime.fromisoformat(
-                str(exam_date).replace("Z", "+00:00")
-            )
-        except (ValueError, TypeError):
+        if not utc_datetime(exam_date):
             return jsonify({
                 "error": "Invalid exam date."
             }), 400
 
-    # Fetch questions.
+    # --------------------------------------------------------
+    # LOAD QUESTION BANK
+    # --------------------------------------------------------
+
     params = {
         "select": (
-            "id,subject,course_id,topic,question_text,"
-            "option_a,option_b,option_c,option_d,"
+            "id,subject,course_id,topic,difficulty,"
+            "question_text,option_a,option_b,option_c,option_d,"
             "correction_answer,explanation,image_url"
         ),
         "is_active": "eq.true",
@@ -565,7 +883,6 @@ def start_quiz():
         params["course_id"] = f"eq.{course_id}"
 
     elif exam_purpose == "my_exam":
-        # Load subject questions, then filter to selected subjects.
         params["course_id"] = "is.null"
 
     else:
@@ -581,109 +898,218 @@ def start_quiz():
 
     if not isinstance(questions, list):
         return jsonify({
-            "error": (
-                "The question database returned an invalid response."
-            )
+            "error": "Invalid question database response."
         }), 502
 
-    # For My Exam, keep only the selected subjects.
-    if exam_purpose == "my_exam":
-        selected_subjects = {
-            item.casefold()
-            for item in subjects
-        }
+    # --------------------------------------------------------
+    # SELECT QUESTIONS
+    # --------------------------------------------------------
 
-        questions = [
-            question
-            for question in questions
-            if str(
-                question.get("subject") or ""
-            ).strip().casefold() in selected_subjects
-        ]
+    selected_questions = []
 
-    # Filter by topic unless mixed topics were requested.
-    if topic.casefold() != "mixed":
-        selected_topic = normalize_topic(topic)
+    if validated_allocations:
 
-        questions = [
-            question
-            for question in questions
-            if normalize_topic(
-                question.get("topic")
-            ) == selected_topic
-        ]
+        for allocation in validated_allocations:
 
-    # Ensure enough questions are available.
-    if len(questions) < count:
+            allocation_subject = (
+                allocation["subject"].casefold()
+            )
+
+            available = [
+                question
+                for question in questions
+                if str(
+                    question.get("subject") or ""
+                ).strip().casefold() == allocation_subject
+            ]
+
+            if allocation["difficulty"] != "mixed":
+                available = [
+                    question
+                    for question in available
+                    if str(
+                        question.get("difficulty") or "medium"
+                    ).strip().lower()
+                    == allocation["difficulty"]
+                ]
+
+            if allocation["topics"]:
+                topic_keys = {
+                    normalize_topic(value)
+                    for value in allocation["topics"]
+                }
+
+                available = [
+                    question
+                    for question in available
+                    if normalize_topic(
+                        question.get("topic")
+                    ) in topic_keys
+                ]
+
+            requested = allocation["question_count"]
+
+            if len(available) < requested:
+                return jsonify({
+                    "error": (
+                        f"{allocation['subject']} has only "
+                        f"{len(available)} matching questions, "
+                        f"but {requested} were requested. "
+                        "Add more questions or adjust your selection."
+                    ),
+                    "subject": allocation["subject"],
+                    "available": len(available),
+                    "requested": requested,
+                }), 400
+
+            selected_questions.extend(
+                random.sample(available, requested)
+            )
+
+    else:
+
+        if exam_purpose == "my_exam":
+
+            selected_subjects = {
+                item.casefold()
+                for item in subjects
+            }
+
+            questions = [
+                question
+                for question in questions
+                if str(
+                    question.get("subject") or ""
+                ).strip().casefold() in selected_subjects
+            ]
+
+        if topic.casefold() != "mixed":
+
+            selected_topic = normalize_topic(topic)
+
+            questions = [
+                question
+                for question in questions
+                if normalize_topic(
+                    question.get("topic")
+                ) == selected_topic
+            ]
+
+        if len(questions) < count:
+            return jsonify({
+                "error": (
+                    f"Only {len(questions)} questions are available "
+                    "for this selection."
+                ),
+                "available": len(questions),
+                "requested": count,
+            }), 400
+
+        selected_questions = random.sample(
+            questions,
+            count,
+        )
+
+    if not selected_questions:
         return jsonify({
-            "error": (
-                f"Only {len(questions)} questions are available "
-                "for this selection."
-            ),
-            "available": len(questions),
+            "error": "No questions could be selected."
         }), 400
 
-    random.shuffle(questions)
-    questions = questions[:count]
+    random.shuffle(selected_questions)
+
+    # --------------------------------------------------------
+    # VALIDATE SELECTED QUESTION IDS
+    # --------------------------------------------------------
+
+    try:
+        selected_question_ids = [
+            int(question["id"])
+            for question in selected_questions
+        ]
+
+        if any(value <= 0 for value in selected_question_ids):
+            raise ValueError
+
+    except (KeyError, TypeError, ValueError):
+        return jsonify({
+            "error": "The selected questions have invalid IDs."
+        }), 500
+
+    if len(set(selected_question_ids)) != len(selected_question_ids):
+        return jsonify({
+            "error": "Duplicate questions were selected."
+        }), 500
+
+    # --------------------------------------------------------
+    # CREATE QUIZ ATTEMPT
+    # --------------------------------------------------------
 
     now = datetime.now(timezone.utc)
 
-    # Save the quiz attempt.
+    attempt_payload = {
+        "user_id": profile["id"],
+        "course_id": course_id,
+        "score": 0,
+        "total_questions": len(selected_questions),
+        "mode": (
+            "Examination Mode"
+            if mode == "examination"
+            else "Practice Mode"
+        ),
+        "exam_purpose": exam_purpose,
+        "subjects": (
+            subjects
+            if exam_purpose == "my_exam"
+            else ([subject] if subject else [])
+        ),
+        "selected_topic": topic,
+        "exam_title": (
+            exam_title
+            if exam_purpose == "my_exam"
+            else None
+        ),
+        "exam_date": (
+            exam_date
+            if exam_purpose == "my_exam"
+            else None
+        ),
+        "target_score": (
+            target_score
+            if exam_purpose == "my_exam"
+            else None
+        ),
+        "subject_allocations": validated_allocations,
+        "started_at": now.isoformat(),
+    }
+
     attempt, status = db_insert(
         "quiz_attempts",
-        {
-            "user_id": profile["id"],
-            "course_id": course_id,
-            "score": 0,
-            "total_questions": count,
-            "mode": (
-                "Examination Mode"
-                if mode == "examination"
-                else "Practice Mode"
-            ),
-            "exam_purpose": exam_purpose,
-            "subjects": (
-                subjects
-                if exam_purpose == "my_exam"
-                else ([subject] if subject else [])
-            ),
-            "selected_topic": topic,
-            "exam_title": (
-                exam_title
-                if exam_purpose == "my_exam"
-                else None
-            ),
-            "exam_date": (
-                exam_date
-                if exam_purpose == "my_exam"
-                else None
-            ),
-            "started_at": now.isoformat(),
-        },
+        attempt_payload,
     )
 
     if status != 200 or not attempt or not attempt.get("id"):
         return jsonify({
-            "error": (
-                "Could not create the quiz attempt. "
-                "Check that quiz_attempts.id is generated by the database."
-            )
+            "error": "Could not create the quiz attempt."
         }), 502
 
-    # Create the signed quiz session.
+    # --------------------------------------------------------
+    # SIGN QUIZ SESSION
+    # --------------------------------------------------------
+
     session_payload = {
-        "attempt_id": attempt["id"],
-        "user_id": profile["id"],
-        "question_ids": [
-            question["id"]
-            for question in questions
-        ],
+        "attempt_id": int(attempt["id"]),
+        "user_id": int(profile["id"]),
+        "question_ids": selected_question_ids,
         "mode": mode,
         "exam_purpose": exam_purpose,
         "duration_seconds": duration_seconds,
     }
 
     session_token = serializer.dumps(session_payload)
+
+    # --------------------------------------------------------
+    # RETURN QUESTIONS
+    # --------------------------------------------------------
 
     return jsonify({
         "attempt_id": attempt["id"],
@@ -696,6 +1122,8 @@ def start_quiz():
             if exam_purpose == "my_exam"
             else []
         ),
+        "subject_allocations": validated_allocations,
+        "target_score": target_score,
         "exam_title": (
             exam_title
             if exam_purpose == "my_exam"
@@ -708,9 +1136,9 @@ def start_quiz():
         ),
         "course_id": course_id,
         "topic": topic,
-        "question_count": count,
+        "question_count": len(selected_questions),
         "time_per_question": seconds_per_question,
-        "duration_minutes": duration_seconds // 60,
+        "duration_minutes": (duration_seconds + 59) // 60,
         "duration_seconds": duration_seconds,
         "questions": [
             public_question(
@@ -720,69 +1148,162 @@ def start_quiz():
                     and mode == "practice"
                 ),
             )
-            for question in questions
+            for question in selected_questions
         ],
     }), 201
 
+
+# ============================================================
+# SUBMIT QUIZ
+# ============================================================
+
 @premium_quiz_api.route("/submit", methods=["POST"])
 def submit_quiz():
+
     profile, error = premium_student()
 
     if error:
         return error
 
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
 
     if not isinstance(data, dict):
         return jsonify({
-            "error": "Invalid quiz submission."
+            "error": "Invalid submission request."
         }), 400
 
-    session_token = data.get("session_token")
+    session_token = str(
+        data.get("session_token") or ""
+    ).strip()
+
     answers = data.get("answers")
 
-    if not session_token or not isinstance(answers, list):
+    if not session_token:
         return jsonify({
-            "error": "Quiz session and answers are required."
+            "error": "Your quiz session is missing."
         }), 400
+
+    if not isinstance(answers, list):
+        return jsonify({
+            "error": "Invalid answers submission."
+        }), 400
+
+    # --------------------------------------------------------
+    # VERIFY SESSION
+    # --------------------------------------------------------
 
     try:
         session = serializer.loads(
             session_token,
-            max_age=12 * 60 * 60,
+            max_age=SESSION_MAX_AGE,
         )
+
     except SignatureExpired:
         return jsonify({
-            "error": "This quiz session has expired."
+            "error": (
+                "Your quiz session has expired. "
+                "Please start another quiz."
+            )
         }), 401
+
     except BadSignature:
         return jsonify({
             "error": "Invalid quiz session."
         }), 401
 
-    if session.get("user_id") != profile["id"]:
+    if not isinstance(session, dict):
         return jsonify({
-            "error": "This quiz belongs to another user."
+            "error": "Invalid quiz session data."
+        }), 400
+
+    try:
+        session_user_id = int(session.get("user_id"))
+        current_user_id = int(profile["id"])
+    except (TypeError, ValueError):
+        return jsonify({
+            "error": "Invalid quiz session ownership."
+        }), 400
+
+    if session_user_id != current_user_id:
+        return jsonify({
+            "error": (
+                "You cannot submit another student's quiz."
+            )
         }), 403
 
-    attempt_id = session.get("attempt_id")
+    # --------------------------------------------------------
+    # VALIDATE ATTEMPT AND QUESTION IDS
+    # --------------------------------------------------------
+
+    try:
+        attempt_id = int(session.get("attempt_id"))
+
+        if attempt_id <= 0:
+            raise ValueError
+
+    except (TypeError, ValueError):
+        return jsonify({
+            "error": "Invalid quiz attempt ID."
+        }), 400
+
+    question_ids = session.get("question_ids")
+
+    if not isinstance(question_ids, list) or not question_ids:
+        return jsonify({
+            "error": "No questions were found in this session."
+        }), 400
+
+    total_questions = len(question_ids)
+
+    if total_questions > MAX_QUESTIONS:
+        return jsonify({
+            "error": "A quiz cannot contain more than 100 questions."
+        }), 400
+
+    try:
+        numeric_question_ids = [
+            int(value)
+            for value in question_ids
+        ]
+
+        if any(value <= 0 for value in numeric_question_ids):
+            raise ValueError
+
+    except (TypeError, ValueError):
+        return jsonify({
+            "error": "Invalid question IDs in the quiz session."
+        }), 400
+
+    allowed_question_ids = {
+        str(value)
+        for value in numeric_question_ids
+    }
+
+    if len(allowed_question_ids) != total_questions:
+        return jsonify({
+            "error": "Duplicate question IDs were found."
+        }), 400
+
+    # --------------------------------------------------------
+    # VERIFY ATTEMPT OWNERSHIP
+    # --------------------------------------------------------
 
     attempts, status = db_get(
         "quiz_attempts",
         {
             "select": (
-                "id,user_id,started_at,completed_at,"
-                "total_questions,exam_purpose"
+                "id,user_id,total_questions,completed_at,"
+                "started_at,mode,exam_purpose"
             ),
             "id": f"eq.{attempt_id}",
-            "user_id": f"eq.{profile['id']}",
+            "user_id": f"eq.{current_user_id}",
             "limit": 1,
         },
     )
 
     if status != 200:
         return jsonify({
-            "error": "Unable to verify quiz attempt."
+            "error": "Unable to verify your quiz attempt."
         }), status
 
     if not attempts:
@@ -797,190 +1318,347 @@ def submit_quiz():
             "error": "This quiz has already been submitted."
         }), 409
 
-    started = utc_datetime(attempt.get("started_at"))
+    try:
+        saved_question_count = int(
+            attempt.get("total_questions") or 0
+        )
+    except (TypeError, ValueError):
+        saved_question_count = 0
 
-    if not started:
+    if saved_question_count != total_questions:
         return jsonify({
-            "error": "Quiz start time is invalid."
+            "error": "Quiz question count does not match your session."
         }), 400
 
-    duration_seconds = int(
-        session.get("duration_seconds") or 0
-    )
+    # --------------------------------------------------------
+    # VALIDATE ANSWER DATA
+    # --------------------------------------------------------
 
-    if duration_seconds <= 0:
+    if len(answers) > total_questions:
         return jsonify({
-            "error": "Quiz duration is invalid."
-        }), 400
-
-    deadline = started.timestamp() + duration_seconds
-    now_timestamp = datetime.now(timezone.utc).timestamp()
-
-    if now_timestamp > deadline + 15:
-        return jsonify({
-            "error": (
-                "The examination time has expired. "
-                "Submit before the deadline."
-            )
-        }), 408
-
-    question_ids = session.get("question_ids") or []
-
-    if not question_ids:
-        return jsonify({
-            "error": "No questions were found for this quiz."
+            "error": "Too many answers were submitted."
         }), 400
 
     answer_map = {}
 
     for item in answers:
+
         if not isinstance(item, dict):
-            continue
+            return jsonify({
+                "error": "Invalid answer format."
+            }), 400
 
         question_id = item.get("question_id")
-        selected = item.get("selected_answer")
+
+        if question_id is None:
+            return jsonify({
+                "error": "An answer is missing its question ID."
+            }), 400
 
         try:
-            question_id = int(question_id)
+            numeric_id = int(question_id)
+
+            if numeric_id <= 0:
+                raise ValueError
+
+            question_key = str(numeric_id)
+
         except (TypeError, ValueError):
-            continue
+            return jsonify({
+                "error": "Invalid question ID in answer."
+            }), 400
 
-        if question_id in question_ids:
-            answer_map[question_id] = (
-                str(selected).strip().upper()
-                if selected is not None
-                else ""
+        if question_key not in allowed_question_ids:
+            return jsonify({
+                "error": (
+                    "An answer belongs to an unknown question."
+                )
+            }), 400
+
+        if question_key in answer_map:
+            return jsonify({
+                "error": "Duplicate answers were submitted."
+            }), 400
+
+        selected_answer = str(
+            item.get("selected_answer") or ""
+        ).strip().upper()
+
+        if selected_answer not in {"", "A", "B", "C", "D"}:
+            return jsonify({
+                "error": "Invalid answer option."
+            }), 400
+
+        answer_map[question_key] = selected_answer
+
+    # --------------------------------------------------------
+    # VERIFY EXAMINATION TIME
+    # --------------------------------------------------------
+
+    try:
+        duration_seconds = int(
+            session.get("duration_seconds") or 0
+        )
+
+        if duration_seconds < 0:
+            raise ValueError
+
+    except (TypeError, ValueError):
+        return jsonify({
+            "error": "Invalid quiz duration."
+        }), 400
+
+    started_at = utc_datetime(
+        attempt.get("started_at")
+    )
+
+    if not started_at:
+        return jsonify({
+            "error": "The quiz start time could not be verified."
+        }), 400
+
+    now = datetime.now(timezone.utc)
+
+    elapsed_seconds = max(
+        0,
+        int((now - started_at).total_seconds()),
+    )
+
+    # Allow 60 seconds for frontend and network delays.
+    if (
+        duration_seconds > 0
+        and elapsed_seconds > duration_seconds + 60
+    ):
+        return jsonify({
+            "error": (
+                "The examination time has expired. "
+                "Please start another quiz."
             )
+        }), 408
 
-    questions, status = db_get(
+    # --------------------------------------------------------
+    # LOAD QUESTIONS FOR GRADING
+    # --------------------------------------------------------
+
+    question_filter = (
+        "in.("
+        + ",".join(str(value) for value in numeric_question_ids)
+        + ")"
+    )
+
+    question_rows, status = db_get(
         "questions",
         {
             "select": (
-                "id,correction_answer,explanation,question_text,"
+                "id,subject,topic,question_text,"
                 "option_a,option_b,option_c,option_d,"
-                "subject,course_id,topic,image_url"
+                "correction_answer,explanation,image_url"
             ),
-            "id": (
-                "in.("
-                + ",".join(
-                    str(int(question_id))
-                    for question_id in question_ids
-                )
-                + ")"
-            ),
-            "limit": str(len(question_ids)),
+            "id": question_filter,
+            "limit": str(MAX_QUESTIONS),
         },
     )
 
     if status != 200:
         return jsonify({
-            "error": "Unable to grade this quiz."
+            "error": "Unable to load questions for grading."
         }), status
 
-    if not isinstance(questions, list):
+    if not isinstance(question_rows, list):
         return jsonify({
-            "error": "Invalid question response while grading."
+            "error": "Invalid question database response."
         }), 502
 
-    question_by_id = {
-        int(question["id"]): question
-        for question in questions
+    question_lookup = {
+        str(question.get("id")): question
+        for question in question_rows
     }
 
-    if len(question_by_id) != len(question_ids):
+    if len(question_lookup) != total_questions:
         return jsonify({
             "error": (
-                "Some quiz questions are no longer available."
+                "Some quiz questions could not be found. "
+                "Please contact support."
             )
-        }), 409
+        }), 500
 
-    answer_rows = []
+    # --------------------------------------------------------
+    # GRADE QUESTIONS
+    # --------------------------------------------------------
+
     correct_count = 0
+    unanswered_count = 0
+
     review = []
+    answer_records = []
+    subject_results = {}
 
-    for question_id in question_ids:
-        question_id = int(question_id)
-        question = question_by_id[question_id]
+    for question_id in numeric_question_ids:
 
-        selected = answer_map.get(question_id, "")
-        correct = str(
+        question_key = str(question_id)
+        question = question_lookup.get(question_key)
+
+        if not question:
+            return jsonify({
+                "error": "A quiz question could not be loaded."
+            }), 500
+
+        selected_answer = answer_map.get(
+            question_key,
+            "",
+        )
+
+        correct_answer = str(
             question.get("correction_answer") or ""
         ).strip().upper()
 
-        is_correct = bool(selected) and selected == correct
+        if correct_answer not in {"A", "B", "C", "D"}:
+            return jsonify({
+                "error": (
+                    "A question has an invalid correct answer. "
+                    "Please contact support."
+                )
+            }), 500
+
+        is_unanswered = not selected_answer
+
+        is_correct = (
+            not is_unanswered
+            and selected_answer == correct_answer
+        )
+
+        if is_unanswered:
+            unanswered_count += 1
 
         if is_correct:
             correct_count += 1
 
-        answer_rows.append({
-            "attempt_id": attempt_id,
+        subject_name = str(
+            question.get("subject") or "General"
+        ).strip() or "General"
+
+        if subject_name not in subject_results:
+            subject_results[subject_name] = {
+                "subject": subject_name,
+                "total": 0,
+                "correct": 0,
+                "incorrect": 0,
+                "unanswered": 0,
+            }
+
+        subject_results[subject_name]["total"] += 1
+
+        if is_correct:
+            subject_results[subject_name]["correct"] += 1
+
+        elif is_unanswered:
+            subject_results[subject_name]["unanswered"] += 1
+
+        else:
+            subject_results[subject_name]["incorrect"] += 1
+
+        # Prepare the record expected by the PostgreSQL RPC.
+        answer_records.append({
             "question_id": question_id,
-            "selected_answer": selected or None,
-            "is_correct": is_correct,
+            "selected_answer": selected_answer or None,
+            "is_correct": bool(is_correct),
         })
 
+        # Prepare frontend review.
         review.append({
-            **public_question(
-                question,
-                reveal_answer=True,
-            ),
-            "selected_answer": selected or None,
-            "is_correct": is_correct,
+            "question_id": question_id,
+            "subject": subject_name,
+            "topic": question.get("topic"),
+            "question_text": question.get("question_text"),
+            "option_a": question.get("option_a"),
+            "option_b": question.get("option_b"),
+            "option_c": question.get("option_c"),
+            "option_d": question.get("option_d"),
+            "selected_answer": selected_answer or None,
+            "correct_answer": correct_answer,
+            "is_correct": bool(is_correct),
+            "is_unanswered": bool(is_unanswered),
+            "explanation": question.get("explanation"),
+            "image_url": question.get("image_url"),
         })
 
-    # Save answer details before marking the attempt completed.
-    # A database RPC/transaction is recommended for strict atomicity.
-    for row in answer_rows:
-        saved, status = db_insert(
-            "quiz_answers",
-            row,
-        )
+    # --------------------------------------------------------
+    # CALCULATE FINAL SCORE
+    # --------------------------------------------------------
 
-        if status != 200:
-            return jsonify({
-                "error": (
-                    "Could not save all answers. "
-                    "Please contact support before retrying this attempt."
-                )
-            }), status
-
-    total = len(question_ids)
-
-    score = (
-        round((correct_count / total) * 100, 2)
-        if total
-        else 0
+    incorrect_count = (
+        total_questions
+        - correct_count
+        - unanswered_count
     )
 
-    completed_at = datetime.now(timezone.utc).isoformat()
+    score = round(
+        (correct_count / total_questions) * 100,
+        2,
+    )
 
-    updated, status = db_patch(
-        "quiz_attempts",
+    # --------------------------------------------------------
+    # ATOMICALLY SAVE ANSWERS AND COMPLETE ATTEMPT
+    # --------------------------------------------------------
+
+    saved_result, status = db_rpc(
+        "complete_quiz_attempt",
         {
-            "id": f"eq.{attempt_id}",
-            "user_id": f"eq.{profile['id']}",
-            "completed_at": "is.null",
-        },
-        {
-            "score": score,
-            "completed_at": completed_at,
+            "p_attempt_id": attempt_id,
+            "p_user_id": current_user_id,
+            "p_score": score,
+            "p_answers": answer_records,
         },
     )
 
-    if status != 200 or not updated:
+    if status == 409:
         return jsonify({
             "error": (
-                "The answers were saved but the attempt could not "
-                "be finalized. Contact support before retrying."
+                "This quiz has already been submitted, "
+                "or the attempt is no longer available."
             )
+        }), 409
+
+    if status != 200 or not saved_result:
+        return jsonify({
+            "error": (
+                "Your quiz could not be saved completely. "
+                "Please try again. If the problem continues, "
+                "contact support."
+            )
+        }), status
+
+    if not saved_result.get("success"):
+        return jsonify({
+            "error": "The database could not complete your quiz."
         }), 502
 
+    completed_at = saved_result.get("completed_at")
+
+    if not completed_at:
+        completed_at = datetime.now(
+            timezone.utc
+        ).isoformat()
+
+    # --------------------------------------------------------
+    # RETURN RESULTS
+    # --------------------------------------------------------
+
     return jsonify({
+        "success": True,
+        "message": "Quiz submitted successfully.",
         "attempt_id": attempt_id,
-        "exam_purpose": attempt.get("exam_purpose"),
+        "exam_purpose": session.get("exam_purpose"),
+        "mode": session.get("mode"),
         "score": score,
         "correct": correct_count,
-        "total": total,
+        "incorrect": incorrect_count,
+        "unanswered": unanswered_count,
+        "total": total_questions,
+        "elapsed_seconds": elapsed_seconds,
+        "subject_results": list(
+            subject_results.values()
+        ),
         "review": review,
         "completed_at": completed_at,
-    })
+    }), 200

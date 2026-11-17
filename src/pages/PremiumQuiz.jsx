@@ -473,88 +473,123 @@ export default function PremiumQuiz() {
     }
   };
 
-  const submitQuiz = useCallback(
-    async (reason = "manual") => {
-      if (
-        savedRef.current ||
-        submitting ||
-        submitted ||
-        questions.length === 0
-      ) {
-        return;
-      }
+  
+const submitQuiz = useCallback(
+  async (reason = "manual") => {
+    // Prevent duplicate submissions.
+    if (
+      savedRef.current ||
+      submitting ||
+      submitted ||
+      questions.length === 0
+    ) {
+      return;
+    }
 
-      if (!sessionToken || !accessToken) {
-        setSaveMessage(
-          "Your quiz session is missing or expired. Please start another quiz."
-        );
-        return;
-      }
+    if (!sessionToken || !accessToken) {
+      setSaveMessage(
+        "Your quiz session is missing or expired. Please start another quiz."
+      );
+      return;
+    }
 
-      savedRef.current = true;
-      setSubmitting(true);
-      setShowSubmitModal(false);
-      setShowQuitModal(false);
-      setError("");
+    // Backend supports a maximum of 100 questions.
+    if (questions.length > 100) {
+      setSaveMessage(
+        "This examination contains more than 100 questions. Please contact support."
+      );
+      return;
+    }
 
-      window.clearInterval(timerRef.current);
-      window.clearInterval(elapsedRef.current);
+    // Validate question IDs before sending.
+    const questionIds = questions.map((question) => question.id);
 
-      try {
-        const result = await apiRequest(
-          "/api/premium-quiz/submit",
-          accessToken,
-          {
-            method: "POST",
-            body: JSON.stringify({
-              session_token: sessionToken,
-              answers: questions.map((question) => ({
-                question_id: question.id,
-                selected_answer:
-                  normalizeAnswer(answers[question.id]) || null,
-              })),
-            }),
-          }
-        );
+    if (
+      questionIds.some((id) => id === undefined || id === null) ||
+      new Set(questionIds.map(String)).size !== questionIds.length
+    ) {
+      setSaveMessage(
+        "Some questions have missing or duplicate IDs. Please restart the quiz."
+      );
+      return;
+    }
 
-        if (!Array.isArray(result.review)) {
-          throw new Error(
-            "The server saved the submission but did not return the answer review."
-          );
+    savedRef.current = true;
+    setSubmitting(true);
+    setShowSubmitModal(false);
+    setShowQuitModal(false);
+    setError("");
+    setSaveMessage("Submitting your examination. Please wait...");
+
+    window.clearInterval(timerRef.current);
+    window.clearInterval(elapsedRef.current);
+
+    try {
+      // Send every question, including unanswered questions.
+      const submissionAnswers = questions.map((question) => ({
+        question_id: question.id,
+        selected_answer:
+          normalizeAnswer(answers[question.id]) || null,
+      }));
+
+      const result = await apiRequest(
+        "/api/premium-quiz/submit",
+        accessToken,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            session_token: sessionToken,
+            answers: submissionAnswers,
+          }),
         }
+      );
 
-        setServerResult(result);
-        setSubmitted(true);
-        setSaveMessage(
-          reason === "timeout"
-            ? "Time is up. Your examination has been submitted and your result was saved."
-            : "Your result has been saved successfully."
+      if (!result || result.success === false) {
+        throw new Error(
+          result?.error || result?.message || "The server could not save your examination."
         );
-      } catch (submitError) {
-        savedRef.current = false;
-
-        setSaveMessage(
-          submitError?.message
-            ? `Submission failed: ${submitError.message}. You can try submitting again.`
-            : "Submission failed. Please try again."
-        );
-      } finally {
-        setSubmitting(false);
       }
-    },
-    [
-      submitting,
-      submitted,
-      questions,
-      sessionToken,
-      accessToken,
-      answers,
-    ]
-  );
 
-  useEffect(() => {
-    submitRef.current = submitQuiz;
-  }, [submitQuiz]);
+      if (!Array.isArray(result.review)) {
+        throw new Error(
+          "The server response is missing the examination review."
+        );
+      }
+
+      // Save the result returned by the backend.
+      setServerResult(result);
+      setSubmitted(true);
+
+      setSaveMessage(
+        reason === "timeout"
+          ? "Time is up! Your examination has been submitted successfully."
+          : "Your examination has been submitted and your result has been saved."
+      );
+    } catch (submitError) {
+      savedRef.current = false;
+
+      setSaveMessage(
+        `Submission failed: ${
+          submitError?.message || "Please check your connection and try again."
+        }`
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  },
+  [
+    submitting,
+    submitted,
+    questions,
+    sessionToken,
+    accessToken,
+    answers,
+  ]
+);
+
+useEffect(() => {
+  submitRef.current = submitQuiz;
+}, [submitQuiz]);
 
   const goNext = () =>
     goToQuestion(Math.min(currentIndex + 1, questions.length - 1));
