@@ -960,18 +960,74 @@ const examEnvironment = useMemo(
         subject allocations.
       */
 
-      if (isMyExam) {
-        const actualCounts = result.questions.reduce(
-          (counts, question) => {
-            const key = normalizeText(
-              displaySubject(question.subject)
-            );
+      
+if (isMyExam) {
+  console.log("========== MY EXAM DIAGNOSTICS ==========");
 
-            counts[key] = (counts[key] || 0) + 1;
-            return counts;
-          },
-          {}
-        );
+  console.log(
+    "EXPECTED SUBJECT ALLOCATIONS:",
+    subjectAllocations
+  );
+
+  console.log(
+    "SUBJECTS RECEIVED FROM BACKEND:",
+    result.questions.map((question) => ({
+      id: question.id,
+      subject: question.subject,
+    }))
+  );
+
+  const actualCounts = result.questions.reduce(
+    (counts, question) => {
+      const rawSubject = question.subject;
+
+      const key = normalizeText(
+        displaySubject(rawSubject)
+      );
+
+      counts[key] = (counts[key] || 0) + 1;
+
+      return counts;
+    },
+    {}
+  );
+
+  console.log("ACTUAL SUBJECT COUNTS:", actualCounts);
+
+  const allocationErrors = subjectAllocations
+    .filter((allocation) => {
+      const key = normalizeText(
+        displaySubject(allocation.subject)
+      );
+
+      return (
+        (actualCounts[key] || 0) !==
+        Number(allocation.question_count)
+      );
+    })
+    .map((allocation) => {
+      const key = normalizeText(
+        displaySubject(allocation.subject)
+      );
+
+      return `${displaySubject(
+        allocation.subject
+      )}: expected ${Number(
+        allocation.question_count
+      )}, received ${actualCounts[key] || 0}`;
+    });
+
+  console.log("ALLOCATION ERRORS:", allocationErrors);
+
+  console.log("========================================");
+
+  if (allocationErrors.length > 0) {
+    throw new Error(
+      `Your examination questions do not match your subject allocations:\n${allocationErrors.join("\n")}. Please try again.`
+    );
+  }
+}
+
 
         const allocationErrors = subjectAllocations
           .filter((allocation) => {
