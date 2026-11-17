@@ -125,6 +125,47 @@ def supabase_get(table, params):
         }, 502
 
 
+
+def supabase_get_all(table, params, page_size=500):
+    """
+    Retrieve all matching Supabase rows in pages.
+
+    Prevents subjects from disappearing simply because
+    the question bank contains more than 1,000 records.
+    """
+
+    all_rows = []
+    offset = 0
+
+    while True:
+        page_params = dict(params)
+
+        page_params["limit"] = page_size
+        page_params["offset"] = offset
+
+        rows, error, status = supabase_get(
+            table,
+            page_params
+        )
+
+        if error:
+            return None, error, status
+
+        if not isinstance(rows, list):
+            return None, {
+                "error": "Invalid database response."
+            }, 502
+
+        all_rows.extend(rows)
+
+        if len(rows) < page_size:
+            break
+
+        offset += page_size
+
+    return all_rows, None, 200       
+
+
 # ============================================================
 # AUTHENTICATION
 # ============================================================
@@ -1319,6 +1360,10 @@ def normalize_question(question):
 # PRACTICE SUBJECTS
 # ============================================================
 
+# ============================================================
+# PRACTICE SUBJECTS — LIVE FROM SUPABASE
+# ============================================================
+
 @app.route(
     "/api/practice/subjects",
     methods=["GET"]
@@ -1326,51 +1371,53 @@ def normalize_question(question):
 def get_practice_subjects():
 
     params = {
-
         "select": "subject",
-
         "is_active": "eq.true",
-
         "course_id": "is.null",
-
         "subject": "not.is.null",
-
-        "limit": 1000,
+        "order": "subject.asc",
     }
 
-    rows, error, status = supabase_get(
+    rows, error, status = supabase_get_all(
         "questions",
         params
     )
 
     if error:
-
         return jsonify(error), status
 
+    unique_subjects = {}
+
+    for row in rows:
+
+        raw_subject = row.get("subject")
+
+        if not raw_subject:
+            continue
+
+        name = clean_basic_text(raw_subject)
+
+        if not name:
+            continue
+
+        key = re.sub(
+            r"\s+",
+            " ",
+            name
+        ).strip().casefold()
+
+        if key not in unique_subjects:
+            unique_subjects[key] = name
+
     subjects = sorted(
-
-        {
-            clean_basic_text(
-                row.get("subject")
-            )
-
-            for row in rows
-
-            if row.get("subject")
-        },
-
-        key=lambda value:
-            value.lower()
+        unique_subjects.values(),
+        key=lambda value: value.casefold()
     )
 
     return jsonify({
-
         "subjects": subjects,
-
-        "count": len(subjects)
-
-    })
-
+        "count": len(subjects),
+    }), 200
 
 # ============================================================
 # PRACTICE COURSES
