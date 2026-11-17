@@ -101,6 +101,45 @@ def db_get(table, params):
         return None, 502
 
 
+
+def db_get_all(table, params, page_size=500):
+    """
+    Retrieve all matching database records.
+
+    This avoids silently limiting the quiz question bank
+    to the first 1,000 records.
+    """
+
+    all_rows = []
+    offset = 0
+
+    while True:
+
+        page_params = dict(params)
+
+        page_params["limit"] = page_size
+        page_params["offset"] = offset
+
+        rows, status = db_get(
+            table,
+            page_params
+        )
+
+        if status != 200:
+            return None, status
+
+        if not isinstance(rows, list):
+            return None, 502
+
+        all_rows.extend(rows)
+
+        if len(rows) < page_size:
+            break
+
+        offset += page_size
+
+    return all_rows, 200
+
 # ============================================================
 # DATABASE INSERT
 # ============================================================
@@ -394,6 +433,20 @@ def normalize_topic(topic):
     value = re.sub(r"\s+", " ", value)
 
     return TOPIC_ALIASES.get(value, value)
+
+
+def normalize_subject(subject):
+
+    value = unicodedata.normalize(
+        "NFKC",
+        str(subject or "")
+    )
+
+    value = value.strip()
+    value = re.sub(r"\s+", " ", value)
+
+    return value.casefold()
+
 
 
 def public_question(question, reveal_answer=False):
@@ -889,8 +942,10 @@ def start_quiz():
         params["subject"] = f"eq.{subject}"
         params["course_id"] = "is.null"
 
-    questions, status = db_get("questions", params)
-
+    questions, status = db_get_all(
+    "questions",
+    params
+)
     if status != 200:
         return jsonify({
             "error": "Unable to load questions."
@@ -911,17 +966,17 @@ def start_quiz():
 
         for allocation in validated_allocations:
 
-            allocation_subject = (
-                allocation["subject"].casefold()
-            )
+            allocation_subject = normalize_subject(
+    allocation["subject"]
+)
 
             available = [
-                question
-                for question in questions
-                if str(
-                    question.get("subject") or ""
-                ).strip().casefold() == allocation_subject
-            ]
+    question
+    for question in questions
+    if normalize_subject(
+        question.get("subject")
+    ) == allocation_subject
+]
 
             if allocation["difficulty"] != "mixed":
                 available = [
@@ -971,17 +1026,19 @@ def start_quiz():
         if exam_purpose == "my_exam":
 
             selected_subjects = {
-                item.casefold()
-                for item in subjects
+              normalize_subject(item)
+              for item in subjects
             }
 
+            
+
             questions = [
-                question
-                for question in questions
-                if str(
-                    question.get("subject") or ""
-                ).strip().casefold() in selected_subjects
-            ]
+    question
+    for question in questions
+    if normalize_subject(
+        question.get("subject")
+    ) in selected_subjects
+]
 
         if topic.casefold() != "mixed":
 

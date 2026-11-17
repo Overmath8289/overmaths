@@ -1,5 +1,5 @@
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -23,18 +23,30 @@ import {
 } from "lucide-react";
 import "./MyExamSetup.css";
 
-const SUBJECT_OPTIONS = [
-  { name: "Mathematics", icon: "∑", color: "purple" },
-  { name: "English Language", icon: "Aa", color: "blue" },
-  { name: "Physics", icon: "⚛", color: "cyan" },
-  { name: "Chemistry", icon: "⚗", color: "green" },
-  { name: "Biology", icon: "🧬", color: "pink" },
-  { name: "Further Mathematics", icon: "ƒ", color: "orange" },
-  { name: "Economics", icon: "₦", color: "green" },
-  { name: "Government", icon: "§", color: "blue" },
-  { name: "Geography", icon: "🌍", color: "cyan" },
-  { name: "Computer Science", icon: "⌘", color: "purple" },
+const API_BASE = (
+  import.meta.env.VITE_API_BASE_URL ||
+  "https://overmaths.onrender.com"
+).replace(/\/$/, "");
+
+const SUBJECT_STYLES = [
+  { icon: "∑", color: "purple" },
+  { icon: "Aa", color: "blue" },
+  { icon: "⚛", color: "cyan" },
+  { icon: "⚗", color: "green" },
+  { icon: "🧬", color: "pink" },
+  { icon: "ƒ", color: "orange" },
+  { icon: "₦", color: "green" },
+  { icon: "§", color: "blue" },
+  { icon: "🌍", color: "cyan" },
+  { icon: "⌘", color: "purple" },
 ];
+
+const normalizeSubject = (value) =>
+  String(value || "")
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
 
 const DEFAULT_ENVIRONMENT = {
   shuffleQuestions: true,
@@ -61,10 +73,87 @@ export default function MyExamSetup() {
   const [targetScore, setTargetScore] = useState("70");
   const [durationMinutes, setDurationMinutes] = useState("60");
   const [subjects, setSubjects] = useState([]);
-  const [subjectInput, setSubjectInput] = useState("");
   const [environment, setEnvironment] = useState(DEFAULT_ENVIRONMENT);
   const [error, setError] = useState("");
   const [activeSection, setActiveSection] = useState("subjects");
+
+  const [availableSubjects, setAvailableSubjects] = useState([]);
+const [subjectsLoading, setSubjectsLoading] = useState(true);
+const [subjectsError, setSubjectsError] = useState("");
+
+const loadSubjects = useCallback(async () => {
+  try {
+    setSubjectsError("");
+
+    const response = await fetch(
+      `${API_BASE}/api/practice/subjects`,
+      {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+        cache: "no-store",
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error || "Unable to load subjects."
+      );
+    }
+
+    const receivedSubjects = Array.isArray(data.subjects)
+      ? data.subjects
+      : [];
+
+    const uniqueSubjects = new Map();
+
+    receivedSubjects.forEach((subject) => {
+      if (typeof subject !== "string" || !subject.trim()) {
+        return;
+      }
+
+      const cleanName = subject.trim().replace(/\s+/g, " ");
+      const key = normalizeSubject(cleanName);
+
+      if (!uniqueSubjects.has(key)) {
+        uniqueSubjects.set(key, cleanName);
+      }
+    });
+
+    setAvailableSubjects(
+      [...uniqueSubjects.values()].sort((a, b) =>
+        a.localeCompare(b)
+      )
+    );
+  } catch (error) {
+    console.error("MY EXAM SUBJECT ERROR:", error);
+    setSubjectsError(error.message);
+  } finally {
+    setSubjectsLoading(false);
+  }
+}, []);
+
+useEffect(() => {
+  loadSubjects();
+
+  const interval = window.setInterval(() => {
+    loadSubjects();
+  }, 30000);
+
+  const handleFocus = () => {
+    loadSubjects();
+  };
+
+  window.addEventListener("focus", handleFocus);
+
+  return () => {
+    window.clearInterval(interval);
+    window.removeEventListener("focus", handleFocus);
+  };
+}, [loadSubjects]);
 
   const totalQuestions = useMemo(
     () =>
@@ -84,29 +173,45 @@ export default function MyExamSetup() {
   };
 
   const addSubject = (name) => {
-    const cleanName = name.trim();
+  const cleanName = String(name || "").trim();
 
-    if (!cleanName) return;
+  if (!cleanName) return;
 
-    if (
-      subjects.some(
-        (item) => item.subject.toLowerCase() === cleanName.toLowerCase()
-      )
-    ) {
-      setError(`${cleanName} has already been selected.`);
-      return;
-    }
+  const available = availableSubjects.find(
+    (item) =>
+      normalizeSubject(item) === normalizeSubject(cleanName)
+  );
 
-    if (subjects.length >= 10) {
-      setError("You can select a maximum of 10 subjects.");
-      return;
-    }
+  if (!available) {
+    setError(
+      `${cleanName} is no longer available. Refresh your subject list.`
+    );
+    return;
+  }
 
-    setSubjects((current) => [...current, makeSubject(cleanName)]);
-    setSubjectInput("");
-    setError("");
-  };
+  if (
+    subjects.some(
+      (item) =>
+        normalizeSubject(item.subject) ===
+        normalizeSubject(available)
+    )
+  ) {
+    setError(`${available} has already been selected.`);
+    return;
+  }
 
+  if (subjects.length >= 10) {
+    setError("You can select a maximum of 10 subjects.");
+    return;
+  }
+
+  setSubjects((current) => [
+    ...current,
+    makeSubject(available),
+  ]);
+
+  setError("");
+};
   const removeSubject = (name) => {
     setSubjects((current) =>
       current.filter((item) => item.subject !== name)
@@ -257,7 +362,7 @@ export default function MyExamSetup() {
         <button
           type="button"
           className="my-exam-setup__back"
-          onClick={() => navigate("/my-exam")}
+          onClick={() => navigate("/premium")}
         >
           <ArrowLeft size={17} />
           Back to My Exam
@@ -378,29 +483,60 @@ export default function MyExamSetup() {
                   </div>
                 </div>
 
-                <div className="my-exam-setup__subject-library">
-                  {SUBJECT_OPTIONS.filter(
-                    (item) =>
-                      !subjects.some(
-                        (selected) =>
-                          selected.subject.toLowerCase() ===
-                          item.name.toLowerCase()
-                      )
-                  ).map((item) => (
-                    <button
-                      type="button"
-                      key={item.name}
-                      className={`my-exam-setup__subject-option ${item.color}`}
-                      onClick={() => addSubject(item.name)}
-                    >
-                      <span className="my-exam-setup__subject-symbol">
-                        {item.icon}
-                      </span>
-                      <span>{item.name}</span>
-                      <Plus size={16} />
-                    </button>
-                  ))}
-                </div>
+               <div className="my-exam-setup__subject-library">
+  {subjectsLoading ? (
+    <p className="my-exam-setup__loading">
+      Loading subjects from the question bank...
+    </p>
+  ) : subjectsError ? (
+    <div className="my-exam-setup__error" role="alert">
+      {subjectsError}
+
+      <button
+        type="button"
+        onClick={loadSubjects}
+      >
+        Try again
+      </button>
+    </div>
+  ) : availableSubjects.length === 0 ? (
+    <p>
+      No active subjects are currently available in the question bank.
+    </p>
+  ) : (
+    availableSubjects
+      .filter(
+        (name) =>
+          !subjects.some(
+            (selected) =>
+              normalizeSubject(selected.subject) ===
+              normalizeSubject(name)
+          )
+      )
+      .map((name) => {
+        const index = availableSubjects.indexOf(name);
+        const style =
+          SUBJECT_STYLES[index % SUBJECT_STYLES.length];
+
+        return (
+          <button
+            type="button"
+            key={name}
+            className={`my-exam-setup__subject-option ${style.color}`}
+            onClick={() => addSubject(name)}
+          >
+            <span className="my-exam-setup__subject-symbol">
+              {style.icon}
+            </span>
+
+            <span>{name}</span>
+
+            <Plus size={16} />
+          </button>
+        );
+      })
+  )}
+</div>
 
                 <div className="my-exam-setup__custom-subject">
                   <input
