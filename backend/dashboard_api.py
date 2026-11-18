@@ -1,4 +1,4 @@
-
+import traceback
 import os
 import requests
 
@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask import Blueprint, jsonify, request
 from dotenv import load_dotenv
-import traceback
+
 
 load_dotenv()
 
