@@ -370,12 +370,7 @@ function App() {
             element={<Navigate to="/my-exam" replace />}
           />
 
-          {/* PREMIUM EXAMINATION */}
-
-          <Route
-            path="/premium-quiz"
-            element={<PremiumQuiz />}
-          />
+          
 
           {/* DAILY MISSION */}
 
@@ -440,6 +435,18 @@ function App() {
             }
           />
         </Route>
+
+
+        {/* STANDALONE PREMIUM EXAMINATION */}
+
+<Route
+  path="/premium-quiz"
+  element={
+    <PremiumRoute>
+      <PremiumQuiz />
+    </PremiumRoute>
+  }
+/>
 
         {/* ==================================================
             PREMIUM QUIZ SETUP

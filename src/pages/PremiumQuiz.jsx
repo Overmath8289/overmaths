@@ -1735,10 +1735,24 @@ const examEnvironment = useMemo(
             </span>
           </button>
 
-          <span className="pq-topbar-status">
-            <ShieldCheck size={15} />
-            Quiz completed
-          </span>
+          <div className="pq-topbar-actions">
+  <select
+    className="pq-theme-select"
+    value={themeMode}
+    onChange={(event) => setThemeMode(event.target.value)}
+    aria-label="Choose appearance"
+    title="Choose appearance"
+  >
+    <option value="light">☀ Light</option>
+    <option value="dark">☾ Dark</option>
+    <option value="system">◐ System</option>
+  </select>
+
+  <span className="pq-topbar-status">
+    <ShieldCheck size={15} />
+    Quiz completed
+  </span>
+</div>
         </header>
 
         <section className="pq-results-wrap">
