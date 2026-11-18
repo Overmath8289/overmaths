@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask import Blueprint, jsonify, request
 from dotenv import load_dotenv
+import traceback
 
 load_dotenv()
 
@@ -921,9 +922,9 @@ def dashboard_summary():
         })
 
     except Exception as error:
-        print("DASHBOARD API ERROR:", error)
+      print("DASHBOARD API ERROR:", str(error))
+      traceback.print_exc()
 
-        return jsonify({
-            "success": False,
-            "error": "Unable to load your dashboard summary.",
-        }), 500
+      return jsonify({
+        "error": "Unable to load your dashboard summary."
+       }), 500
