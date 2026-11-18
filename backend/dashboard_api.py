@@ -3,6 +3,8 @@ import os
 import requests
 
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 from flask import Blueprint, jsonify, request
 from dotenv import load_dotenv
 
@@ -17,7 +19,7 @@ dashboard_api = Blueprint(
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 
-EXAM_MODE = "Examination Mode"
+DEFAULT_TIMEZONE = "Africa/Lagos"
 
 
 # ============================================================
@@ -53,8 +55,38 @@ def supabase_get(table, params=None):
     if not response.ok:
         raise RuntimeError(
             f"Supabase request failed for {table}: "
-            f"{response.status_code} "
-            f"{response.text}"
+            f"{response.status_code} {response.text}"
+        )
+
+    return response.json()
+
+
+def supabase_rpc(function_name, payload):
+    """
+    Call a PostgreSQL function through Supabase RPC.
+    """
+
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        raise RuntimeError(
+            "Supabase environment variables are missing."
+        )
+
+    url = (
+        f"{SUPABASE_URL.rstrip('/')}"
+        f"/rest/v1/rpc/{function_name}"
+    )
+
+    response = requests.post(
+        url,
+        headers=supabase_headers(),
+        json=payload,
+        timeout=45,
+    )
+
+    if not response.ok:
+        raise RuntimeError(
+            f"Supabase RPC failed for {function_name}: "
+            f"{response.status_code} {response.text}"
         )
 
     return response.json()
@@ -237,10 +269,6 @@ def parse_datetime(value):
 
 
 def format_attempt_subjects(value):
-    """
-    Convert the quiz_attempts.subjects value into a
-    readable string for dashboard responses.
-    """
     if isinstance(value, list):
         return ", ".join(
             str(item) for item in value if item
@@ -250,6 +278,143 @@ def format_attempt_subjects(value):
         return value.strip() or None
 
     return None
+
+
+def get_timezone():
+    """
+    Use the requested timezone if valid.
+    Otherwise use Africa/Lagos.
+    """
+
+    requested_timezone = (
+        request.args.get("timezone")
+        or DEFAULT_TIMEZONE
+    )
+
+    try:
+        ZoneInfo(requested_timezone)
+        return requested_timezone
+
+    except (ZoneInfoNotFoundError, ValueError):
+        return DEFAULT_TIMEZONE
+
+
+def calculate_streak_from_daily(daily, timezone_name):
+    """
+    Calculate a study streak from completed daily activity.
+
+    The SQL analytics function provides the daily buckets,
+    so Flask does not need to download every quiz attempt.
+    """
+
+    if not daily:
+        return 0
+
+    try:
+        local_timezone = ZoneInfo(timezone_name)
+    except (ZoneInfoNotFoundError, ValueError):
+        local_timezone = timezone.utc
+
+    today = datetime.now(local_timezone).date()
+
+    active_dates = set()
+
+    for item in daily:
+        if not isinstance(item, dict):
+            continue
+
+        if not item.get("attempts"):
+            continue
+
+        date_value = item.get("date")
+
+        if not date_value:
+            continue
+
+        try:
+            date_text = str(date_value)[:10]
+
+            activity_date = datetime.strptime(
+                date_text,
+                "%Y-%m-%d"
+            ).date()
+
+            active_dates.add(activity_date)
+
+        except (ValueError, TypeError):
+            continue
+
+    if today in active_dates:
+        current_date = today
+
+    elif today - timedelta(days=1) in active_dates:
+        current_date = today - timedelta(days=1)
+
+    else:
+        return 0
+
+    streak = 0
+
+    while current_date in active_dates:
+        streak += 1
+        current_date -= timedelta(days=1)
+
+    return streak
+
+
+def get_encouragement(score, attempts):
+    if attempts == 0:
+        return {
+            "title": "Your journey starts here.",
+            "message": (
+                "Complete your first quiz and Overmaths "
+                "will start learning about your performance."
+            )
+        }
+
+    if score >= 90:
+        return {
+            "title": "Excellent work.",
+            "message": (
+                "You're performing at a very high level. "
+                "Keep challenging yourself."
+            )
+        }
+
+    if score >= 80:
+        return {
+            "title": "You're doing very well.",
+            "message": (
+                "Your understanding is becoming strong. "
+                "Keep practising consistently."
+            )
+        }
+
+    if score >= 70:
+        return {
+            "title": "Good progress.",
+            "message": (
+                "You're building a solid foundation. "
+                "Focus on the areas where you lose marks."
+            )
+        }
+
+    if score >= 50:
+        return {
+            "title": "You're making progress.",
+            "message": (
+                "Don't be discouraged by mistakes. "
+                "Every wrong answer shows you what to improve."
+            )
+        }
+
+    return {
+        "title": "Every attempt is progress.",
+        "message": (
+            "Use your mistakes as a study guide. "
+            "Keep going and focus on understanding."
+        )
+    }
 
 
 # ============================================================
@@ -379,116 +544,6 @@ def get_premium_access(public_user):
 
 
 # ============================================================
-# ENCOURAGEMENT
-# ============================================================
-
-def get_encouragement(score, attempts):
-    if attempts == 0:
-        return {
-            "title": "Your journey starts here.",
-            "message": (
-                "Complete your first examination session "
-                "and Overmaths will start learning "
-                "your performance."
-            )
-        }
-
-    if score >= 90:
-        return {
-            "title": "Excellent work.",
-            "message": (
-                "You're performing at a very high level. "
-                "Keep challenging yourself."
-            )
-        }
-
-    if score >= 80:
-        return {
-            "title": "You're doing very well.",
-            "message": (
-                "Your understanding is becoming strong. "
-                "Keep practising consistently."
-            )
-        }
-
-    if score >= 70:
-        return {
-            "title": "Good progress.",
-            "message": (
-                "You're building a solid foundation. "
-                "Focus on the areas where you lose marks."
-            )
-        }
-
-    if score >= 50:
-        return {
-            "title": "You're making progress.",
-            "message": (
-                "Don't be discouraged by mistakes. "
-                "Every wrong answer shows you what to improve."
-            )
-        }
-
-    return {
-        "title": "Every attempt is progress.",
-        "message": (
-            "Use your mistakes as a study guide. "
-            "Keep going and focus on understanding."
-        )
-    }
-
-
-# ============================================================
-# STREAK
-# ============================================================
-
-def calculate_streak(attempts):
-    if not attempts:
-        return 0
-
-    dates = set()
-
-    for attempt in attempts:
-        created_at = attempt.get("created_at")
-
-        if not created_at:
-            continue
-
-        try:
-            date_text = str(created_at)[:10]
-
-            dates.add(
-                datetime.strptime(
-                    date_text,
-                    "%Y-%m-%d"
-                ).date()
-            )
-
-        except (ValueError, TypeError):
-            continue
-
-    if not dates:
-        return 0
-
-    today = datetime.now(timezone.utc).date()
-
-    if today in dates:
-        current = today
-    elif today - timedelta(days=1) in dates:
-        current = today - timedelta(days=1)
-    else:
-        return 0
-
-    streak = 0
-
-    while current in dates:
-        streak += 1
-        current -= timedelta(days=1)
-
-    return streak
-
-
-# ============================================================
 # SHARED ACCESS RESPONSE
 # ============================================================
 
@@ -507,6 +562,125 @@ def build_access_response(premium):
         "subscription_id": premium.get("subscription_id"),
         "source": premium.get("source"),
     }
+
+
+# ============================================================
+# ANALYTICS RESPONSE HELPERS
+# ============================================================
+
+def build_performance_history(recent_activity):
+    """
+    Convert recent SQL analytics activity into the
+    performance-history format used by the dashboard.
+    """
+
+    history = []
+
+    for attempt in reversed(recent_activity or []):
+        score = attempt.get("score") or 0
+
+        try:
+            score = round(float(score))
+        except (TypeError, ValueError):
+            score = 0
+
+        history.append({
+            "id": attempt.get("id"),
+            "score": score,
+            "subject": format_attempt_subjects(
+                attempt.get("subjects")
+            ),
+            "topic": attempt.get("selected_topic"),
+            "mode": attempt.get("mode"),
+            "exam_purpose": attempt.get("purpose"),
+            "created_at": attempt.get("completed_at"),
+            "completed_at": attempt.get("completed_at"),
+        })
+
+    current_score = (
+        history[-1]["score"]
+        if history
+        else 0
+    )
+
+    previous_score = (
+        history[-2]["score"]
+        if len(history) > 1
+        else current_score
+    )
+
+    return {
+        "current": current_score,
+        "previous": previous_score,
+        "trend": current_score - previous_score,
+        "history": history[-10:],
+    }
+
+
+def build_subject_insights(subjects):
+    """
+    Build the existing dashboard weakness and strength
+    fields from SQL subject analytics.
+    """
+
+    weaknesses = []
+    strengths = []
+
+    for subject in subjects or []:
+        answered = subject.get("answered", 0) or 0
+        accuracy = subject.get("accuracy", 0) or 0
+        subject_name = subject.get("subject") or "General"
+
+        if answered >= 2 and accuracy < 70:
+            weaknesses.append({
+                "topic": subject_name,
+                "subject": subject_name,
+                "accuracy": accuracy,
+                "questions": answered,
+            })
+
+        if answered >= 2 and accuracy >= 80:
+            strengths.append({
+                "topic": subject_name,
+                "subject": subject_name,
+                "accuracy": accuracy,
+                "questions": answered,
+            })
+
+    weaknesses.sort(
+        key=lambda item: item["accuracy"]
+    )
+
+    strengths.sort(
+        key=lambda item: item["accuracy"],
+        reverse=True
+    )
+
+    return weaknesses[:5], strengths[:5]
+
+
+def build_purpose_summary(purposes):
+    """
+    Make the practice and My Exam statistics easy for
+    the frontend to access separately.
+    """
+
+    result = {
+        "practice": None,
+        "my_exam": None,
+    }
+
+    for item in purposes or []:
+        purpose = (
+            item.get("exam_purpose")
+            or item.get("purpose")
+            or ""
+        ).strip().lower()
+
+        if purpose in result:
+            result[purpose] = item
+
+    return result
 
 
 # ============================================================
@@ -565,260 +739,107 @@ def dashboard_summary():
 
         premium = get_premium_access(public_user)
 
-        # Get completed My Exam attempts only.
-        attempts = supabase_get(
-            "quiz_attempts",
+        timezone_name = get_timezone()
+
+        # ----------------------------------------------------
+        # GET ALL STUDENT ANALYTICS FROM THE SQL FUNCTION
+        # ----------------------------------------------------
+
+        analytics = supabase_rpc(
+            "get_student_learning_analytics",
             {
-                "user_id": f"eq.{public_user_id}",
-                "exam_purpose": "eq.my_exam",
-                "completed_at": "not.is.null",
-                "select": (
-                    "id,user_id,course_id,score,"
-                    "total_questions,mode,subjects,"
-                    "selected_topic,exam_title,"
-                    "exam_date,started_at,completed_at,"
-                    "created_at"
-                ),
-                "order": "created_at.desc",
+                "p_user_id": public_user_id,
+                "p_timezone": timezone_name,
             },
         )
 
-        if not attempts:
-            return jsonify({
-                "success": True,
-                "access": build_access_response(premium),
-                "overview": {
-                    "questions_answered": 0,
-                    "correct_answers": 0,
-                    "accuracy": 0,
-                    "study_streak": 0,
-                    "exam_readiness": 0,
-                    "attempts": 0,
-                },
-                "performance": {
-                    "current": 0,
-                    "previous": 0,
-                    "trend": 0,
-                    "history": [],
-                },
-                "weaknesses": [],
-                "strengths": [],
-                "subjects": [],
-                "topics": [],
-                "recent_activity": [],
-                "encouragement": get_encouragement(0, 0),
-            })
-
-        # Get answers belonging to these attempts.
-        attempt_ids = [
-            attempt.get("id")
-            for attempt in attempts
-            if attempt.get("id") is not None
-        ]
-
-        answers = []
-
-        if attempt_ids:
-            ids_string = ",".join(
-                str(value) for value in attempt_ids
+        if not isinstance(analytics, dict):
+            raise RuntimeError(
+                "The analytics function returned an invalid response."
             )
 
-            answers = supabase_get(
-                "quiz_answers",
-                {
-                    "attempt_id": f"in.({ids_string})",
-                    "select": (
-                        "id,attempt_id,question_id,"
-                        "selected_answer,is_correct"
-                    ),
-                },
-            )
+        overview_data = analytics.get("overview") or {}
+        recent_activity = analytics.get("recent_activity") or []
+        subjects = analytics.get("subjects") or []
+        topics = analytics.get("topics") or []
+        purposes = analytics.get("purposes") or []
+        daily = analytics.get("daily") or []
+        weekly = analytics.get("weekly") or []
+        monthly = analytics.get("monthly") or []
 
-        # Get question details for the answers.
-        question_ids = list({
-            answer.get("question_id")
-            for answer in answers
-            if answer.get("question_id") is not None
-        })
+        # ----------------------------------------------------
+        # OVERVIEW
+        # ----------------------------------------------------
 
-        questions = []
+        total_attempts = overview_data.get(
+            "total_attempts", 0
+        ) or 0
 
-        if question_ids:
-            ids_string = ",".join(
-                str(value) for value in question_ids
-            )
+        total_questions = overview_data.get(
+            "total_questions", 0
+        ) or 0
 
-            questions = supabase_get(
-                "questions",
-                {
-                    "id": f"in.({ids_string})",
-                    "select": "id,subject,topic,course_id",
-                },
-            )
+        questions_answered = overview_data.get(
+            "questions_answered", 0
+        ) or 0
 
-        question_map = {
-            str(question["id"]): question
-            for question in questions
-            if question.get("id") is not None
-        }
+        correct_answers = overview_data.get(
+            "correct_answers", 0
+        ) or 0
 
-        # Overall answer statistics.
-        total_questions_answered = 0
-        total_correct = 0
+        incorrect_answers = overview_data.get(
+            "incorrect_answers", 0
+        ) or 0
 
-        for answer in answers:
-            if answer.get("selected_answer") is None:
-                continue
+        unanswered_questions = overview_data.get(
+            "unanswered_questions", 0
+        ) or 0
 
-            total_questions_answered += 1
+        accuracy = overview_data.get(
+            "accuracy", 0
+        ) or 0
 
-            if answer.get("is_correct") is True:
-                total_correct += 1
+        overall_score = overview_data.get(
+            "overall_score", 0
+        ) or 0
 
-        overall_accuracy = percentage(
-            total_correct,
-            total_questions_answered
+        study_streak = calculate_streak_from_daily(
+            daily,
+            timezone_name
         )
 
-        # Performance history.
-        performance_history = []
+        # ----------------------------------------------------
+        # PERFORMANCE HISTORY
+        # ----------------------------------------------------
 
-        for attempt in reversed(attempts):
-            score = attempt.get("score") or 0
-
-            try:
-                score = float(score)
-            except (TypeError, ValueError):
-                score = 0
-
-            performance_history.append({
-                "id": attempt.get("id"),
-                "score": round(score),
-                "subject": format_attempt_subjects(
-                    attempt.get("subjects")
-                ),
-                "topic": attempt.get("selected_topic"),
-                "mode": attempt.get("mode"),
-                "created_at": attempt.get("created_at"),
-            })
-
-        current_score = (
-            performance_history[-1]["score"]
-            if performance_history
-            else 0
+        performance = build_performance_history(
+            recent_activity
         )
 
-        previous_score = (
-            performance_history[-2]["score"]
-            if len(performance_history) > 1
-            else current_score
+        # ----------------------------------------------------
+        # SUBJECT WEAKNESSES AND STRENGTHS
+        # ----------------------------------------------------
+
+        weaknesses, strengths = build_subject_insights(
+            subjects
         )
 
-        trend = current_score - previous_score
+        # ----------------------------------------------------
+        # PRACTICE AND MY EXAM STATISTICS
+        # ----------------------------------------------------
 
-        # Subject performance based on the question records.
-        subject_stats = {}
-
-        for answer in answers:
-            if answer.get("selected_answer") is None:
-                continue
-
-            question_id = answer.get("question_id")
-            question = question_map.get(str(question_id))
-
-            if not question:
-                continue
-
-            subject = question.get("subject") or "General"
-
-            if subject not in subject_stats:
-                subject_stats[subject] = {
-                    "subject": subject,
-                    "answered": 0,
-                    "correct": 0,
-                }
-
-            subject_stats[subject]["answered"] += 1
-
-            if answer.get("is_correct") is True:
-                subject_stats[subject]["correct"] += 1
-
-        subjects = []
-
-        for subject_data in subject_stats.values():
-            answered = subject_data["answered"]
-            correct = subject_data["correct"]
-
-            subject_data["accuracy"] = percentage(
-                correct,
-                answered
-            )
-
-            subjects.append(subject_data)
-
-        subjects.sort(
-            key=lambda item: item["accuracy"]
+        purpose_summary = build_purpose_summary(
+            purposes
         )
 
-        # Weaknesses.
-        weaknesses = []
+        # ----------------------------------------------------
+        # RECENT ACTIVITY
+        # ----------------------------------------------------
 
-        for subject in subjects:
-            if (
-                subject["answered"] >= 2
-                and subject["accuracy"] < 70
-            ):
-                weaknesses.append({
-                    "topic": subject["subject"],
-                    "subject": subject["subject"],
-                    "accuracy": subject["accuracy"],
-                    "questions": subject["answered"],
-                })
+        formatted_recent_activity = []
 
-        weaknesses = weaknesses[:5]
-
-        # Strengths.
-        strengths = []
-
-        for subject in sorted(
-            subjects,
-            key=lambda item: item["accuracy"],
-            reverse=True
-        ):
-            if (
-                subject["answered"] >= 2
-                and subject["accuracy"] >= 80
-            ):
-                strengths.append({
-                    "topic": subject["subject"],
-                    "subject": subject["subject"],
-                    "accuracy": subject["accuracy"],
-                    "questions": subject["answered"],
-                })
-
-        strengths = strengths[:5]
-
-        # Study streak.
-        study_streak = calculate_streak(attempts)
-
-        # Exam readiness.
-        attempt_count = len(attempts)
-
-        consistency_score = min(
-            attempt_count * 10,
-            100
-        )
-
-        exam_readiness = round(
-            (overall_accuracy * 0.7)
-            + (consistency_score * 0.3)
-        )
-
-        # Recent activity.
-        recent_activity = []
-
-        for attempt in attempts[:5]:
-            recent_activity.append({
+        for attempt in recent_activity:
+            formatted_recent_activity.append({
                 "id": attempt.get("id"),
                 "score": attempt.get("score") or 0,
                 "total_questions": (
@@ -829,37 +850,74 @@ def dashboard_summary():
                 ),
                 "topic": attempt.get("selected_topic"),
                 "mode": attempt.get("mode"),
-                "created_at": attempt.get("created_at"),
+                "exam_purpose": attempt.get("purpose"),
+                "exam_title": attempt.get("exam_title"),
+                "created_at": attempt.get("completed_at"),
+                "completed_at": attempt.get("completed_at"),
             })
 
+        # ----------------------------------------------------
+        # ENCOURAGEMENT
+        # ----------------------------------------------------
+
         encouragement = get_encouragement(
-            overall_accuracy,
-            attempt_count
+            accuracy,
+            total_attempts
         )
+
+        # ----------------------------------------------------
+        # FINAL RESPONSE
+        # ----------------------------------------------------
 
         return jsonify({
             "success": True,
+
             "access": build_access_response(premium),
+
+            # Existing dashboard fields.
             "overview": {
-                "questions_answered": total_questions_answered,
-                "correct_answers": total_correct,
-                "accuracy": overall_accuracy,
+                "questions_answered": questions_answered,
+                "correct_answers": correct_answers,
+                "incorrect_answers": incorrect_answers,
+                "unanswered_questions": unanswered_questions,
+                "total_questions": total_questions,
+                "accuracy": accuracy,
+                "overall_score": overall_score,
                 "study_streak": study_streak,
-                "exam_readiness": exam_readiness,
-                "attempts": attempt_count,
+
+                # No artificial readiness percentage.
+                "exam_readiness": None,
+
+                "attempts": total_attempts,
+                "total_attempts": total_attempts,
             },
-            "performance": {
-                "current": current_score,
-                "previous": previous_score,
-                "trend": trend,
-                "history": performance_history[-10:],
-            },
+
+            "performance": performance,
+
             "weaknesses": weaknesses,
             "strengths": strengths,
+
             "subjects": subjects,
-            "topics": [],
-            "recent_activity": recent_activity,
+            "topics": topics,
+
+            "recent_activity": formatted_recent_activity,
+
             "encouragement": encouragement,
+
+            # New analytics data.
+            "analytics": {
+                "timezone": timezone_name,
+                "overview": overview_data,
+                "purposes": purposes,
+                "practice": purpose_summary["practice"],
+                "my_exam": purpose_summary["my_exam"],
+                "daily": daily,
+                "weekly": weekly,
+                "monthly": monthly,
+                "subjects": subjects,
+                "topics": topics,
+                "recent_activity": formatted_recent_activity,
+            },
         })
 
     except Exception as error:
