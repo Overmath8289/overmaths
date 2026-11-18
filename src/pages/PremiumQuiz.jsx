@@ -43,6 +43,23 @@ const MAX_DURATION_MINUTES = 180;
 const STORAGE_KEY = "overmaths_premium_quiz_active_v2";
 
 
+const THEME_STORAGE_KEY = "overmaths_premium_quiz_theme";
+
+const readThemePreference = () => {
+  if (typeof window === "undefined") return "system";
+
+  try {
+    const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
+
+    return ["light", "dark", "system"].includes(saved)
+      ? saved
+      : "system";
+  } catch {
+    return "system";
+  }
+};
+
+
 const EMPTY_ARRAY = Object.freeze([]);
 const EMPTY_CONFIG = Object.freeze({});
 
@@ -361,6 +378,53 @@ async function apiRequest(path, token, options = {}) {
 export default function PremiumQuiz() {
   const location = useLocation();
   const navigate = useNavigate();
+
+
+
+    const [themeMode, setThemeMode] = useState(readThemePreference);
+
+  const [systemDark, setSystemDark] = useState(() =>
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-color-scheme: dark)").matches
+  );
+
+  const resolvedTheme =
+    themeMode === "system"
+      ? systemDark
+        ? "dark"
+        : "light"
+      : themeMode;
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        THEME_STORAGE_KEY,
+        themeMode
+      );
+    } catch {
+      // Ignore unavailable local storage.
+    }
+  }, [themeMode]);
+
+  useEffect(() => {
+    if (!window.matchMedia) return undefined;
+
+    const media = window.matchMedia(
+      "(prefers-color-scheme: dark)"
+    );
+
+    const updateTheme = () => setSystemDark(media.matches);
+
+    updateTheme();
+
+    if (media.addEventListener) {
+      media.addEventListener("change", updateTheme);
+      return () => media.removeEventListener("change", updateTheme);
+    }
+
+    media.addListener(updateTheme);
+    return () => media.removeListener(updateTheme);
+  }, []);
 
   /*
     RESTORE CONFIGURATION
@@ -1579,7 +1643,7 @@ const examEnvironment = useMemo(
 
   if (loading) {
     return (
-      <main className="pq-screen pq-centered">
+      <main className="pq-screen pq-centered"  data-theme={resolvedTheme}>
         <div className="pq-loading-card">
           <div className="pq-logo-mark">
             <Sparkles size={22} />
@@ -1607,7 +1671,7 @@ const examEnvironment = useMemo(
 
   if (error && questions.length === 0) {
     return (
-      <main className="pq-screen pq-centered">
+      <main className="pq-screen pq-centered"  data-theme={resolvedTheme}>
         <div className="pq-error-card">
           <div className="pq-error-icon">
             <XCircle size={28} />
@@ -1653,7 +1717,7 @@ const examEnvironment = useMemo(
       Number(serverResult.correct) || 0;
 
     return (
-      <main className="pq-screen pq-results-screen">
+      <main className="pq-screen pq-results-screen"  data-theme={resolvedTheme}>
         <header className="pq-topbar">
           <button
             className="pq-brand"
@@ -1956,7 +2020,7 @@ const examEnvironment = useMemo(
   */
 
   return (
-    <main className="pq-screen">
+    <main className="pq-screen"  data-theme={resolvedTheme}>
       <header className="pq-topbar">
         <button
           className="pq-brand"
@@ -1989,6 +2053,19 @@ const examEnvironment = useMemo(
         </div>
 
         <div className="pq-topbar-actions">
+
+
+          <select
+  className="pq-theme-select"
+  value={themeMode}
+  onChange={(event) => setThemeMode(event.target.value)}
+  aria-label="Choose appearance"
+  title="Choose appearance"
+>
+  <option value="light">☀ Light</option>
+  <option value="dark">☾ Dark</option>
+  <option value="system">◐ System</option>
+</select>
           <span
             className={`pq-mode-pill ${
               isExamMode
