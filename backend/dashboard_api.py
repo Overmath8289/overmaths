@@ -719,6 +719,7 @@ def dashboard_access():
 # DASHBOARD SUMMARY
 # ============================================================
 
+
 @dashboard_api.route("/summary", methods=["GET"])
 def dashboard_summary():
     public_user, auth_error = authenticate_request()
@@ -737,13 +738,9 @@ def dashboard_summary():
             }), 404
 
         premium = get_premium_access(public_user)
-
         timezone_name = get_timezone()
 
-        # ----------------------------------------------------
-        # GET ALL STUDENT ANALYTICS FROM THE SQL FUNCTION
-        # ----------------------------------------------------
-
+        # GET STUDENT ANALYTICS FROM SQL
         analytics = supabase_rpc(
             "get_student_learning_analytics",
             {
@@ -752,9 +749,10 @@ def dashboard_summary():
             },
         )
 
+        # Validate analytics response
         if not isinstance(analytics, dict):
             raise RuntimeError(
-                "The analytics function returned an invalid response."
+                f"Invalid analytics response: {type(analytics).__name__}"
             )
 
         overview_data = analytics.get("overview") or {}
@@ -766,84 +764,79 @@ def dashboard_summary():
         weekly = analytics.get("weekly") or []
         monthly = analytics.get("monthly") or []
 
-        # ----------------------------------------------------
+        # DIAGNOSTICS
+        print("DASHBOARD ANALYTICS TYPE:", type(analytics).__name__)
+        print("OVERVIEW TYPE:", type(overview_data).__name__)
+        print("RECENT ACTIVITY TYPE:", type(recent_activity).__name__)
+        print("SUBJECTS TYPE:", type(subjects).__name__)
+        print("PURPOSES TYPE:", type(purposes).__name__)
+
+        # Validate nested data before using .get()
+        if not isinstance(overview_data, dict):
+            raise RuntimeError("Analytics overview is not an object.")
+
+        def normalize_rows(value, field_name):
+            if not isinstance(value, list):
+                raise RuntimeError(
+                    f"Analytics field '{field_name}' is not a list."
+                )
+
+            invalid_rows = [
+                type(item).__name__
+                for item in value
+                if not isinstance(item, dict)
+            ]
+
+            if invalid_rows:
+                raise RuntimeError(
+                    f"Analytics field '{field_name}' contains invalid rows: "
+                    f"{invalid_rows}"
+                )
+
+            return value
+
+        recent_activity = normalize_rows(
+            recent_activity, "recent_activity"
+        )
+        subjects = normalize_rows(subjects, "subjects")
+        topics = normalize_rows(topics, "topics")
+        purposes = normalize_rows(purposes, "purposes")
+        daily = normalize_rows(daily, "daily")
+        weekly = normalize_rows(weekly, "weekly")
+        monthly = normalize_rows(monthly, "monthly")
+
         # OVERVIEW
-        # ----------------------------------------------------
-
-        total_attempts = overview_data.get(
-            "total_attempts", 0
-        ) or 0
-
-        total_questions = overview_data.get(
-            "total_questions", 0
-        ) or 0
-
-        questions_answered = overview_data.get(
-            "questions_answered", 0
-        ) or 0
-
-        correct_answers = overview_data.get(
-            "correct_answers", 0
-        ) or 0
-
-        incorrect_answers = overview_data.get(
-            "incorrect_answers", 0
-        ) or 0
-
-        unanswered_questions = overview_data.get(
-            "unanswered_questions", 0
-        ) or 0
-
-        accuracy = overview_data.get(
-            "accuracy", 0
-        ) or 0
-
-        overall_score = overview_data.get(
-            "overall_score", 0
-        ) or 0
+        total_attempts = overview_data.get("total_attempts", 0) or 0
+        total_questions = overview_data.get("total_questions", 0) or 0
+        questions_answered = overview_data.get("questions_answered", 0) or 0
+        correct_answers = overview_data.get("correct_answers", 0) or 0
+        incorrect_answers = overview_data.get("incorrect_answers", 0) or 0
+        unanswered_questions = overview_data.get("unanswered_questions", 0) or 0
+        accuracy = overview_data.get("accuracy", 0) or 0
+        overall_score = overview_data.get("overall_score", 0) or 0
 
         study_streak = calculate_streak_from_daily(
             daily,
             timezone_name
         )
 
-        # ----------------------------------------------------
         # PERFORMANCE HISTORY
-        # ----------------------------------------------------
+        performance = build_performance_history(recent_activity)
 
-        performance = build_performance_history(
-            recent_activity
-        )
+        # SUBJECT STRENGTHS AND WEAKNESSES
+        weaknesses, strengths = build_subject_insights(subjects)
 
-        # ----------------------------------------------------
-        # SUBJECT WEAKNESSES AND STRENGTHS
-        # ----------------------------------------------------
-
-        weaknesses, strengths = build_subject_insights(
-            subjects
-        )
-
-        # ----------------------------------------------------
         # PRACTICE AND MY EXAM STATISTICS
-        # ----------------------------------------------------
+        purpose_summary = build_purpose_summary(purposes)
 
-        purpose_summary = build_purpose_summary(
-            purposes
-        )
-
-        # ----------------------------------------------------
         # RECENT ACTIVITY
-        # ----------------------------------------------------
-
         formatted_recent_activity = []
 
         for attempt in recent_activity:
             formatted_recent_activity.append({
                 "id": attempt.get("id"),
                 "score": attempt.get("score") or 0,
-                "total_questions": (
-                    attempt.get("total_questions") or 0
-                ),
+                "total_questions": attempt.get("total_questions") or 0,
                 "subject": format_attempt_subjects(
                     attempt.get("subjects")
                 ),
@@ -855,25 +848,17 @@ def dashboard_summary():
                 "completed_at": attempt.get("completed_at"),
             })
 
-        # ----------------------------------------------------
         # ENCOURAGEMENT
-        # ----------------------------------------------------
-
         encouragement = get_encouragement(
             accuracy,
             total_attempts
         )
 
-        # ----------------------------------------------------
         # FINAL RESPONSE
-        # ----------------------------------------------------
-
         return jsonify({
             "success": True,
-
             "access": build_access_response(premium),
 
-            # Existing dashboard fields.
             "overview": {
                 "questions_answered": questions_answered,
                 "correct_answers": correct_answers,
@@ -883,27 +868,19 @@ def dashboard_summary():
                 "accuracy": accuracy,
                 "overall_score": overall_score,
                 "study_streak": study_streak,
-
-                # No artificial readiness percentage.
                 "exam_readiness": None,
-
                 "attempts": total_attempts,
                 "total_attempts": total_attempts,
             },
 
             "performance": performance,
-
             "weaknesses": weaknesses,
             "strengths": strengths,
-
             "subjects": subjects,
             "topics": topics,
-
             "recent_activity": formatted_recent_activity,
-
             "encouragement": encouragement,
 
-            # New analytics data.
             "analytics": {
                 "timezone": timezone_name,
                 "overview": overview_data,
@@ -920,9 +897,10 @@ def dashboard_summary():
         })
 
     except Exception as error:
-      print("DASHBOARD API ERROR:", str(error))
-      traceback.print_exc()
+        print("DASHBOARD API ERROR:", str(error))
+        traceback.print_exc()
 
-      return jsonify({
-        "error": "Unable to load your dashboard summary."
-       }), 500
+        return jsonify({
+            "success": False,
+            "error": "Unable to load your dashboard summary."
+        }), 500
