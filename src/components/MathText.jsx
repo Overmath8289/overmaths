@@ -90,6 +90,8 @@ function normalizeSource(value) {
   return decodeEntities(value)
     .replace(/\r\n?/g, "\n")
     .replace(/<br\s*\/?>/gi, "\n")
+    // Normalize repeated backslashes around math delimiters.
+    .replace(/\\{2,}(?=[()[\]])/g, "\\")
     .trim();
 }
 
@@ -100,7 +102,6 @@ function normalizeSource(value) {
 function normalizeLatex(value) {
   let math = String(value ?? "").trim();
 
-  // Convert common mathematical Unicode symbols.
   math = math
     .replace(/×/g, "\\times ")
     .replace(/÷/g, "\\div ")
@@ -170,19 +171,14 @@ function looksMathematical(value) {
   return (
     /[=<>±×÷≤≥≠≈√∫∑∞]/.test(text) ||
     /\\(?:frac|dfrac|tfrac|sqrt|log|ln|sin|cos|tan|pi|theta|alpha|beta|gamma|angle|times|div|cdot|boxed|therefore|sum|int|prod|mathrm|text|circ|left|right|overline|underline|lim|rightarrow|begin)\b/.test(text) ||
-    /[A-Za-z0-9][_^]\s*\{/.test(text) ||
+    /[A-Za-z0-9][\_^]\s*\{/.test(text) ||
     /[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻₀₁₂₃₄₅₆₇₈₉]/.test(text)
   );
 }
 
-/*
- * Only treat an undelimited line as mathematics when
- * it clearly starts with a mathematical command or
- * resembles a standalone mathematical expression.
- *
- * This prevents ordinary paragraphs from being
- * accidentally converted into equations.
- */
+/* ---------------------------------------
+   DETECT CLEAR STANDALONE LATEX
+--------------------------------------- */
 
 function looksLikeStandaloneMath(value) {
   const text = String(value ?? "").trim();
@@ -191,13 +187,9 @@ function looksLikeStandaloneMath(value) {
     return false;
   }
 
-  const startsWithLatexCommand =
-    /^\\(?:frac|dfrac|tfrac|sqrt|sum|int|prod|lim|log|ln|begin|left|boxed)\b/.test(text);
-
-  const startsWithEquation =
-    /^[A-Za-z0-9(.[\\-].*(?:=|\\frac|\\sqrt|\\times|\\div|\^|_)/.test(text);
-
-  return startsWithLatexCommand || startsWithEquation;
+  // A line beginning with an explicit LaTeX command
+  // is a clear standalone mathematical expression.
+  return /^\\(?:frac|dfrac|tfrac|sqrt|sum|int|prod|lim|log|ln|begin|left|boxed)\b/.test(text);
 }
 
 /* ---------------------------------------
@@ -241,7 +233,7 @@ function SafeMath({ math, display = false }) {
 
 function renderPlainText(text, keyPrefix) {
   const pieces = String(text ?? "").split(
-    /(`[^`\n]+`|\*\*[^*\n]+\*\*)/g
+    /(`[^`\n]+`|\*\*[^\*\n]+\*\*)/g
   );
 
   return pieces.map((piece, index) => {
@@ -287,16 +279,16 @@ function renderPlainText(text, keyPrefix) {
 
 function renderContent(source) {
   /*
-   * Supported formats:
-   *
-   * $$ ... $$       Display mathematics
-   * \[ ... \]       Display mathematics
-   * \( ... \)       Inline mathematics
-   * $ ... $         Inline mathematics
-   */
+    Supported formats:
+
+    $$ ... $$       Display mathematics
+    \[ ... \]       Display mathematics
+    \( ... \)       Inline mathematics
+    $ ... $         Inline mathematics
+  */
 
   const delimiterPattern =
-    /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\]|\$[^$\n]+\$)/g;
+    /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$\n]+\$)/g;
 
   return source.split(delimiterPattern).map((piece, index) => {
     const key = `math-piece-${index}`;
