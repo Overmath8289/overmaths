@@ -101,29 +101,21 @@ def db_get(table, params):
         return None, 502
 
 
-
 def db_get_all(table, params, page_size=500):
     """
-    Retrieve all matching database records.
-
-    This avoids silently limiting the quiz question bank
-    to the first 1,000 records.
+    Retrieve all matching database records in pages.
+    This avoids silently limiting the question bank.
     """
 
     all_rows = []
     offset = 0
 
     while True:
-
         page_params = dict(params)
-
         page_params["limit"] = page_size
         page_params["offset"] = offset
 
-        rows, status = db_get(
-            table,
-            page_params
-        )
+        rows, status = db_get(table, page_params)
 
         if status != 200:
             return None, status
@@ -139,6 +131,7 @@ def db_get_all(table, params, page_size=500):
         offset += page_size
 
     return all_rows, 200
+
 
 # ============================================================
 # DATABASE INSERT
@@ -194,8 +187,8 @@ def db_rpc(function_name, payload):
     """
     Calls a PostgreSQL RPC function through Supabase.
 
-    The complete_quiz_attempt function saves all quiz answers
-    and completes the attempt in one database transaction.
+    complete_quiz_attempt saves all answers and completes
+    the attempt in one database transaction.
     """
 
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
@@ -247,8 +240,6 @@ def db_rpc(function_name, payload):
     except ValueError:
         return None, 502
 
-    # Supabase JSONB functions normally return an object.
-    # This also handles a one-item list defensively.
     if isinstance(result, list):
         result = result[0] if result else None
 
@@ -263,7 +254,6 @@ def db_rpc(function_name, payload):
 # ============================================================
 
 def authenticate():
-
     authorization = request.headers.get(
         "Authorization",
         "",
@@ -387,7 +377,6 @@ def parse_positive_int(value, default, maximum):
 
 
 def utc_datetime(value):
-
     if not value:
         return None
 
@@ -423,7 +412,6 @@ TOPIC_ALIASES = {
 
 
 def normalize_topic(topic):
-
     value = unicodedata.normalize(
         "NFKC",
         str(topic or ""),
@@ -436,10 +424,9 @@ def normalize_topic(topic):
 
 
 def normalize_subject(subject):
-
     value = unicodedata.normalize(
         "NFKC",
-        str(subject or "")
+        str(subject or ""),
     )
 
     value = value.strip()
@@ -448,9 +435,83 @@ def normalize_subject(subject):
     return value.casefold()
 
 
+# ============================================================
+# ANSWER NORMALIZATION AND QUESTION VALIDATION
+# ============================================================
+
+def normalize_answer_letter(value):
+    """
+    Accept:
+        A
+        B
+        C
+        D
+        E
+        Option A
+        Option E
+        (A)
+        [E]
+        A.
+
+    Return an empty string for invalid or missing answers.
+    """
+
+    value = unicodedata.normalize(
+        "NFKC",
+        str(value or ""),
+    ).strip().upper()
+
+    match = re.fullmatch(
+        r"(?:OPTION\s*)?[\(\[]?([A-E])[\)\]]?\.?",
+        value,
+    )
+
+    return match.group(1) if match else ""
+
+
+def has_valid_question_answer(question):
+    """
+    A question is valid only if its correct answer is A-E
+    and the corresponding option actually contains text.
+    """
+
+    correct_answer = normalize_answer_letter(
+        question.get("correction_answer")
+    )
+
+    if not correct_answer:
+        return False
+
+    option_value = question.get(
+        f"option_{correct_answer.lower()}"
+    )
+
+    if option_value is None:
+        return False
+
+    option_text = str(option_value).strip()
+
+    invalid_option_values = {
+        "",
+        "—",
+        "–",
+        "-",
+        "n/a",
+        "null",
+        "none",
+    }
+
+    if option_text.casefold() in invalid_option_values:
+        return False
+
+    return True
+
+
+# ============================================================
+# PUBLIC QUESTION FORMAT
+# ============================================================
 
 def public_question(question, reveal_answer=False):
-
     result = {
         "id": question.get("id"),
         "subject": question.get("subject"),
@@ -461,12 +522,13 @@ def public_question(question, reveal_answer=False):
         "option_b": question.get("option_b"),
         "option_c": question.get("option_c"),
         "option_d": question.get("option_d"),
+        "option_e": question.get("option_e"),
         "image_url": question.get("image_url"),
     }
 
     if reveal_answer:
-        result["correction_answer"] = question.get(
-            "correction_answer"
+        result["correction_answer"] = normalize_answer_letter(
+            question.get("correction_answer")
         )
         result["explanation"] = question.get("explanation")
 
@@ -478,7 +540,6 @@ def public_question(question, reveal_answer=False):
 # ============================================================
 
 def has_premium_access(user_id):
-
     rows, status = db_get(
         "subscriptions",
         {
@@ -504,7 +565,6 @@ def has_premium_access(user_id):
     }
 
     for subscription in rows:
-
         plan = str(
             subscription.get("plan") or ""
         ).strip().lower()
@@ -536,7 +596,6 @@ def has_premium_access(user_id):
 
 
 def premium_student():
-
     profile, auth_error = authenticate()
 
     if auth_error:
@@ -583,7 +642,6 @@ def premium_student():
 
 @premium_quiz_api.route("/start", methods=["POST"])
 def start_quiz():
-
     profile, error = premium_student()
 
     if error:
@@ -641,12 +699,16 @@ def start_quiz():
             "error": "Invalid subject allocations."
         }), 400
 
-    # Normalize and deduplicate subjects case-insensitively.
+    # --------------------------------------------------------
+    # NORMALIZE AND DEDUPLICATE SUBJECTS
+    # --------------------------------------------------------
+
     normalized_subjects = {}
 
     for item in subjects:
         if isinstance(item, str) and item.strip():
             cleaned = item.strip()
+
             normalized_subjects.setdefault(
                 cleaned.casefold(),
                 cleaned,
@@ -664,6 +726,7 @@ def start_quiz():
             if course_id not in (None, "")
             else None
         )
+
     except (TypeError, ValueError):
         return jsonify({
             "error": "Invalid course selection."
@@ -679,7 +742,6 @@ def start_quiz():
     # --------------------------------------------------------
 
     if exam_purpose == "my_exam":
-
         if course_id is not None:
             return jsonify({
                 "error": "Choose subjects or a course, not both."
@@ -696,7 +758,6 @@ def start_quiz():
         subject = ""
 
     else:
-
         if subjects or allocations:
             return jsonify({
                 "error": (
@@ -716,7 +777,6 @@ def start_quiz():
     validated_allocations = []
 
     if allocations:
-
         if exam_purpose != "my_exam":
             return jsonify({
                 "error": (
@@ -736,7 +796,6 @@ def start_quiz():
         total_allocated = 0
 
         for item in allocations:
-
             if not isinstance(item, dict):
                 return jsonify({
                     "error": "Invalid subject allocation."
@@ -766,6 +825,7 @@ def start_quiz():
                 allocation_count = int(
                     item.get("question_count")
                 )
+
             except (TypeError, ValueError):
                 return jsonify({
                     "error": (
@@ -842,7 +902,6 @@ def start_quiz():
         count = total_allocated
 
     else:
-
         count = parse_positive_int(
             data.get("question_count"),
             10,
@@ -856,7 +915,6 @@ def start_quiz():
     duration_minutes = data.get("duration_minutes")
 
     if duration_minutes not in (None, ""):
-
         try:
             duration_minutes = int(duration_minutes)
 
@@ -893,7 +951,6 @@ def start_quiz():
     target_score = data.get("target_score")
 
     if target_score not in (None, ""):
-
         try:
             target_score = int(target_score)
 
@@ -926,10 +983,9 @@ def start_quiz():
         "select": (
             "id,subject,course_id,topic,difficulty,"
             "question_text,option_a,option_b,option_c,option_d,"
-            "correction_answer,explanation,image_url"
+            "option_e,correction_answer,explanation,image_url"
         ),
         "is_active": "eq.true",
-        "limit": "1000",
     }
 
     if course_id is not None:
@@ -943,9 +999,10 @@ def start_quiz():
         params["course_id"] = "is.null"
 
     questions, status = db_get_all(
-    "questions",
-    params
-)
+        "questions",
+        params,
+    )
+
     if status != 200:
         return jsonify({
             "error": "Unable to load questions."
@@ -956,6 +1013,13 @@ def start_quiz():
             "error": "Invalid question database response."
         }), 502
 
+    # Exclude incomplete questions before selection.
+    questions = [
+        question
+        for question in questions
+        if has_valid_question_answer(question)
+    ]
+
     # --------------------------------------------------------
     # SELECT QUESTIONS
     # --------------------------------------------------------
@@ -963,20 +1027,18 @@ def start_quiz():
     selected_questions = []
 
     if validated_allocations:
-
         for allocation in validated_allocations:
-
             allocation_subject = normalize_subject(
-    allocation["subject"]
-)
+                allocation["subject"]
+            )
 
             available = [
-    question
-    for question in questions
-    if normalize_subject(
-        question.get("subject")
-    ) == allocation_subject
-]
+                question
+                for question in questions
+                if normalize_subject(
+                    question.get("subject")
+                ) == allocation_subject
+            ]
 
             if allocation["difficulty"] != "mixed":
                 available = [
@@ -1008,9 +1070,10 @@ def start_quiz():
                 return jsonify({
                     "error": (
                         f"{allocation['subject']} has only "
-                        f"{len(available)} matching questions, "
+                        f"{len(available)} matching valid questions, "
                         f"but {requested} were requested. "
-                        "Add more questions or adjust your selection."
+                        "Add more complete questions or adjust "
+                        "your selection."
                     ),
                     "subject": allocation["subject"],
                     "available": len(available),
@@ -1022,26 +1085,21 @@ def start_quiz():
             )
 
     else:
-
         if exam_purpose == "my_exam":
-
             selected_subjects = {
-              normalize_subject(item)
-              for item in subjects
+                normalize_subject(item)
+                for item in subjects
             }
 
-            
-
             questions = [
-    question
-    for question in questions
-    if normalize_subject(
-        question.get("subject")
-    ) in selected_subjects
-]
+                question
+                for question in questions
+                if normalize_subject(
+                    question.get("subject")
+                ) in selected_subjects
+            ]
 
         if topic.casefold() != "mixed":
-
             selected_topic = normalize_topic(topic)
 
             questions = [
@@ -1055,8 +1113,8 @@ def start_quiz():
         if len(questions) < count:
             return jsonify({
                 "error": (
-                    f"Only {len(questions)} questions are available "
-                    "for this selection."
+                    f"Only {len(questions)} valid questions are "
+                    "available for this selection."
                 ),
                 "available": len(questions),
                 "requested": count,
@@ -1216,7 +1274,6 @@ def start_quiz():
 
 @premium_quiz_api.route("/submit", methods=["POST"])
 def submit_quiz():
-
     profile, error = premium_student()
 
     if error:
@@ -1276,6 +1333,7 @@ def submit_quiz():
     try:
         session_user_id = int(session.get("user_id"))
         current_user_id = int(profile["id"])
+
     except (TypeError, ValueError):
         return jsonify({
             "error": "Invalid quiz session ownership."
@@ -1379,6 +1437,7 @@ def submit_quiz():
         saved_question_count = int(
             attempt.get("total_questions") or 0
         )
+
     except (TypeError, ValueError):
         saved_question_count = 0
 
@@ -1399,7 +1458,6 @@ def submit_quiz():
     answer_map = {}
 
     for item in answers:
-
         if not isinstance(item, dict):
             return jsonify({
                 "error": "Invalid answer format."
@@ -1437,11 +1495,15 @@ def submit_quiz():
                 "error": "Duplicate answers were submitted."
             }), 400
 
-        selected_answer = str(
+        raw_selected_answer = str(
             item.get("selected_answer") or ""
-        ).strip().upper()
+        ).strip()
 
-        if selected_answer not in {"", "A", "B", "C", "D"}:
+        selected_answer = normalize_answer_letter(
+            raw_selected_answer
+        )
+
+        if raw_selected_answer and not selected_answer:
             return jsonify({
                 "error": "Invalid answer option."
             }), 400
@@ -1499,7 +1561,10 @@ def submit_quiz():
 
     question_filter = (
         "in.("
-        + ",".join(str(value) for value in numeric_question_ids)
+        + ",".join(
+            str(value)
+            for value in numeric_question_ids
+        )
         + ")"
     )
 
@@ -1508,7 +1573,7 @@ def submit_quiz():
         {
             "select": (
                 "id,subject,topic,question_text,"
-                "option_a,option_b,option_c,option_d,"
+                "option_a,option_b,option_c,option_d,option_e,"
                 "correction_answer,explanation,image_url"
             ),
             "id": question_filter,
@@ -1551,7 +1616,6 @@ def submit_quiz():
     subject_results = {}
 
     for question_id in numeric_question_ids:
-
         question_key = str(question_id)
         question = question_lookup.get(question_key)
 
@@ -1565,16 +1629,23 @@ def submit_quiz():
             "",
         )
 
-        correct_answer = str(
-            question.get("correction_answer") or ""
-        ).strip().upper()
+        correct_answer = normalize_answer_letter(
+            question.get("correction_answer")
+        )
 
-        if correct_answer not in {"A", "B", "C", "D"}:
+        if not has_valid_question_answer(question):
+            print(
+                "INVALID PREMIUM QUIZ QUESTION:",
+                question_id,
+                question.get("correction_answer"),
+            )
+
             return jsonify({
                 "error": (
                     "A question has an invalid correct answer. "
                     "Please contact support."
-                )
+                ),
+                "question_id": question_id,
             }), 500
 
         is_unanswered = not selected_answer
@@ -1631,6 +1702,7 @@ def submit_quiz():
             "option_b": question.get("option_b"),
             "option_c": question.get("option_c"),
             "option_d": question.get("option_d"),
+            "option_e": question.get("option_e"),
             "selected_answer": selected_answer or None,
             "correct_answer": correct_answer,
             "is_correct": bool(is_correct),
