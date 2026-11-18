@@ -1,3 +1,4 @@
+
 import os
 import requests
 import traceback
@@ -39,10 +40,7 @@ def supabase_get(table, params=None):
             "Supabase environment variables are missing."
         )
 
-    url = (
-        f"{SUPABASE_URL.rstrip('/')}"
-        f"/rest/v1/{table}"
-    )
+    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/{table}"
 
     response = requests.get(
         url,
@@ -61,9 +59,7 @@ def supabase_get(table, params=None):
 
 
 def supabase_rpc(function_name, payload):
-    """
-    Call a PostgreSQL function through Supabase RPC.
-    """
+    """Call a PostgreSQL function through Supabase RPC."""
 
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
         raise RuntimeError(
@@ -99,16 +95,9 @@ def authenticate_request():
     """
     Authenticate the current request using the Supabase
     access token supplied in the Authorization header.
-
-    Returns:
-        (public_user, None) on success
-        (None, (error_body, status_code)) on failure
     """
 
-    authorization = request.headers.get(
-        "Authorization",
-        ""
-    )
+    authorization = request.headers.get("Authorization", "")
 
     if not authorization.startswith("Bearer "):
         return None, (
@@ -119,9 +108,7 @@ def authenticate_request():
             401
         )
 
-    access_token = authorization[
-        len("Bearer "):
-    ].strip()
+    access_token = authorization[len("Bearer "):].strip()
 
     if not access_token:
         return None, (
@@ -198,9 +185,7 @@ def authenticate_request():
             return None, (
                 {
                     "success": False,
-                    "error": (
-                        "Overmaths user profile was not found."
-                    )
+                    "error": "Overmaths user profile was not found."
                 },
                 404
             )
@@ -214,8 +199,7 @@ def authenticate_request():
             {
                 "success": False,
                 "error": (
-                    "Unable to verify your session. "
-                    "Please try again."
+                    "Unable to verify your session. Please try again."
                 )
             },
             503
@@ -257,9 +241,7 @@ def parse_datetime(value):
         parsed = datetime.fromisoformat(value)
 
         if parsed.tzinfo is None:
-            parsed = parsed.replace(
-                tzinfo=timezone.utc
-            )
+            parsed = parsed.replace(tzinfo=timezone.utc)
 
         return parsed
 
@@ -280,10 +262,7 @@ def format_attempt_subjects(value):
 
 
 def get_timezone():
-    """
-    Use the requested timezone if valid.
-    Otherwise use Africa/Lagos.
-    """
+    """Use the requested timezone if valid, otherwise Lagos."""
 
     requested_timezone = (
         request.args.get("timezone")
@@ -299,12 +278,7 @@ def get_timezone():
 
 
 def calculate_streak_from_daily(daily, timezone_name):
-    """
-    Calculate a study streak from completed daily activity.
-
-    The SQL analytics function provides the daily buckets,
-    so Flask does not need to download every quiz attempt.
-    """
+    """Calculate a study streak from completed daily activity."""
 
     if not daily:
         return 0
@@ -315,7 +289,6 @@ def calculate_streak_from_daily(daily, timezone_name):
         local_timezone = timezone.utc
 
     today = datetime.now(local_timezone).date()
-
     active_dates = set()
 
     for item in daily:
@@ -331,10 +304,8 @@ def calculate_streak_from_daily(daily, timezone_name):
             continue
 
         try:
-            date_text = str(date_value)[:10]
-
             activity_date = datetime.strptime(
-                date_text,
+                str(date_value)[:10],
                 "%Y-%m-%d"
             ).date()
 
@@ -437,10 +408,7 @@ def get_public_user(auth_user_id):
 
 
 def get_premium_access(public_user):
-    """
-    Determine whether the Overmaths user currently has
-    Premium access.
-    """
+    """Determine whether the user currently has Premium access."""
 
     if not public_user:
         return {
@@ -458,12 +426,7 @@ def get_premium_access(public_user):
         {
             "user_id": f"eq.{public_user_id}",
             "select": (
-                "id,"
-                "plan,"
-                "started_at,"
-                "expires_at,"
-                "status,"
-                "created_at"
+                "id,plan,started_at,expires_at,status,created_at"
             ),
             "order": "created_at.desc",
             "limit": "1",
@@ -489,13 +452,8 @@ def get_premium_access(public_user):
         subscription.get("status") or ""
     ).strip().lower()
 
-    started_at = parse_datetime(
-        subscription.get("started_at")
-    )
-
-    expires_at = parse_datetime(
-        subscription.get("expires_at")
-    )
+    started_at = parse_datetime(subscription.get("started_at"))
+    expires_at = parse_datetime(subscription.get("expires_at"))
 
     now = datetime.now(timezone.utc)
 
@@ -514,15 +472,8 @@ def get_premium_access(public_user):
         "current",
     }
 
-    started = (
-        started_at is None
-        or started_at <= now
-    )
-
-    not_expired = (
-        expires_at is None
-        or expires_at > now
-    )
+    started = started_at is None or started_at <= now
+    not_expired = expires_at is None or expires_at > now
 
     is_premium = (
         premium_plan
@@ -549,11 +500,7 @@ def get_premium_access(public_user):
 def build_access_response(premium):
     return {
         "is_premium": premium["is_premium"],
-        "mode": (
-            "premium"
-            if premium["is_premium"]
-            else "free"
-        ),
+        "mode": "premium" if premium["is_premium"] else "free",
         "plan": premium["plan"],
         "status": premium["status"],
         "expires_at": premium.get("expires_at"),
@@ -568,10 +515,7 @@ def build_access_response(premium):
 # ============================================================
 
 def build_performance_history(recent_activity):
-    """
-    Convert recent SQL analytics activity into the
-    performance-history format used by the dashboard.
-    """
+    """Convert recent SQL activity into dashboard history."""
 
     history = []
 
@@ -596,11 +540,7 @@ def build_performance_history(recent_activity):
             "completed_at": attempt.get("completed_at"),
         })
 
-    current_score = (
-        history[-1]["score"]
-        if history
-        else 0
-    )
+    current_score = history[-1]["score"] if history else 0
 
     previous_score = (
         history[-2]["score"]
@@ -617,10 +557,7 @@ def build_performance_history(recent_activity):
 
 
 def build_subject_insights(subjects):
-    """
-    Build the existing dashboard weakness and strength
-    fields from SQL subject analytics.
-    """
+    """Build dashboard subject strengths and weaknesses."""
 
     weaknesses = []
     strengths = []
@@ -646,10 +583,7 @@ def build_subject_insights(subjects):
                 "questions": answered,
             })
 
-    weaknesses.sort(
-        key=lambda item: item["accuracy"]
-    )
-
+    weaknesses.sort(key=lambda item: item["accuracy"])
     strengths.sort(
         key=lambda item: item["accuracy"],
         reverse=True
@@ -660,8 +594,13 @@ def build_subject_insights(subjects):
 
 def build_purpose_summary(purposes):
     """
-    Make the practice and My Exam statistics easy for
-    the frontend to access separately.
+    Support both dictionary and list formats returned by SQL.
+
+    Expected output:
+        {
+            "practice": {...} or None,
+            "my_exam": {...} or None
+        }
     """
 
     result = {
@@ -669,12 +608,35 @@ def build_purpose_summary(purposes):
         "my_exam": None,
     }
 
-    for item in purposes or []:
+    if isinstance(purposes, dict):
+        purpose_rows = []
+
+        for purpose_name, purpose_data in purposes.items():
+            if isinstance(purpose_data, dict):
+                row = dict(purpose_data)
+                row.setdefault("purpose", purpose_name)
+                purpose_rows.append(row)
+
+    elif isinstance(purposes, list):
+        purpose_rows = [
+            item for item in purposes
+            if isinstance(item, dict)
+        ]
+
+    else:
+        purpose_rows = []
+
+    for item in purpose_rows:
         purpose = (
             item.get("exam_purpose")
             or item.get("purpose")
             or ""
-        ).strip().lower()
+        )
+
+        if not isinstance(purpose, str):
+            continue
+
+        purpose = purpose.strip().lower()
 
         if purpose in result:
             result[purpose] = item
@@ -708,6 +670,7 @@ def dashboard_access():
 
     except Exception as error:
         print("DASHBOARD ACCESS ERROR:", error)
+        traceback.print_exc()
 
         return jsonify({
             "success": False,
@@ -718,7 +681,6 @@ def dashboard_access():
 # ============================================================
 # DASHBOARD SUMMARY
 # ============================================================
-
 
 @dashboard_api.route("/summary", methods=["GET"])
 def dashboard_summary():
@@ -749,17 +711,17 @@ def dashboard_summary():
             },
         )
 
-        # Validate analytics response
         if not isinstance(analytics, dict):
             raise RuntimeError(
-                f"Invalid analytics response: {type(analytics).__name__}"
+                "Invalid analytics response: "
+                f"{type(analytics).__name__}"
             )
 
         overview_data = analytics.get("overview") or {}
         recent_activity = analytics.get("recent_activity") or []
         subjects = analytics.get("subjects") or []
         topics = analytics.get("topics") or []
-        purposes = analytics.get("purposes") or []
+        purposes = analytics.get("purposes") or {}
         daily = analytics.get("daily") or []
         weekly = analytics.get("weekly") or []
         monthly = analytics.get("monthly") or []
@@ -769,11 +731,17 @@ def dashboard_summary():
         print("OVERVIEW TYPE:", type(overview_data).__name__)
         print("RECENT ACTIVITY TYPE:", type(recent_activity).__name__)
         print("SUBJECTS TYPE:", type(subjects).__name__)
+        print("TOPICS TYPE:", type(topics).__name__)
         print("PURPOSES TYPE:", type(purposes).__name__)
+        print("DAILY TYPE:", type(daily).__name__)
+        print("WEEKLY TYPE:", type(weekly).__name__)
+        print("MONTHLY TYPE:", type(monthly).__name__)
 
-        # Validate nested data before using .get()
+        # VALIDATION
         if not isinstance(overview_data, dict):
-            raise RuntimeError("Analytics overview is not an object.")
+            raise RuntimeError(
+                "Analytics overview is not an object."
+            )
 
         def normalize_rows(value, field_name):
             if not isinstance(value, list):
@@ -789,8 +757,8 @@ def dashboard_summary():
 
             if invalid_rows:
                 raise RuntimeError(
-                    f"Analytics field '{field_name}' contains invalid rows: "
-                    f"{invalid_rows}"
+                    f"Analytics field '{field_name}' contains "
+                    f"invalid rows: {invalid_rows}"
                 )
 
             return value
@@ -800,10 +768,26 @@ def dashboard_summary():
         )
         subjects = normalize_rows(subjects, "subjects")
         topics = normalize_rows(topics, "topics")
-        purposes = normalize_rows(purposes, "purposes")
         daily = normalize_rows(daily, "daily")
         weekly = normalize_rows(weekly, "weekly")
         monthly = normalize_rows(monthly, "monthly")
+
+        # PURPOSES SUPPORTS DICTIONARY OR LIST
+        if isinstance(purposes, dict):
+            purposes = purposes
+
+        elif isinstance(purposes, list):
+            purposes = [
+                item for item in purposes
+                if isinstance(item, dict)
+            ]
+
+        else:
+            print(
+                "WARNING: Unexpected purposes format:",
+                type(purposes).__name__
+            )
+            purposes = {}
 
         # OVERVIEW
         total_attempts = overview_data.get("total_attempts", 0) or 0
