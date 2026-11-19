@@ -71,6 +71,7 @@ function PerformanceReadiness() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activePeriod, setActivePeriod] = useState("recent");
+  const [chartPage, setChartPage] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -142,6 +143,23 @@ function PerformanceReadiness() {
     const list = [...attempts].reverse();
     return activePeriod === "recent" ? list.slice(-10) : list;
   }, [attempts, activePeriod]);
+
+
+  // Show seven quiz attempts per chart page.
+const CHART_PAGE_SIZE = 7;
+
+const chartPageCount = Math.ceil(
+  chartAttempts.length / CHART_PAGE_SIZE
+);
+
+const visibleChartAttempts = chartAttempts.slice(
+  chartPage * CHART_PAGE_SIZE,
+  (chartPage + 1) * CHART_PAGE_SIZE
+);
+
+useEffect(() => {
+  setChartPage(0);
+}, [activePeriod]);
 
   const maxAccuracy = Math.max(
     100,
@@ -372,63 +390,103 @@ function PerformanceReadiness() {
             <span>Previous average: <strong>{number(trend.previous_average)}%</strong></span>
           </div>
         </div>
-        {chartAttempts.length > 0 ? (
-          <div className="pr-chart">
-            <div className="pr-chart-grid">
-              {[100, 75, 50, 25, 0].map((value) => (
-                <div className="pr-chart-line" key={value}>
-                  <span>{value}%</span>
-                  <div />
-                </div>
-              ))}
-            </div>
-            
-<div className="pr-chart-bars">
-  {chartAttempts.map((attempt, index) => {
-    const accuracy = Math.max(
-      0,
-      Math.min(100, Number(attempt.accuracy) || 0)
-    );
-
-    // Show no more than five date labels.
-    const labelInterval = Math.max(
-      1,
-      Math.ceil(chartAttempts.length / 5)
-    );
-
-    const showDate =
-      index === 0 ||
-      index === chartAttempts.length - 1 ||
-      index % labelInterval === 0;
-
-    return (
-      <div
-        className="pr-chart-column"
-        key={attempt.attempt_id || index}
+        
+{chartAttempts.length > 0 ? (
+  <>
+    <div className="pr-chart-navigation">
+      <button
+        type="button"
+        disabled={chartPage === 0}
+        onClick={() => setChartPage((page) => Math.max(0, page - 1))}
       >
-        <div className="pr-chart-bar-wrap">
-          <div
-            className="pr-chart-bar"
-            style={{ height: `${accuracy}%` }}
-            title={`${number(accuracy)}% accuracy`}
-          />
-        </div>
+        ← Previous
+      </button>
 
-        <span
-          className={`pr-chart-date ${showDate ? "visible" : ""}`}
-          title={formatDate(attempt.date)}
-        >
-          {formatDate(attempt.date).replace(/, \d{4}/, "")}
-        </span>
-      </div>
-    );
-  })}
-</div>
+      <span>
+        {chartPage + 1} of {Math.max(1, chartPageCount)}
+        <small>
+          Showing {chartPage * CHART_PAGE_SIZE + 1}–
+          {Math.min(
+            (chartPage + 1) * CHART_PAGE_SIZE,
+            chartAttempts.length
+          )} of {chartAttempts.length} quizzes
+        </small>
+      </span>
 
+      <button
+        type="button"
+        disabled={chartPage >= chartPageCount - 1}
+        onClick={() =>
+          setChartPage((page) =>
+            Math.min(chartPageCount - 1, page + 1)
+          )
+        }
+      >
+        Next →
+      </button>
+    </div>
+
+    <div className="pr-chart" key={`${activePeriod}-${chartPage}`}>
+      <div className="pr-chart-grid">
+        {[100, 75, 50, 25, 0].map((value) => (
+          <div className="pr-chart-line" key={value}>
+            <span>{value}%</span>
+            <div />
           </div>
-        ) : (
-          <div className="pr-empty">Your performance chart will appear after completed quizzes.</div>
-        )}
+        ))}
+      </div>
+
+      <div className="pr-chart-bars">
+        {visibleChartAttempts.map((attempt, index) => {
+          const accuracy = Math.max(
+            0,
+            Math.min(100, Number(attempt.accuracy) || 0)
+          );
+
+          const date = attempt.date
+            ? new Date(attempt.date)
+            : null;
+
+          const validDate =
+            date && !Number.isNaN(date.getTime());
+
+          return (
+            <div
+              className="pr-chart-column"
+              key={attempt.attempt_id || index}
+            >
+              <div className="pr-chart-bar-wrap">
+                <div
+                  className="pr-chart-bar"
+                  style={{ height: `${accuracy}%` }}
+                  title={`${number(accuracy)}% accuracy`}
+                />
+              </div>
+
+              <span
+                className="pr-chart-date visible"
+                title={formatDate(attempt.date)}
+              >
+                {validDate
+                  ? date.toLocaleDateString("en-GB", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })
+                  : "Date unavailable"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  </>
+) : (
+  <div className="pr-empty">
+    Your performance chart will appear after completed quizzes.
+  </div>
+)}
+
       </section>
 
       <section className="pr-two-column">
