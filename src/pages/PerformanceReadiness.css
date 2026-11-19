@@ -1361,3 +1361,106 @@
     animation: none;
   }
 }
+
+
+
+/* ==========================================
+   MOBILE PERFORMANCE CHART IMPROVEMENTS
+========================================== */
+
+@media (max-width: 460px) {
+  .pr-trend-panel {
+    padding: 14px 10px;
+    overflow: hidden;
+  }
+
+  .pr-chart-navigation {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+    margin: 16px 0 12px;
+  }
+
+  .pr-chart-navigation button {
+    padding: 8px 7px;
+    font-size: 10px;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  .pr-chart-navigation > span {
+    min-width: 0;
+    font-size: 11px;
+  }
+
+  .pr-chart-navigation small {
+    font-size: 9px;
+  }
+
+  .pr-chart {
+    width: 100%;
+    height: 205px;
+    padding: 0 0 36px 31px;
+    overflow: hidden;
+  }
+
+  .pr-chart-grid {
+    inset: 0 0 36px 0;
+  }
+
+  .pr-chart-bars {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    gap: 5px;
+    justify-content: space-between;
+    overflow: hidden;
+  }
+
+  .pr-chart-column {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: none;
+    gap: 4px;
+  }
+
+  .pr-chart-bar {
+    width: min(20px, 70%);
+    max-width: 20px;
+  }
+
+  .pr-chart-date {
+    width: 100%;
+    height: 28px;
+    font-size: 8px;
+    line-height: 11px;
+    white-space: normal;
+    text-align: center;
+    overflow: hidden;
+  }
+
+  .pr-chart-date-day,
+  .pr-chart-date-year {
+    display: block;
+  }
+
+  .pr-chart-date-year {
+    font-size: 7px;
+    color: #64748b;
+  }
+
+  .pr-chart-line span {
+    font-size: 8px;
+  }
+
+  .pr-trend-summary {
+    gap: 10px;
+  }
+
+  .pr-trend-averages {
+    gap: 6px;
+    font-size: 10px;
+  }
+}

@@ -467,13 +467,21 @@ useEffect(() => {
                 className="pr-chart-date visible"
                 title={formatDate(attempt.date)}
               >
-                {validDate
-                  ? date.toLocaleDateString("en-GB", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                    })
-                  : "Date unavailable"}
+                {validDate ? (
+  <>
+    <span className="pr-chart-date-day">
+      {date.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+      })}
+    </span>
+    <span className="pr-chart-date-year">
+      {date.getFullYear()}
+    </span>
+  </>
+) : (
+  "Date unavailable"
+)}
               </span>
             </div>
           );
