@@ -382,26 +382,49 @@ function PerformanceReadiness() {
                 </div>
               ))}
             </div>
-            <div className="pr-chart-bars">
-              {chartAttempts.map((attempt, index) => {
-                const accuracy = Math.max(
-                  0,
-                  Math.min(100, Number(attempt.accuracy) || 0)
-                );
-                return (
-                  <div className="pr-chart-column" key={attempt.attempt_id || index}>
-                    <div className="pr-chart-bar-wrap">
-                      <div
-                        className="pr-chart-bar"
-                        style={{ height: `${(accuracy / maxAccuracy) * 100}%` }}
-                        title={`${number(accuracy)}% accuracy`}
-                      />
-                    </div>
-                    <span>{formatDate(attempt.date).replace(/, \d{4}/, "")}</span>
-                  </div>
-                );
-              })}
-            </div>
+            
+<div className="pr-chart-bars">
+  {chartAttempts.map((attempt, index) => {
+    const accuracy = Math.max(
+      0,
+      Math.min(100, Number(attempt.accuracy) || 0)
+    );
+
+    // Show no more than five date labels.
+    const labelInterval = Math.max(
+      1,
+      Math.ceil(chartAttempts.length / 5)
+    );
+
+    const showDate =
+      index === 0 ||
+      index === chartAttempts.length - 1 ||
+      index % labelInterval === 0;
+
+    return (
+      <div
+        className="pr-chart-column"
+        key={attempt.attempt_id || index}
+      >
+        <div className="pr-chart-bar-wrap">
+          <div
+            className="pr-chart-bar"
+            style={{ height: `${accuracy}%` }}
+            title={`${number(accuracy)}% accuracy`}
+          />
+        </div>
+
+        <span
+          className={`pr-chart-date ${showDate ? "visible" : ""}`}
+          title={formatDate(attempt.date)}
+        >
+          {formatDate(attempt.date).replace(/, \d{4}/, "")}
+        </span>
+      </div>
+    );
+  })}
+</div>
+
           </div>
         ) : (
           <div className="pr-empty">Your performance chart will appear after completed quizzes.</div>

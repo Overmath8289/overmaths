@@ -990,3 +990,240 @@
     width: 100%;
   }
 }
+
+
+
+
+/* ==========================================
+   PERFORMANCE CHART RESPONSIVE IMPROVEMENTS
+========================================== */
+
+.pr-page {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: clip;
+}
+
+.pr-panel,
+.pr-trend-panel {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pr-trend-panel {
+  overflow: hidden;
+}
+
+.pr-trend-panel .pr-section-heading,
+.pr-trend-panel .pr-section-heading > div {
+  min-width: 0;
+}
+
+.pr-period-switch {
+  flex-shrink: 0;
+}
+
+.pr-trend-summary {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.pr-trend-averages {
+  min-width: 0;
+  gap: 10px 18px;
+}
+
+.pr-chart {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: 230px;
+  padding: 0 0 30px 42px;
+  overflow: hidden;
+}
+
+.pr-chart-grid {
+  position: absolute;
+  inset: 0 0 30px 0;
+  min-width: 0;
+}
+
+.pr-chart-line {
+  width: 100%;
+  min-width: 0;
+}
+
+.pr-chart-line div {
+  min-width: 0;
+}
+
+.pr-chart-bars {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.pr-chart-column {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 80px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.pr-chart-bar-wrap {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.pr-chart-bar {
+  width: min(28px, 70%);
+  max-width: 28px;
+  min-height: 3px;
+  border-radius: 6px 6px 2px 2px;
+}
+
+.pr-chart-date {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 14px;
+  overflow: hidden;
+  visibility: hidden;
+  text-align: center;
+  white-space: nowrap;
+  text-overflow: clip;
+  font-size: 9px;
+}
+
+.pr-chart-date.visible {
+  visibility: visible;
+}
+
+/* TABLET */
+@media (max-width: 720px) {
+  .pr-page {
+    padding: 14px;
+  }
+
+  .pr-trend-panel {
+    padding: 16px 12px;
+  }
+
+  .pr-chart {
+    height: 205px;
+    padding-left: 34px;
+    padding-bottom: 27px;
+  }
+
+  .pr-chart-grid {
+    inset: 0 0 27px 0;
+  }
+
+  .pr-chart-bars {
+    gap: 3px;
+  }
+
+  .pr-chart-column {
+    gap: 6px;
+  }
+
+  .pr-chart-bar {
+    width: min(22px, 75%);
+  }
+
+  .pr-chart-date {
+    font-size: 8px;
+  }
+
+  .pr-trend-summary {
+    gap: 14px;
+  }
+
+  .pr-trend-averages {
+    flex-direction: column;
+    gap: 6px;
+  }
+}
+
+/* SMALL PHONES */
+@media (max-width: 460px) {
+  .pr-page {
+    padding: 10px;
+  }
+
+  .pr-trend-panel {
+    padding: 14px 10px;
+    border-radius: 13px;
+  }
+
+  .pr-trend-panel .pr-section-heading {
+    gap: 12px;
+  }
+
+  .pr-period-switch {
+    width: 100%;
+  }
+
+  .pr-period-switch button {
+    flex: 1;
+    padding: 9px 5px;
+    font-size: 10px;
+  }
+
+  .pr-chart {
+    height: 190px;
+    padding-left: 31px;
+    padding-bottom: 26px;
+  }
+
+  .pr-chart-grid {
+    inset: 0 0 26px 0;
+  }
+
+  .pr-chart-bars {
+    gap: 2px;
+  }
+
+  .pr-chart-column {
+    gap: 5px;
+  }
+
+  .pr-chart-bar {
+    width: min(17px, 75%);
+    border-radius: 5px 5px 2px 2px;
+  }
+
+  .pr-chart-date {
+    font-size: 7px;
+  }
+
+  .pr-chart-line span {
+    font-size: 8px;
+  }
+
+  .pr-trend-summary > div:first-child strong {
+    font-size: 23px;
+  }
+
+  .pr-trend-averages {
+    font-size: 10px;
+  }
+}
