@@ -1,0 +1,626 @@
+
+/* =========================================
+   OVERMATHS AI STUDY TUTOR
+   Modern responsive learning interface
+========================================= */
+
+.ai-tutor-page {
+  min-height: 100vh;
+  width: 100%;
+  padding: 32px 20px 60px;
+  background: var(--background, #f5f7fb);
+  color: var(--text-primary, #172033);
+  box-sizing: border-box;
+}
+
+.ai-tutor-shell {
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+/* HEADER */
+
+.ai-tutor-header {
+  margin-bottom: 28px;
+}
+
+.ai-tutor-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 0;
+  margin-bottom: 25px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ai-tutor-back:hover {
+  color: #2563eb;
+}
+
+.ai-tutor-heading {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.ai-tutor-avatar {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 17px;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: white;
+  font-size: 17px;
+  font-weight: 800;
+  box-shadow: 0 7px 18px rgba(79, 70, 229, 0.2);
+}
+
+.ai-tutor-avatar.small {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  font-size: 12px;
+  box-shadow: none;
+}
+
+.ai-tutor-eyebrow {
+  display: block;
+  margin-bottom: 5px;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+
+.ai-tutor-heading h1 {
+  margin: 0;
+  font-size: clamp(25px, 4vw, 34px);
+  line-height: 1.2;
+  letter-spacing: -1px;
+}
+
+.ai-tutor-heading p {
+  margin: 7px 0 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.ai-tutor-premium {
+  margin-left: auto;
+  padding: 8px 13px;
+  border-radius: 30px;
+  background: #ede9fe;
+  color: #6d28d9;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+}
+
+/* QUESTION CARD */
+
+.ai-tutor-question {
+  padding: 26px;
+  margin-bottom: 30px;
+  border: 1px solid #e5eaf2;
+  border-radius: 20px;
+  background: white;
+  box-shadow: 0 5px 20px rgba(15, 23, 42, 0.035);
+}
+
+.ai-tutor-section-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+}
+
+.ai-tutor-section-label span {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 11px;
+}
+
+.ai-tutor-question h2 {
+  margin: 0 0 23px;
+  font-size: 18px;
+  line-height: 1.7;
+  font-weight: 650;
+  color: #1e293b;
+}
+
+.ai-tutor-answer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.ai-tutor-answer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+}
+
+.ai-tutor-answer span {
+  color: #64748b;
+}
+
+.ai-tutor-answer strong {
+  font-size: 15px;
+}
+
+.ai-tutor-answer.wrong {
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.ai-tutor-answer.correct {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+/* LESSON AREA */
+
+.ai-tutor-lesson {
+  margin-bottom: 20px;
+}
+
+.ai-tutor-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.ai-tutor-message.assistant {
+  padding: 25px;
+  border: 1px solid #e5eaf2;
+  border-radius: 18px;
+  background: white;
+  box-shadow: 0 5px 20px rgba(15, 23, 42, 0.025);
+}
+
+.ai-tutor-message-heading {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding-bottom: 17px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid #eef1f6;
+}
+
+.ai-tutor-message-heading strong {
+  font-size: 13px;
+  color: #334155;
+}
+
+.ai-tutor-audio {
+  margin-left: auto;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: white;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.ai-tutor-audio:hover {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #2563eb;
+}
+
+/* FORMATTED AI ANSWERS */
+
+.ai-tutor-formatted {
+  color: #475569;
+  font-size: 15px;
+  line-height: 1.85;
+  overflow-wrap: anywhere;
+}
+
+.ai-tutor-formatted p {
+  margin: 0 0 16px;
+}
+
+.ai-tutor-formatted h3,
+.ai-tutor-formatted h4 {
+  margin: 25px 0 12px;
+  color: #172033;
+  line-height: 1.45;
+}
+
+.ai-tutor-formatted h3 {
+  font-size: 19px;
+}
+
+.ai-tutor-formatted h4 {
+  font-size: 16px;
+}
+
+.ai-tutor-formatted strong {
+  color: #1e293b;
+  font-weight: 750;
+}
+
+.ai-tutor-formatted ul {
+  padding-left: 23px;
+  margin: 12px 0 20px;
+}
+
+.ai-tutor-formatted li {
+  padding-left: 5px;
+  margin-bottom: 8px;
+}
+
+.ai-tutor-formatted blockquote {
+  padding: 13px 17px;
+  margin: 16px 0;
+  border-left: 4px solid #6366f1;
+  border-radius: 0 10px 10px 0;
+  background: #f5f3ff;
+  color: #4338ca;
+}
+
+.ai-tutor-formatted hr {
+  border: 0;
+  border-top: 1px solid #e5eaf2;
+  margin: 20px 0;
+}
+
+.ai-tutor-formatted code {
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: #f1f5f9;
+  color: #7c3aed;
+}
+
+/* STUDENT MESSAGES */
+
+.ai-tutor-message.user {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ai-tutor-user-message {
+  max-width: 80%;
+  padding: 14px 18px;
+  border-radius: 17px 17px 4px 17px;
+  background: #2563eb;
+  color: white;
+}
+
+.ai-tutor-user-message span {
+  display: block;
+  margin-bottom: 6px;
+  color: #dbeafe;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.ai-tutor-user-message p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+/* THINKING / LOADING */
+
+.ai-tutor-welcome,
+.ai-tutor-thinking {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 20px;
+  border: 1px solid #e5eaf2;
+  border-radius: 16px;
+  background: white;
+}
+
+.ai-tutor-welcome h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+
+.ai-tutor-welcome p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ai-tutor-thinking {
+  width: fit-content;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.ai-tutor-dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ai-tutor-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #6366f1;
+  animation: aiTutorPulse 1s infinite ease-in-out;
+}
+
+.ai-tutor-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.ai-tutor-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes aiTutorPulse {
+  0%, 80%, 100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+
+  40% {
+    opacity: 1;
+    transform: translateY(-5px);
+  }
+}
+
+/* ERROR */
+
+.ai-tutor-error {
+  padding: 14px 16px;
+  border: 1px solid #fecdd3;
+  border-radius: 12px;
+  background: #fff1f2;
+  color: #be123c;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* MESSAGE COMPOSER */
+
+.ai-tutor-composer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px;
+  margin-top: 25px;
+  border: 1px solid #e2e8f0;
+  border-radius: 17px;
+  background: white;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
+}
+
+.ai-tutor-composer input {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 10px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #1e293b;
+  font-size: 14px;
+}
+
+.ai-tutor-composer input::placeholder {
+  color: #94a3b8;
+}
+
+.ai-tutor-mic,
+.ai-tutor-send {
+  flex-shrink: 0;
+  min-height: 43px;
+  padding: 0 15px;
+  border: none;
+  border-radius: 11px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.ai-tutor-mic {
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 17px;
+}
+
+.ai-tutor-mic:hover {
+  background: #e2e8f0;
+}
+
+.ai-tutor-mic.active {
+  background: #fee2e2;
+  color: #dc2626;
+  animation: aiTutorMicPulse 1.2s infinite;
+}
+
+@keyframes aiTutorMicPulse {
+  50% {
+    box-shadow: 0 0 0 6px rgba(220, 38, 38, 0.1);
+  }
+}
+
+.ai-tutor-send {
+  background: #2563eb;
+  color: white;
+  font-size: 13px;
+}
+
+.ai-tutor-send:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.ai-tutor-send:disabled,
+.ai-tutor-mic:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ai-tutor-footer {
+  margin: 12px 0 0;
+  color: #94a3b8;
+  text-align: center;
+  font-size: 11px;
+}
+
+/* MOBILE */
+
+@media (max-width: 640px) {
+  .ai-tutor-page {
+    padding: 20px 13px 40px;
+  }
+
+  .ai-tutor-header {
+    margin-bottom: 22px;
+  }
+
+  .ai-tutor-back {
+    margin-bottom: 20px;
+  }
+
+  .ai-tutor-heading {
+    gap: 11px;
+  }
+
+  .ai-tutor-heading h1 {
+    font-size: 25px;
+  }
+
+  .ai-tutor-premium {
+    margin-left: 63px;
+    margin-top: -5px;
+  }
+
+  .ai-tutor-question {
+    padding: 19px 16px;
+    border-radius: 16px;
+  }
+
+  .ai-tutor-question h2 {
+    font-size: 16px;
+  }
+
+  .ai-tutor-answer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-tutor-answer {
+    padding: 12px;
+  }
+
+  .ai-tutor-message.assistant {
+    padding: 18px 15px;
+  }
+
+  .ai-tutor-formatted {
+    font-size: 14px;
+    line-height: 1.8;
+  }
+
+  .ai-tutor-message-heading {
+    flex-wrap: wrap;
+  }
+
+  .ai-tutor-user-message {
+    max-width: 92%;
+  }
+
+  .ai-tutor-composer {
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .ai-tutor-composer input {
+    font-size: 13px;
+  }
+
+  .ai-tutor-mic,
+  .ai-tutor-send {
+    min-height: 40px;
+    padding: 0 11px;
+  }
+}
+
+/* DARK MODE */
+
+@media (prefers-color-scheme: dark) {
+  .ai-tutor-page {
+    background: #0b1220;
+    color: #e2e8f0;
+  }
+
+  .ai-tutor-question,
+  .ai-tutor-message.assistant,
+  .ai-tutor-welcome,
+  .ai-tutor-thinking,
+  .ai-tutor-composer {
+    background: #111c2e;
+    border-color: #263449;
+  }
+
+  .ai-tutor-question h2,
+  .ai-tutor-formatted h3,
+  .ai-tutor-formatted h4,
+  .ai-tutor-formatted strong {
+    color: #e2e8f0;
+  }
+
+  .ai-tutor-formatted,
+  .ai-tutor-heading p,
+  .ai-tutor-welcome p {
+    color: #cbd5e1;
+  }
+
+  .ai-tutor-message-heading strong {
+    color: #e2e8f0;
+  }
+
+  .ai-tutor-message-heading {
+    border-color: #263449;
+  }
+
+  .ai-tutor-audio,
+  .ai-tutor-mic {
+    background: #1e293b;
+    border-color: #334155;
+    color: #e2e8f0;
+  }
+
+  .ai-tutor-composer input {
+    color: #f1f5f9;
+  }
+
+  .ai-tutor-formatted blockquote {
+    background: #25214b;
+    color: #c4b5fd;
+  }
+
+  .ai-tutor-formatted code {
+    background: #1e293b;
+  }
+}

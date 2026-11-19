@@ -1,9 +1,13 @@
 
 import { useEffect, useState } from "react";
+
 import {
   getMissedQuestions,
   updateMissedQuestionStatus,
 } from "./missedQuestionsService";
+
+import AITutor from "./tutor/AITutor";
+
 import "./MissedQuestions.css";
 
 export default function MissedQuestions() {
@@ -11,6 +15,8 @@ export default function MissedQuestions() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [updating, setUpdating] = useState(null);
+
+  const [selectedQuestion, setSelectedQuestion] = useState(null);
 
   async function loadQuestions() {
     try {
@@ -68,11 +74,23 @@ export default function MissedQuestions() {
     );
   }
 
+  // Open the selected question in the AI Tutor.
+  if (selectedQuestion) {
+    return (
+      <AITutor
+        missedQuestion={selectedQuestion}
+        onBack={() => setSelectedQuestion(null)}
+      />
+    );
+  }
+
   return (
     <main className="mq-page">
       <header className="mq-header">
         <span className="mq-eyebrow">AI STUDY COACH</span>
+
         <h1>My Missed Questions</h1>
+
         <p>
           Learn from your mistakes and turn your weak areas
           into strengths.
@@ -106,7 +124,9 @@ export default function MissedQuestions() {
       {questions.length === 0 ? (
         <section className="mq-empty">
           <div className="mq-empty-icon">🎯</div>
+
           <h2>No missed questions yet!</h2>
+
           <p>
             When you answer a quiz question incorrectly,
             it will automatically appear here.
@@ -115,12 +135,16 @@ export default function MissedQuestions() {
       ) : (
         <section className="mq-question-list">
           {questions.map((question) => (
-            <article className="mq-question-card" key={question.id}>
+            <article
+              className="mq-question-card"
+              key={question.id}
+            >
               <div className="mq-card-top">
                 <div>
                   <span className="mq-subject">
                     {question.subject || "General"}
                   </span>
+
                   <span className="mq-topic">
                     {question.topic || "Uncategorised"}
                   </span>
@@ -135,12 +159,16 @@ export default function MissedQuestions() {
 
               <div className="mq-answer wrong">
                 <strong>Your answer</strong>
-                <p>{question.selected_answer || "Not recorded"}</p>
+                <p>
+                  {question.selected_answer || "Not recorded"}
+                </p>
               </div>
 
               <div className="mq-answer correct">
                 <strong>Correct answer</strong>
-                <p>{question.correct_answer || "Not available"}</p>
+                <p>
+                  {question.correct_answer || "Not available"}
+                </p>
               </div>
 
               {question.explanation && (
@@ -158,6 +186,15 @@ export default function MissedQuestions() {
 
                 <div className="mq-actions">
                   <button
+                    type="button"
+                    className="mq-ai-tutor-btn"
+                    onClick={() => setSelectedQuestion(question)}
+                  >
+                    ✨ Study with AI Tutor
+                  </button>
+
+                  <button
+                    type="button"
                     disabled={updating === question.id}
                     onClick={() =>
                       changeStatus(question.id, "learning")
@@ -167,6 +204,7 @@ export default function MissedQuestions() {
                   </button>
 
                   <button
+                    type="button"
                     disabled={updating === question.id}
                     onClick={() =>
                       changeStatus(question.id, "mastered")

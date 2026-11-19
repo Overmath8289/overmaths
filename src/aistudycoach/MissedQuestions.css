@@ -215,3 +215,29 @@
     flex-direction: column;
   }
 }
+
+
+
+
+/* AI TUTOR BUTTON */
+
+.mq-ai-tutor-btn {
+  background: linear-gradient(135deg, #635bff, #8b5cf6);
+  color: #ffffff;
+  border: none;
+  padding: 11px 17px;
+  border-radius: 9px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.mq-ai-tutor-btn:hover {
+  transform: translateY(-2px);
+  opacity: 0.92;
+}
+
+.mq-ai-tutor-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
