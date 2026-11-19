@@ -1104,19 +1104,20 @@
   display: block;
   width: 100%;
   min-width: 0;
-  height: 14px;
-  overflow: hidden;
+  height: 20px;
+  overflow: visible;
   visibility: hidden;
   text-align: center;
   white-space: nowrap;
-  text-overflow: clip;
   font-size: 9px;
+  line-height: 20px;
+  transform: rotate(-35deg);
+  transform-origin: top center;
 }
 
 .pr-chart-date.visible {
   visibility: visible;
 }
-
 /* TABLET */
 @media (max-width: 720px) {
   .pr-page {
@@ -1225,5 +1226,21 @@
 
   .pr-trend-averages {
     font-size: 10px;
+  }
+}
+
+
+@media (max-width: 460px) {
+  .pr-chart {
+    overflow: visible;
+    margin-bottom: 25px;
+  }
+
+  .pr-chart-bars {
+    overflow: visible;
+  }
+
+  .pr-chart-date {
+    font-size: 8px;
   }
 }
