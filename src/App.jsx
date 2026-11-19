@@ -44,6 +44,7 @@ import PremiumQuiz from './pages/PremiumQuiz'
 import PremiumQuizSetup from './pages/PremiumQuizSetup'
 import PremiumSectionPage from './pages/PremiumSectionPage'
 import PremiumWorkspaceLayout from './pages/PremiumWorkspaceLayout'
+import PerformanceReadiness from './pages/PerformanceReadiness'
 
 // ============================================================
 // ADMIN
@@ -419,12 +420,11 @@ function App() {
 
           {/* PERFORMANCE & READINESS */}
 
-          <Route
-            path="/performance-readiness"
-            element={
-              <PremiumSectionPage section="Performance & Readiness" />
-            }
-          />
+         {/* PERFORMANCE & READINESS */}
+<Route
+  path="/performance-readiness"
+  element={<PerformanceReadiness />}
+/>
 
           {/* ACHIEVEMENTS & STREAKS */}
 

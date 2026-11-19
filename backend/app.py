@@ -12,6 +12,7 @@ from admin_api import admin_api
 from question_api import question_api
 from premium_quiz_api import premium_quiz_api
 from premium_workspace_api import premium_workspace_api
+from performance_readiness_api import performance_readiness_api
 # ============================================================
 # ENVIRONMENT
 # ============================================================
@@ -1824,6 +1825,12 @@ app.register_blueprint(
 app.register_blueprint(
     premium_quiz_api
 )
+
+app.register_blueprint(performance_readiness_api)
+
+
+
+
 # ============================================================
 # START SERVER
 # ============================================================
