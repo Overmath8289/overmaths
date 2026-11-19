@@ -45,6 +45,7 @@ import PremiumQuizSetup from './pages/PremiumQuizSetup'
 import PremiumSectionPage from './pages/PremiumSectionPage'
 import PremiumWorkspaceLayout from './pages/PremiumWorkspaceLayout'
 import PerformanceReadiness from './pages/PerformanceReadiness'
+import MissedQuestions from './aistudycoach/MissedQuestions'
 
 // ============================================================
 // ADMIN
@@ -411,12 +412,14 @@ function App() {
 
           {/* AI STUDY COACH */}
 
-          <Route
-            path="/ai-study-coach"
-            element={
-              <PremiumSectionPage section="AI Study Coach" />
-            }
-          />
+          
+{/* AI STUDY COACH */}
+
+<Route
+  path="/ai-study-coach"
+  element={<MissedQuestions />}
+/>
+
 
           {/* PERFORMANCE & READINESS */}
 
