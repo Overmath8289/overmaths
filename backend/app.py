@@ -1788,6 +1788,45 @@ def get_questions():
     })
 
 
+
+
+# ============================================================
+# GET ONE QUESTION BY ID
+# ============================================================
+
+@app.route(
+    "/api/questions/<int:question_id>",
+    methods=["GET"]
+)
+def get_question_by_id(question_id):
+
+    rows, error, status = supabase_get(
+        "questions",
+        {
+            "select": (
+                "id,subject,course_id,topic,"
+                "question_text,option_a,option_b,"
+                "option_c,option_d,correction_answer,"
+                "explanation,image_url"
+            ),
+            "id": f"eq.{question_id}",
+            "limit": 1
+        }
+    )
+
+    if error:
+        return jsonify(error), status
+
+    if not rows:
+        return jsonify({
+            "error": "Question not found"
+        }), 404
+
+    return jsonify({
+        "question": normalize_question(rows[0])
+    }), 200
+
+
 # ============================================================
 # HEALTH CHECK
 # ============================================================
