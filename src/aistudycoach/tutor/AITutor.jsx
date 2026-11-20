@@ -1,29 +1,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { askAITutor } from "./aiTutorService";
+import MathText from "../../components/MathText";
 import "./AITutor.css";
 
 // Format Gemini's Markdown answers without installing another package.
 function formatInline(text) {
-  const parts = text.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`)/g);
-
-  return parts.map((part, index) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={index}>{part.slice(2, -2)}</strong>;
-    }
-
-    if (part.startsWith("*") && part.endsWith("*")) {
-      return <em key={index}>{part.slice(1, -1)}</em>;
-    }
-
-    if (part.startsWith("`") && part.endsWith("`")) {
-      return <code key={index}>{part.slice(1, -1)}</code>;
-    }
-
-    return part;
-  });
+  return <MathText as="span" text={text} />;
 }
-
 function FormattedMessage({ content }) {
   const lines = content.split("\n");
   const elements = [];

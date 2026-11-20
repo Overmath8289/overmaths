@@ -32,6 +32,7 @@ import Dashboard from './pages/Dashboard'
 import Practice from './pages/Practice'
 import Quiz from './pages/Quiz'
 
+
 // ============================================================
 // PREMIUM
 // ============================================================
@@ -46,6 +47,7 @@ import PremiumSectionPage from './pages/PremiumSectionPage'
 import PremiumWorkspaceLayout from './pages/PremiumWorkspaceLayout'
 import PerformanceReadiness from './pages/PerformanceReadiness'
 import MissedQuestions from './aistudycoach/MissedQuestions'
+import DailyMission from './aistudycoach/dailymission/DailyMission'
 
 // ============================================================
 // ADMIN
@@ -377,11 +379,9 @@ function App() {
           {/* DAILY MISSION */}
 
           <Route
-            path="/daily-mission"
-            element={
-              <PremiumSectionPage section="Daily Mission" />
-            }
-          />
+  path="/daily-mission"
+  element={<DailyMission />}
+/>
 
           {/* PRACTICE & MASTERY */}
 
